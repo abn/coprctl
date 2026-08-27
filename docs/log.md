@@ -6,6 +6,17 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Implemented Wave 08 (M5 polish): shell completions generated
+  from the registry, an environment doctor with structured exit codes, version
+  injection, GoReleaser/nfpm packaging, the self-hosting `copr.yaml` and spec,
+  and a minimal `ui` view that degrades to plain output off a TTY. The full
+  Bubble Tea dashboard is deferred.
+* **Creation**: Implemented Wave 07 (M4.7 init/sync): read-only `detect`,
+  `init`, and three-way `sync` with the inferred-fields provenance contract.
+* **Creation**: Implemented Wave 06 (M4.5 preflight): the container runtime
+  abstraction and `try` with chroot-to-image resolution, strict-match gating,
+  coverage reporting, and the fidelity report. The rpmbuild invocation is a
+  declared stub that reports `unsupported` rather than a false pass.
 * **Creation**: Implemented Wave 05 (M4 declarative and integrations): the
   `copr.yaml` manifest with validate/diff/apply/export, local state for webhook
   secrets, and the GitHub webhook integration with idempotent hook management

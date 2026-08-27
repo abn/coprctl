@@ -6,6 +6,11 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Implemented Wave 03 (M2 logs and events): the event bus, the
+  polling source, the log tailer with incremental and full-refetch gzip
+  strategies, multi-chroot tail, monitor, and status. The tailer was validated
+  against a real production Copr log and against synthetic servers covering
+  both gzip framings, plain-log fallback, no-torn-lines, and no-duplicates.
 * **Creation**: Implemented Wave 02 (M1 CRUD parity): project/package/build
   write commands, all source types under one `--source` flag, the migration
   shim, and JSON-body API calls. Verified the full lifecycle end to end

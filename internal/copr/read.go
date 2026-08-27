@@ -241,7 +241,125 @@ func (c *Client) ListPackages(ctx context.Context, owner, project string) ([]Pac
 	return pl.Items, nil
 }
 
-// BuildChrootList lists the build chroots of a build.
+// Terminal build states.
+var terminalStates = map[string]bool{
+	"succeeded": true,
+	"failed":    true,
+	"canceled":  true,
+	"skipped":   true,
+}
+
+// runningStates are the in-progress states.
+var runningStates = map[string]bool{
+	"starting": true,
+	"running":  true,
+}
+
+// ChrootStates returns the per-chroot state map for a build, preferring the
+// detailed Builds map and falling back to the Chroots name list with the
+// build's own state.
+func (b *Build) ChrootStates() map[string]string {
+	if len(b.Builds) > 0 {
+		m := map[string]string{}
+		for name, bc := range b.Builds {
+			state := ""
+			if bc != nil {
+				state = bc.State
+			}
+			m[name] = state
+		}
+		return m
+	}
+	m := map[string]string{}
+	for _, name := range b.Chroots {
+		m[name] = b.State
+	}
+	return m
+}
+
+// IsTerminal reports whether a build state is terminal.
+func IsTerminal(state string) bool { return terminalStates[state] }
+
+// IsRunning reports whether a build state is in progress.
+func IsRunning(state string) bool { return runningStates[state] }
+
+// RollupState derives a single build-level state from per-chroot states,
+// following the documented rollup rules.
+func (b *Build) RollupState() string {
+	return RollupState(b)
+}
+
+// RollupState computes the rollup for a build.
+func RollupState(b *Build) string {
+	chroots := b.ChrootStates()
+	if len(chroots) == 0 {
+		return b.State
+	}
+	hasFailed := false
+	hasCanceled := false
+	hasRunning := false
+	hasPending := false
+	for _, state := range chroots {
+		switch {
+		case state == "failed":
+			hasFailed = true
+		case state == "canceled":
+			hasCanceled = true
+		case runningStates[state]:
+			hasRunning = true
+		case terminalStates[state]:
+			// succeeded/skipped
+		default:
+			hasPending = true
+		}
+	}
+	switch {
+	case hasFailed:
+		return "failed"
+	case hasCanceled:
+		return "canceled"
+	case hasRunning:
+		return "running"
+	case hasPending:
+		return "pending"
+	}
+	return "succeeded"
+}
+
+// Monitor is one package's per-chroot state row.
+type MonitorRow struct {
+	Name    string                       `json:"name"`
+	Chroots map[string]MonitorChrootInfo `json:"chroots"`
+}
+
+// MonitorChrootInfo is a single chroot's state in a monitor row.
+type MonitorChrootInfo struct {
+	BuildID    int    `json:"build_id"`
+	State      string `json:"state"`
+	Status     int    `json:"status"`
+	PkgVersion string `json:"pkg_version"`
+}
+
+// MonitorEnvelope wraps the monitor response.
+type MonitorEnvelope struct {
+	Output   string       `json:"output"`
+	Message  string       `json:"message"`
+	Packages []MonitorRow `json:"packages"`
+}
+
+// Monitor returns the package x chroot state matrix for a project.
+func (c *Client) Monitor(ctx context.Context, owner, project string) ([]MonitorRow, error) {
+	q := url.Values{}
+	q.Set("ownername", owner)
+	q.Set("projectname", project)
+	var env MonitorEnvelope
+	if err := c.Get("/monitor", q, &env); err != nil {
+		return nil, err
+	}
+	return env.Packages, nil
+}
+
+// ListBuildChroots lists the build chroots of a build.
 func (c *Client) ListBuildChroots(ctx context.Context, buildID int) ([]BuildChroot, error) {
 	q := url.Values{}
 	q.Set("build_id", fmt.Sprintf("%d", buildID))

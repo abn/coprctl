@@ -200,3 +200,22 @@ func TestBadRequestSurfacesAPIMessage(t *testing.T) {
 		t.Errorf("expected API message in hint, got %q", ce.Hint)
 	}
 }
+
+func TestRotateAPIToken(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api_3/api-token" {
+			t.Errorf("got %s %s", r.Method, r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]string{
+			"api_login": "newlogin", "api_token": "newtoken", "expiration": "2027-03-01",
+		})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	nt, err := c.RotateAPIToken(context.Background())
+	if err != nil {
+		t.Fatalf("rotate: %v", err)
+	}
+	if nt.APILogin != "newlogin" || nt.APIToken != "newtoken" || nt.Expiration != "2027-03-01" {
+		t.Errorf("token = %+v", nt)
+	}
+}

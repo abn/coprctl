@@ -341,6 +341,22 @@ func (c *Client) GenerateWebhookSecret(ctx context.Context, owner, project strin
 	return resp.WebhookSecret, nil
 }
 
+// NewAPIToken is the response from POST /api_3/api-token.
+type NewAPIToken struct {
+	APILogin   string `json:"api_login"`
+	APIToken   string `json:"api_token"`
+	Expiration string `json:"expiration"`
+}
+
+// RotateAPIToken requests a new API token using the current credentials.
+func (c *Client) RotateAPIToken(ctx context.Context) (*NewAPIToken, error) {
+	var out NewAPIToken
+	if err := c.doJSON(ctx, http.MethodPost, "/api-token", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // UpsertPackage creates a package, tolerating an already-existing one (used
 // by apply, which is additive and safe to re-run).
 func (c *Client) UpsertPackage(ctx context.Context, in PackageCreate) error {

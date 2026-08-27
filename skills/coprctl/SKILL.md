@@ -20,6 +20,9 @@ Generated from the command registry; every command below exists.
 
 - `coprctl` - A reimagined CLI for the Fedora Copr build system
   - `coprctl apply` - Reconcile a project to match the manifest
+  - `coprctl auth` - Inspect and manage credentials
+    - `coprctl auth rotate` - Rotate the API token and update the profile
+    - `coprctl auth status` - Show who you are and whether the token is near expiry
   - `coprctl build` - Manage Copr builds
     - `coprctl build cancel` - Cancel a build
     - `coprctl build get` - Show a build
@@ -36,6 +39,7 @@ Generated from the command registry; every command below exists.
     - `coprctl completion powershell` - Generate powershell completion
     - `coprctl completion zsh` - Generate zsh completion
   - `coprctl config` - Manage configuration and profiles
+    - `coprctl config import` - Import credentials from pasted copr config, flags, or prompts
     - `coprctl config migrate` - Import the legacy ~/.config/copr config into a named profile
     - `coprctl config show` - Show the effective configuration and where each value came from
   - `coprctl detect` - Read-only: infer a project setup from a source repository

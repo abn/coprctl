@@ -6,6 +6,13 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Added credential management: `auth status` (who you are, warns
+  a month before token expiry, exits 13 when expired) and `auth token rotate`
+  (POST /api_3/api-token, updates the profile in place). Added `config import`
+  which accepts a pasted `[copr-cli]` block from the Copr website, explicit
+  flags, or interactive prompts, and detects the instance (production or
+  staging) from the URL with production as the default. Legacy configs now
+  parse the `# expiration date:` comment.
 * **Creation**: Recorded ADR 0002 standardizing the project and binary name on
   `coprctl` and retiring the *Coppersmith* working name. Updated the
   self-hosting manifest and the blog post to reference `github.com/abn/coprctl`.

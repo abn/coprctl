@@ -128,6 +128,60 @@ func (m *Manager) Profile(name string) (Profile, error) {
 	return p, nil
 }
 
+// SetProfileToken updates the credentials for a named profile and writes the
+// config file. It creates the profile if it does not exist.
+func (m *Manager) SetProfileToken(name, login, token, expiry string) error {
+	if err := m.Load(); err != nil {
+		return err
+	}
+	if name == "" {
+		name = m.file.DefaultProfile
+	}
+	p := m.file.Profiles[name]
+	p.Login = login
+	p.Token = token
+	if expiry != "" {
+		p.TokenExpiry = expiry
+	}
+	if m.file.Profiles == nil {
+		m.file.Profiles = map[string]Profile{}
+	}
+	m.file.Profiles[name] = p
+	return m.save()
+}
+
+// SetProfile writes a full profile for the named profile and saves the config.
+// When no default profile is configured yet, the named profile becomes the
+// default.
+func (m *Manager) SetProfile(name string, p Profile) error {
+	if err := m.Load(); err != nil {
+		return err
+	}
+	if name == "" {
+		name = m.file.DefaultProfile
+	}
+	if m.file.Profiles == nil {
+		m.file.Profiles = map[string]Profile{}
+	}
+	m.file.Profiles[name] = p
+	if m.file.DefaultProfile == "" || m.file.DefaultProfile == "default" && len(m.file.Profiles) == 1 {
+		m.file.DefaultProfile = name
+	}
+	return m.save()
+}
+
+// save writes the config file with 0600 permissions.
+func (m *Manager) save() error {
+	data, err := toml.Marshal(m.file)
+	if err != nil {
+		return cerr.Config("failed to encode config").Wrap(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(m.path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(m.path, data, 0o600)
+}
+
 // ProfileNames returns configured profile names (excluding legacy-only).
 func (m *Manager) ProfileNames() []string {
 	_ = m.Load()
@@ -154,18 +208,27 @@ func (m *Manager) Defaults() Defaults { return m.file.Defaults }
 // compatibility; the tool never writes to it.
 func (m *Manager) LoadLegacy() (Profile, error) { return m.loadLegacy() }
 
-func (m *Manager) loadLegacy() (Profile, error) {
-	f, err := os.Open(m.legacy)
-	if err != nil {
-		return Profile{}, err
-	}
-	defer f.Close()
-
+// ParseLegacyBlock parses a [copr-cli] style config block from raw bytes. This
+// is the format the Copr website offers when you generate a token, so it is
+// what a user pastes to import credentials.
+func ParseLegacyBlock(data []byte) (Profile, error) {
 	p := Profile{}
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(strings.NewReader(string(data)))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "[") {
+		if line == "" || strings.HasPrefix(line, "[") {
+			continue
+		}
+		// The expiry is carried as a comment in copr-cli configs:
+		// "# expiration date: 2027-02-23".
+		if strings.HasPrefix(line, "#") {
+			if strings.Contains(line, "expiration") {
+				eq := strings.Index(line, ":")
+				if eq < 0 {
+					continue
+				}
+				p.TokenExpiry = strings.Trim(strings.TrimSpace(line[eq+1:]), `"'`)
+			}
 			continue
 		}
 		eq := strings.Index(line, "=")
@@ -188,6 +251,48 @@ func (m *Manager) loadLegacy() (Profile, error) {
 		}
 	}
 	if err := sc.Err(); err != nil {
+		return Profile{}, err
+	}
+	return p, nil
+}
+
+// Instance names for the well-known Copr deployments.
+const (
+	InstanceProduction = "production"
+	InstanceStaging    = "staging"
+)
+
+// DetectInstance infers the instance name from a base URL. There are two
+// well-known public deployments: production and staging. Anything else is a
+// self-hosted instance and returns the URL host as its name.
+func DetectInstance(baseURL string) string {
+	u := strings.TrimRight(baseURL, "/")
+	switch {
+	case strings.Contains(u, "copr.fedorainfracloud.org"):
+		return InstanceProduction
+	case strings.Contains(u, "copr.stg.fedoraproject.org"):
+		return InstanceStaging
+	}
+	// Strip scheme and take the host.
+	if i := strings.Index(u, "://"); i >= 0 {
+		u = u[i+3:]
+	}
+	if i := strings.Index(u, "/"); i >= 0 {
+		u = u[:i]
+	}
+	return u
+}
+
+// DefaultProductionURL is the production Copr instance.
+const DefaultProductionURL = "https://copr.fedorainfracloud.org"
+
+func (m *Manager) loadLegacy() (Profile, error) {
+	data, err := os.ReadFile(m.legacy)
+	if err != nil {
+		return Profile{}, err
+	}
+	p, err := ParseLegacyBlock(data)
+	if err != nil {
 		return Profile{}, err
 	}
 	if p.URL == "" {

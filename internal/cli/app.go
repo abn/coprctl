@@ -65,6 +65,23 @@ func (a *App) Client() (*copr.Client, error) {
 	return c, nil
 }
 
+// ResetClient drops the cached API client so the next Client() call rebuilds
+// it with the current profile credentials.
+func (a *App) ResetClient() { a.client = nil }
+
+// profileName returns the effective profile name (flag or default).
+func profileName(a *App) string {
+	if a.profile != "" {
+		return a.profile
+	}
+	return a.Cfg.DefaultProfileName()
+}
+
+// newConfigManager builds a config manager with the given paths.
+func newConfigManager(cfgPath, legacy string) *config.Manager {
+	return config.New(cfgPath, legacy)
+}
+
 // installChrootCatalog wires the cached catalog into the reference parser so
 // three-segment references can distinguish a package from a chroot offline.
 func (a *App) installChrootCatalog() {
@@ -105,6 +122,7 @@ func Root(app *App) *cobra.Command {
 		newStatusCmd(app),
 		newCompatCmd(app),
 		newConfigCmd(app),
+		newAuthCmd(app),
 		newSkillCmd(app),
 		newMCPCmd(app),
 		newApplyCmd(app),

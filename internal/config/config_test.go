@@ -107,3 +107,60 @@ copr_url = "https://copr.fedorainfracloud.org"
 		t.Errorf("Username = %q", p.Username)
 	}
 }
+
+func TestParseLegacyBlockWithExpiryComment(t *testing.T) {
+	block := `[copr-cli]
+login = "abc123"
+username = "devnullcake"
+token = "sekrit"
+copr_url = "https://copr.stg.fedoraproject.org"
+# expiration date: 2027-02-23
+`
+	p, err := ParseLegacyBlock([]byte(block))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Login != "abc123" || p.Token != "sekrit" || p.Username != "devnullcake" {
+		t.Errorf("parsed fields wrong: %+v", p)
+	}
+	if p.TokenExpiry != "2027-02-23" {
+		t.Errorf("expiry = %q, want 2027-02-23 (read from comment)", p.TokenExpiry)
+	}
+	if p.URL != "https://copr.stg.fedoraproject.org" {
+		t.Errorf("url = %q", p.URL)
+	}
+}
+
+func TestDetectInstance(t *testing.T) {
+	tests := []struct{ url, want string }{
+		{"https://copr.fedorainfracloud.org", InstanceProduction},
+		{"https://copr.stg.fedoraproject.org", InstanceStaging},
+		{"https://copr.internal.example.com", "copr.internal.example.com"},
+	}
+	for _, tt := range tests {
+		if got := DetectInstance(tt.url); got != tt.want {
+			t.Errorf("DetectInstance(%q) = %q, want %q", tt.url, got, tt.want)
+		}
+	}
+}
+
+func TestSetProfileSetsDefault(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	m := New(cfg, "/nonexistent")
+	err := m.SetProfile("production", Profile{
+		URL: "https://copr.fedorainfracloud.org", Username: "abn", Login: "l", Token: "t",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.DefaultProfileName(); got != "production" {
+		t.Errorf("default profile = %q, want production", got)
+	}
+	// A subsequent profile should not steal the default.
+	if err := m.SetProfile("staging", Profile{URL: "https://copr.stg.fedoraproject.org"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.DefaultProfileName(); got != "production" {
+		t.Errorf("default profile changed to %q", got)
+	}
+}

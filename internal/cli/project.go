@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 )
@@ -20,6 +21,9 @@ func newProjectCmd(app *App) *cobra.Command {
 	cmd.AddCommand(
 		newProjectListCmd(app, &out),
 		newProjectGetCmd(app, &out),
+		newProjectCreateCmd(app, &out),
+		newProjectDeleteCmd(app, &out),
+		newProjectForkCmd(app, &out),
 	)
 	return cmd
 }
@@ -47,7 +51,7 @@ func newProjectListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if out.format == "auto" || out.format == "table" || out.format == "plain" {
+			if isHuman(out.format) {
 				t := render.NewTable("FULL NAME", "DESCRIPTION")
 				for _, p := range projects {
 					t.Add(p.FullName, truncate(p.Description, 40))
@@ -83,7 +87,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if out.format == "auto" || out.format == "table" || out.format == "plain" {
+			if isHuman(out.format) {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("Full name", p.FullName)
 				t.Add("Description", p.Description)
@@ -96,9 +100,128 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 	return cmd
 }
 
+func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
+	var chroots []string
+	var description, instructions, homepage, contact string
+	var ifNotExists, develMode bool
+	cmd := &cobra.Command{
+		Use:   "create REF",
+		Short: "Create a project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], nil)
+			if err != nil {
+				return err
+			}
+			if r.Owner == "" {
+				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			if ifNotExists {
+				// Idempotent create: if the project already exists, report
+				// success without creating it.
+				if existing, gerr := c.GetProject(cmd.Context(), r.Owner, r.Project); gerr == nil && existing != nil {
+					return renderResult(cmd, out, map[string]any{"created": r.String(), "existed": true})
+				}
+			}
+			err = c.CreateProject(cmd.Context(), copr.ProjectCreate{
+				Owner:        r.Owner,
+				Name:         r.Project,
+				Chroots:      chroots,
+				Description:  description,
+				Instructions: instructions,
+				Homepage:     homepage,
+				Contact:      contact,
+				DevelMode:    develMode,
+			}, ifNotExists)
+			if err != nil {
+				return err
+			}
+			return renderResult(cmd, out, map[string]any{
+				"created": r.String(),
+			})
+		},
+	}
+	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to enable (repeatable)")
+	cmd.Flags().StringVar(&description, "description", "", "project description")
+	cmd.Flags().StringVar(&instructions, "instructions", "", "project instructions")
+	cmd.Flags().StringVar(&homepage, "homepage", "", "project homepage")
+	cmd.Flags().StringVar(&contact, "contact", "", "project contact")
+	cmd.Flags().BoolVar(&ifNotExists, "if-not-exists", false, "do not fail if the project exists")
+	cmd.Flags().BoolVar(&develMode, "devel-mode", false, "enable devel mode")
+	return cmd
+}
+
+func newProjectDeleteCmd(app *App, out *outFlags) *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "delete REF",
+		Short: "Delete a project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], nil)
+			if err != nil {
+				return err
+			}
+			if !yes {
+				return confirmRequired("--yes")
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			if err := c.DeleteProject(cmd.Context(), r.Owner, r.Project); err != nil {
+				return err
+			}
+			return renderResult(cmd, out, map[string]any{"deleted": r.String()})
+		},
+	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	return cmd
+}
+
+func newProjectForkCmd(app *App, out *outFlags) *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "fork SRC DST",
+		Short: "Fork a project",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			src, err := ref.Parse(args[0], nil)
+			if err != nil {
+				return err
+			}
+			dst, err := ref.Parse(args[1], nil)
+			if err != nil {
+				return err
+			}
+			if !yes {
+				return confirmRequired("--yes")
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			if err := c.ForkProject(cmd.Context(), src.Owner, src.Project, dst.Owner, dst.Project); err != nil {
+				return err
+			}
+			return renderResult(cmd, out, map[string]any{"forked": src.String() + " -> " + dst.String()})
+		},
+	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	return cmd
+}
+
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
 	return s[:n-3] + "..."
+}
+
+func isHuman(format string) bool {
+	return format == "" || format == "auto" || format == "table" || format == "plain"
 }

@@ -102,19 +102,51 @@ func decode(resp *http.Response, v any) error {
 
 func mapHTTPError(resp *http.Response) error {
 	body, _ := io.ReadAll(resp.Body)
-	switch resp.StatusCode {
+	apiMsg := apiErrorMessage(body)
+	status := resp.StatusCode
+	switch status {
+	case 400:
+		return cerr.New("bad_request", cerr.ExitGeneric, "bad request (400)").
+			WithHint(apiMsg).Wrap(apiErr(apiMsg))
 	case 401:
 		return cerr.Auth("authentication failed (401)").Wrap(fmt.Errorf("%s", body))
 	case 403:
 		return cerr.New("permission_denied", cerr.ExitPermission, "permission denied (403)")
 	case 404:
 		return cerr.NotFound(resp.Request.URL.Path)
+	case 409:
+		return cerr.New("conflict", cerr.ExitConflict, "conflict (409)").
+			WithHint(apiMsg).Wrap(apiErr(apiMsg))
 	case 429:
 		return cerr.New("rate_limited", cerr.ExitTimeout, "rate limited (429)").WithHint("retry after the Retry-After window")
 	case 500, 502, 503, 504:
-		return cerr.New("server_error", cerr.ExitTransport, fmt.Sprintf("server error (%d)", resp.StatusCode))
+		return cerr.New("server_error", cerr.ExitTransport, fmt.Sprintf("server error (%d)", status))
 	}
-	return cerr.New("http_error", cerr.ExitGeneric, fmt.Sprintf("unexpected status %d", resp.StatusCode))
+	return cerr.New("http_error", cerr.ExitGeneric, fmt.Sprintf("unexpected status %d", status)).
+		WithHint(apiMsg)
+}
+
+// apiErrorMessage extracts the Copr API "error" or "output" field from a
+// JSON error body, if present.
+func apiErrorMessage(body []byte) string {
+	var e struct {
+		Error  string `json:"error"`
+		Output string `json:"output"`
+	}
+	if json.Unmarshal(body, &e) == nil {
+		if e.Error != "" {
+			return e.Error
+		}
+		return e.Output
+	}
+	return strings.TrimSpace(string(body))
+}
+
+func apiErr(msg string) error {
+	if msg == "" {
+		return nil
+	}
+	return fmt.Errorf("%s", msg)
 }
 
 // Meta is the pagination envelope.

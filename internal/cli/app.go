@@ -49,7 +49,9 @@ func (a *App) Client() (*copr.Client, error) {
 	if a.client != nil {
 		return a.client, nil
 	}
-	if a.Cfg == nil {
+	// Rebuild the manager if the effective config paths differ from the ones
+	// it was constructed with (e.g. overridden by --config/--legacy-config).
+	if a.Cfg == nil || !a.Cfg.Matches(a.cfgPath, a.legacy) {
 		a.Cfg = config.New(a.cfgPath, a.legacy)
 	}
 	prof, err := a.Cfg.Profile(a.profile)
@@ -95,8 +97,10 @@ func Root(app *App) *cobra.Command {
 
 	root.AddCommand(
 		newProjectCmd(app),
+		newPackageCmd(app),
 		newChrootCmd(app),
 		newBuildCmd(app),
+		newCompatCmd(app),
 		newSchemaCmd(app),
 		newVersionCmd(),
 	)

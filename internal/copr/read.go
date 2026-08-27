@@ -214,6 +214,33 @@ func (c *Client) ListBuilds(ctx context.Context, owner, project, pkg string, lim
 	return all, nil
 }
 
+// Package is a Copr package (a source definition, not an RPM).
+type Package struct {
+	ID          int               `json:"id"`
+	Name        string            `json:"name"`
+	SourceType  SourceType        `json:"source_type"`
+	AutoRebuild bool              `json:"auto_rebuild"`
+	SourceDict  map[string]string `json:"source_dict"`
+}
+
+// PackageList is the list result.
+type PackageList struct {
+	Items []Package `json:"items"`
+	Meta  Meta      `json:"meta"`
+}
+
+// ListPackages lists the packages in a project.
+func (c *Client) ListPackages(ctx context.Context, owner, project string) ([]Package, error) {
+	q := url.Values{}
+	q.Set("ownername", owner)
+	q.Set("projectname", project)
+	var pl PackageList
+	if err := c.Get("/package/list", q, &pl); err != nil {
+		return nil, err
+	}
+	return pl.Items, nil
+}
+
 // BuildChrootList lists the build chroots of a build.
 func (c *Client) ListBuildChroots(ctx context.Context, buildID int) ([]BuildChroot, error) {
 	q := url.Values{}

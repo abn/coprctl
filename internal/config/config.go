@@ -66,6 +66,11 @@ func New(configPath, legacyPath string) *Manager {
 	return &Manager{path: configPath, legacy: legacyPath}
 }
 
+// Matches reports whether the manager's config paths equal the given ones.
+func (m *Manager) Matches(configPath, legacyPath string) bool {
+	return m.path == configPath && m.legacy == legacyPath
+}
+
 // DefaultPaths returns the default config and legacy paths honouring XDG.
 func DefaultPaths() (configPath, legacyPath string) {
 	home, _ := os.UserHomeDir()

@@ -6,6 +6,10 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Implemented Wave 02 (M1 CRUD parity): project/package/build
+  write commands, all source types under one `--source` flag, the migration
+  shim, and JSON-body API calls. Verified the full lifecycle end to end
+  against Copr staging (create project, add package, submit build, delete).
 * **Creation**: Implemented the M0 skeleton in code: the command registry
   (`project`, `chroot`, `build`, `schema`, `version`), the reference parser,
   config profiles with legacy import, the API client, output renderers, and

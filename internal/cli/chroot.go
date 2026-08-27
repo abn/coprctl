@@ -38,7 +38,7 @@ func newChrootListCmd(app *App, out *outFlags) *cobra.Command {
 				_ = state.NewChrootCache(cacheDir).Store(chroots)
 			}
 			names := filterChroots(chroots.ChrootNames(), filter, distro, arch)
-			if out.format == "auto" || out.format == "table" || out.format == "plain" {
+			if isHuman(out.format) {
 				t := render.NewTable("CHROOT", "COMMENT")
 				for _, n := range names {
 					t.Add(n, chroots[n])

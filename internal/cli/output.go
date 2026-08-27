@@ -58,3 +58,9 @@ func requireOne(args []string, usage string) (string, error) {
 	}
 	return args[0], nil
 }
+
+// confirmRequired returns a usage error naming the confirmation flag that a
+// non-interactive destructive command needs.
+func confirmRequired(flag string) error {
+	return cerr.Usage(fmt.Sprintf("this is a destructive operation; pass %s to confirm", flag))
+}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/abn/coprctl/internal/cerr"
 )
@@ -304,11 +305,49 @@ func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath strin
 	return &b, nil
 }
 
+// GenerateWebhookSecret rotates a project's webhook secret and returns it.
+func (c *Client) GenerateWebhookSecret(ctx context.Context, owner, project string) (string, error) {
+	var resp struct {
+		WebhookSecret string `json:"webhook_secret"`
+	}
+	path := fmt.Sprintf("/webhook/generate/%s/%s", owner, project)
+	if err := c.doJSON(ctx, http.MethodPost, path, nil, &resp); err != nil {
+		return "", err
+	}
+	return resp.WebhookSecret, nil
+}
+
+// UpsertPackage creates a package, tolerating an already-existing one (used
+// by apply, which is additive and safe to re-run).
+func (c *Client) UpsertPackage(ctx context.Context, in PackageCreate) error {
+	err := c.CreatePackage(ctx, in)
+	if err == nil {
+		return nil
+	}
+	if isConflict(err) {
+		return nil
+	}
+	if isBadRequestAlreadyExists(err) {
+		return nil
+	}
+	return err
+}
+
 // isConflict reports whether err is a 409 conflict error.
 func isConflict(err error) bool {
 	var ce *cerr.Error
 	if errors.As(err, &ce) {
 		return ce.Code == "conflict"
+	}
+	return false
+}
+
+// isBadRequestAlreadyExists reports whether a 400 is the "already exists"
+// case, which staging surfaces instead of a 409 for duplicate packages.
+func isBadRequestAlreadyExists(err error) bool {
+	var ce *cerr.Error
+	if errors.As(err, &ce) && ce.Code == "bad_request" {
+		return strings.Contains(ce.Hint, "already")
 	}
 	return false
 }

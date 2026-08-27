@@ -6,6 +6,12 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Implemented Wave 05 (M4 declarative and integrations): the
+  `copr.yaml` manifest with validate/diff/apply/export, local state for webhook
+  secrets, and the GitHub webhook integration with idempotent hook management
+  and ping verification. Verified the declarative lifecycle end to end against
+  Copr staging (apply, diff drift with exit 12, export round-trip) and the
+  secret rotation/URL path.
 * **Creation**: Implemented Wave 04 (M3 agent surface): the versioned JSONL
   event schema, `schema --format mcp`, the stdio MCP server with read/write/
   destructive tiers, and the generated agent skill plus `skill install`.

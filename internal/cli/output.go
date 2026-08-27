@@ -8,6 +8,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/abn/coprctl/internal/cerr"
+	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 )
 
@@ -57,6 +58,18 @@ func requireOne(args []string, usage string) (string, error) {
 		return "", cerr.Usage(fmt.Sprintf("expected %s", usage))
 	}
 	return args[0], nil
+}
+
+// parseRef parses a project reference requiring an owner.
+func parseRef(s string) (ref.Ref, error) {
+	r, err := ref.Parse(s, nil)
+	if err != nil {
+		return r, err
+	}
+	if r.Owner == "" {
+		return r, cerr.Usage(fmt.Sprintf("reference %q has no owner; use owner/project", s))
+	}
+	return r, nil
 }
 
 // confirmRequired returns a usage error naming the confirmation flag that a

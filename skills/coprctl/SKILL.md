@@ -14,6 +14,7 @@ description: Manage Fedora Copr projects, packages, chroots, builds, build
 Generated from the command registry; every command below exists.
 
 - `coprctl` - A reimagined CLI for the Fedora Copr build system
+  - `coprctl apply` - Reconcile a project to match the manifest
   - `coprctl build` - Manage Copr builds
     - `coprctl build cancel` - Cancel a build
     - `coprctl build get` - Show a build
@@ -22,6 +23,13 @@ Generated from the command registry; every command below exists.
   - `coprctl chroot` - The instance chroot catalog (mock chroots)
     - `coprctl chroot list` - List the chroot catalog
   - `coprctl compat` - Translate a copr-cli invocation to coprctl
+  - `coprctl diff` - Show field-level drift between manifest and live project
+  - `coprctl export` - Generate a manifest from a live project
+  - `coprctl integration` - Configure forge webhook integrations
+    - `coprctl integration github` - GitHub webhook integration
+      - `coprctl integration github enable` - Enable a GitHub webhook for a project
+    - `coprctl integration rotate-secret` - Generate a new webhook secret and cache it
+    - `coprctl integration url` - Print the Copr webhook URL for a project
   - `coprctl log` - Tail and inspect build logs
     - `coprctl log tail` - Tail build logs (a build id, build/chroot, or ref)
   - `coprctl mcp` - Model Context Protocol server
@@ -42,4 +50,5 @@ Generated from the command registry; every command below exists.
     - `coprctl skill install` - Install the skill into an agent skills directory
     - `coprctl skill print` - Print the skill to stdout
   - `coprctl status` - One-shot project health summary; exits 4 on failed builds
+  - `coprctl validate` - Validate a manifest without any network calls
   - `coprctl version` - Print version and build information

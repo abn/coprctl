@@ -152,6 +152,37 @@ func TestCreateProjectIfNotExists(t *testing.T) {
 	}
 }
 
+func TestUpsertPackageToleratesExisting(t *testing.T) {
+	calls := 0
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, `{"error": "Package already exists in this project."}`, http.StatusBadRequest)
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	if err := c.UpsertPackage(context.Background(), PackageCreate{
+		Owner: "o", Project: "p", Name: "x", SourceType: SourceSCM,
+		Source: map[string]any{"clone_url": "u"},
+	}); err != nil {
+		t.Fatalf("upsert should tolerate already-exists: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call, got %d", calls)
+	}
+}
+
+func TestUpsertPackageSurfacesOtherErrors(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error": "some other problem"}`, http.StatusBadRequest)
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	if err := c.UpsertPackage(context.Background(), PackageCreate{
+		Owner: "o", Project: "p", Name: "x", SourceType: SourceSCM,
+		Source: map[string]any{"clone_url": "u"},
+	}); err == nil {
+		t.Fatal("expected error for non-already-exists 400")
+	}
+}
+
 func TestBadRequestSurfacesAPIMessage(t *testing.T) {
 	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error": "name: This field is required."}`, http.StatusBadRequest)

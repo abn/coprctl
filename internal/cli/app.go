@@ -106,6 +106,11 @@ func Root(app *App) *cobra.Command {
 		newCompatCmd(app),
 		newSkillCmd(app),
 		newMCPCmd(app),
+		newApplyCmd(app),
+		newExportCmd(app),
+		newDiffCmd(app),
+		newValidateCmd(app),
+		newIntegrationCmd(app),
 		newSchemaCmd(app),
 		newVersionCmd(),
 	)

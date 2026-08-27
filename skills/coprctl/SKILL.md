@@ -21,6 +21,7 @@ Generated from the command registry; every command below exists.
 - `coprctl` - A reimagined CLI for the Fedora Copr build system
   - `coprctl apply` - Reconcile a project to match the manifest
   - `coprctl auth` - Inspect and manage credentials
+    - `coprctl auth login` - Open the instance API page and import a fresh token
     - `coprctl auth rotate` - Rotate the API token and update the profile
     - `coprctl auth status` - Show who you are and whether the token is near expiry
   - `coprctl build` - Manage Copr builds

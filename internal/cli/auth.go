@@ -1,12 +1,18 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"os/exec"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/abn/coprctl/internal/cerr"
+	"github.com/abn/coprctl/internal/config"
 	"github.com/abn/coprctl/internal/render"
 )
 
@@ -21,10 +27,141 @@ func newAuthCmd(app *App) *cobra.Command {
 	}
 	out.bind(cmd)
 	cmd.AddCommand(
+		newAuthLoginCmd(app, &out),
 		newAuthStatusCmd(app, &out),
 		newAuthTokenCmd(app, &out),
 	)
 	return cmd
+}
+
+// newAuthLoginCmd opens the instance API page in a browser and guides the user
+// through pasting the [copr-cli] block from it, then writes a profile.
+func newAuthLoginCmd(app *App, out *outFlags) *cobra.Command {
+	var url, profile string
+	var noOpen, interactive bool
+	cmd := &cobra.Command{
+		Use:   "login",
+		Short: "Open the instance API page and import a fresh token",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Resolve the instance URL: flag, then the current profile, then
+			// production.
+			base := strings.TrimRight(url, "/")
+			if base == "" {
+				if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
+					app.Cfg = config.New(app.cfgPath, app.legacy)
+				}
+				if prof, err := app.Cfg.Profile(app.profile); err == nil && prof.BaseURL() != "" {
+					base = prof.BaseURL()
+				}
+			}
+			if base == "" {
+				base = config.DefaultProductionURL
+			}
+			apiURL := base + "/api/"
+
+			// Open the browser, unless the user asked not to.
+			if !noOpen {
+				if err := openBrowser(apiURL); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not open a browser: %v\n", err)
+				}
+			}
+			// Informational messages go to stderr so stdout stays
+			// machine-parseable when the user asked for JSON output.
+			fmt.Fprintf(cmd.ErrOrStderr(), "Visit %s, generate a token, and paste the [copr-cli] block below.\n", apiURL)
+			fmt.Fprintln(cmd.ErrOrStderr(), "(paste the whole block, then press Enter; press Ctrl-D on a blank line to finish)")
+
+			// Read the pasted block. In interactive mode read multiple lines
+			// until EOF; otherwise read a pasted block from stdin.
+			var p config.Profile
+			if interactive || isTTY(cmd) {
+				block := readMultiline(cmd)
+				if strings.TrimSpace(block) != "" {
+					if parsed, err := config.ParseLegacyBlock([]byte(block)); err == nil {
+						p = parsed
+					}
+				}
+				interactiveImport(cmd, &p)
+			} else {
+				if pasted := readPasted(cmd); pasted != "" {
+					parsed, err := config.ParseLegacyBlock([]byte(pasted))
+					if err != nil {
+						return err
+					}
+					p = parsed
+				}
+			}
+
+			if p.Token == "" || p.Login == "" {
+				return fmt.Errorf("no credentials received: paste the [copr-cli] block from %s, or run with -i to enter values by hand", apiURL)
+			}
+			if p.URL == "" {
+				p.URL = base
+			}
+			// Write the profile without emitting a separate import result.
+			name := profile
+			if name == "" {
+				name = config.DetectInstance(p.BaseURL())
+			}
+			if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
+				app.Cfg = config.New(app.cfgPath, app.legacy)
+			}
+			if existing, err := app.Cfg.Profile(name); err == nil && profile == "" && existing.Username != p.Username && existing.Username != "" {
+				return fmt.Errorf("profile %q already exists for a different user; pass --profile to update it explicitly", name)
+			}
+			if err := app.Cfg.SetProfile(name, p); err != nil {
+				return err
+			}
+			// Emit a single result: profile, instance, and expiry status.
+			w := expiryWarning{Profile: name, Expiry: p.TokenExpiry}
+			if p.TokenExpiry != "" {
+				if exp, perr := parseExpiry(p.TokenExpiry); perr == nil {
+					rem := time.Until(exp)
+					switch {
+					case rem < 0:
+						w.Status = "expired"
+						w.Remaining = "expired"
+					case rem < warnThreshold:
+						w.Status = "warning"
+						w.Remaining = roundDuration(rem)
+					default:
+						w.Status = "ok"
+						w.Remaining = roundDuration(rem)
+					}
+				}
+			}
+			if w.Status == "" {
+				w.Status = "unknown"
+			}
+			return renderResult(cmd, out, map[string]any{
+				"logged_in":   true,
+				"profile":     name,
+				"instance":    config.DetectInstance(p.BaseURL()),
+				"expiry":      w.Expiry,
+				"status":      w.Status,
+				"remaining":   w.Remaining,
+				"config_file": app.cfgPath,
+			})
+		},
+	}
+	cmd.Flags().StringVar(&url, "url", "", "instance base URL (default: production or current profile)")
+	cmd.Flags().StringVar(&profile, "profile", "", "profile name (default: instance name)")
+	cmd.Flags().BoolVar(&noOpen, "no-open", false, "do not open a browser; print the URL instead")
+	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "prompt for each credential instead of pasting a block")
+	return cmd
+}
+
+// readMultiline reads until EOF, returning the pasted block.
+func readMultiline(cmd *cobra.Command) string {
+	r := bufio.NewReader(os.Stdin)
+	var b strings.Builder
+	for {
+		line, err := r.ReadString('\n')
+		b.WriteString(line)
+		if err != nil {
+			break
+		}
+	}
+	return b.String()
 }
 
 // expiryWarning describes the token expiry state for a profile.
@@ -177,4 +314,18 @@ func legacySourced(app *App) bool {
 	}
 	name := profileName(app)
 	return app.Cfg.HasProfile(name) == false
+}
+
+// openBrowser opens a URL in the platform default browser.
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	return cmd.Start()
 }

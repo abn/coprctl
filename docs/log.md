@@ -6,6 +6,10 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Added `coprctl auth login`, which opens the instance API page
+  (`<url>/api/`) in the browser and guides the user through pasting the
+  `[copr-cli]` block, then writes a profile and reports expiry status. Supports
+  `--no-open` for headless use and `-i` for per-field prompts.
 * **Creation**: Added secret-handler support (pass, gopass, secret-tool) so
   tokens can be stored in a system secret handler instead of the config file;
   `config set token` reads from a prompt or stdin, never argv. Added full

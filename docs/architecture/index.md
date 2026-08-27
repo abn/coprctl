@@ -7,20 +7,22 @@ generated from it.
 
 ## Layers
 
+The implemented package layout mirrors the working spec:
+
 | Layer | Role |
 |---|---|
 | `cmd/coprctl` | entrypoint |
 | `internal/cli` | Cobra command registry plus schema generation |
 | `internal/copr` | API client against the `/api_3` REST surface |
 | `internal/ref` | the one reference parser, shared by every command |
-| `internal/events` | the event bus that drives watch, tail, and monitor |
-| `internal/logstream` | the log tailer |
-| `internal/manifest` | declarative `copr.yaml` schema, diff, apply, export |
-| `internal/render` | table, plain, json, jsonl, yaml formatters |
-| `internal/tui` | Bubble Tea programs consuming the event bus |
-| `internal/state` | local state for webhook secrets and the chroot cache |
+| `internal/cerr` | structured error objects and stable exit codes |
 | `internal/config` | profiles, precedence, legacy config import |
-| `internal/forge` | GitHub (and later other) hook management |
+| `internal/render` | table, plain, json, jsonl, yaml formatters |
+| `internal/state` | local cache (chroot catalog) |
+
+Planned layers that later milestones add: `internal/events` (event bus),
+`internal/logstream` (log tailer), `internal/manifest` (declarative
+`copr.yaml`), `internal/tui` (TUI), and `internal/forge` (hook management).
 
 ## Repository layout
 

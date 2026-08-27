@@ -6,10 +6,13 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Implemented the M0 skeleton in code: the command registry
+  (`project`, `chroot`, `build`, `schema`, `version`), the reference parser,
+  config profiles with legacy import, the API client, output renderers, and
+  structured error objects with stable exit codes.
+* **Update**: Architecture page reflects the implemented package layout.
 * **Initialization**: Created the bundle root and section scaffolds
   (overview, design, architecture, adr, usage, reference, contribution).
-* **Creation**: Added the ADR for the implementation language and the
-  architecture overview seed pages.
 * **Curation**: OKF conformance pass. Removed frontmatter from the design and
   architecture section index files so only the bundle root carries frontmatter.
   Added stub pages for the referenced-but-missing concepts (terminology, CLI

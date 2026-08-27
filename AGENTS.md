@@ -53,4 +53,5 @@ working spec is at `.scratch/inbox/spec.md`.
 
 ## Contributor guide
 
-See `docs/contribution/`. For maintainers, see `docs/contribution/maintainers.md`.
+See `docs/contribution/`, especially the [release process](docs/contribution/release-process.md)
+for normal and NVR releases. For maintainers, see `docs/contribution/maintainers.md`.

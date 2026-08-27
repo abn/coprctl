@@ -1,5 +1,5 @@
 Name:           coprctl
-Version:        0.1.0
+Version:        0.1.0 # x-release-please-version
 Release:        1%{?dist}
 Summary:        Reimagined CLI and agent interface for Fedora Copr
 

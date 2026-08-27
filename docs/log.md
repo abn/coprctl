@@ -6,6 +6,12 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Documented the release process (normal and NVR releases, the
+  Release Please PR-only and squash-merge conventions, and bump procedures for
+  packaging-only changes) at `docs/contribution/release-process.md`. Linked it
+  from the contribution index, maintainer guide, README, and AGENTS.md. Wired
+  Release Please to sync `coprctl.spec` `Version:` via the `extra-files`
+  generic updater, and added a release-manager agent role card.
 * **Creation**: Added GitHub Actions CI (test suite running `make check`, code
   quality running `make lint` and `make drift`), a release workflow driven by
   Release Please with a GoReleaser build and asset upload, a Dependabot config

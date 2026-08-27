@@ -118,7 +118,8 @@ make gen       # regenerate generated artefacts from the command registry
 ```
 
 See [docs/contribution/](docs/contribution/) for the contributor guide and
-`AGENTS.md` for the operational contract.
+the [release process](docs/contribution/release-process.md), and `AGENTS.md`
+for the operational contract.
 
 ## License
 

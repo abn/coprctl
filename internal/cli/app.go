@@ -114,6 +114,7 @@ func Root(app *App) *cobra.Command {
 		newDetectCmd(app),
 		newInitCmd(app),
 		newSyncCmd(app),
+		newTryCmd(app),
 		newSchemaCmd(app),
 		newVersionCmd(),
 	)

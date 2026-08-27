@@ -65,10 +65,22 @@ func printEvent(ev events.Event) {
 	}
 	if ev.State != "" {
 		out["state"] = ev.State
+		if ev.Prev != "" {
+			out["previous"] = ev.Prev
+		}
 	}
 	if ev.Line != "" {
 		out["line"] = ev.Line
 		out["stream"] = ev.Stream
+		if ev.Seq != 0 {
+			out["seq"] = ev.Seq
+		}
+	}
+	if ev.Dropped != 0 {
+		out["dropped"] = ev.Dropped
+	}
+	if ev.Err != nil {
+		out["message"] = ev.Err.Error()
 	}
 	_ = render.Render(os.Stdout, render.FormatJSONL, out)
 }

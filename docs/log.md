@@ -6,6 +6,11 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Implemented Wave 04 (M3 agent surface): the versioned JSONL
+  event schema, `schema --format mcp`, the stdio MCP server with read/write/
+  destructive tiers, and the generated agent skill plus `skill install`.
+  Added the `make gen`/`make drift` gate so generated artefacts cannot diverge
+  from the command registry.
 * **Creation**: Implemented Wave 03 (M2 logs and events): the event bus, the
   polling source, the log tailer with incremental and full-refetch gzip
   strategies, multi-chroot tail, monitor, and status. The tailer was validated

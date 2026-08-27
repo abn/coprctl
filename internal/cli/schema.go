@@ -19,6 +19,9 @@ func newSchemaCmd(app *App) *cobra.Command {
 			case "", "json":
 				s := buildSchema(Root(app))
 				return render.Render(cmd.OutOrStdout(), render.FormatJSON, s)
+			case "mcp":
+				tools := schemaMCP(Root(app))
+				return render.Render(cmd.OutOrStdout(), render.FormatJSON, tools)
 			case "markdown":
 				fmt.Fprintln(cmd.OutOrStdout(), "# coprctl commands")
 				walkSchema(Root(app), cmd, 1)
@@ -28,7 +31,7 @@ func newSchemaCmd(app *App) *cobra.Command {
 			}
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "json", "json, markdown")
+	cmd.Flags().StringVar(&format, "format", "json", "json, mcp, markdown")
 	return cmd
 }
 

@@ -33,6 +33,7 @@ type Stream struct {
 	isGzip    bool   // whether the active log is gzip-compressed
 	plain     bool   // fell back to the uncompressed .log
 	pending   string // partial trailing line held across fetches
+	seq       int    // monotonic per-stream line sequence
 	interval  time.Duration
 }
 
@@ -243,7 +244,6 @@ func (s *Stream) emitReader(gz io.Reader, skip int64, bus *events.Bus) (bool, er
 	}
 	br := bufio.NewReaderSize(gz, 64*1024)
 	gotNew := false
-	seq := 0
 	for {
 		line, err := br.ReadString('\n')
 		complete := strings.HasSuffix(line, "\n")
@@ -257,10 +257,10 @@ func (s *Stream) emitReader(gz io.Reader, skip int64, bus *events.Bus) (bool, er
 			if line != "" {
 				s.emitted += int64(len(line) + 1)
 				gotNew = true
-				seq++
+				s.seq++
 				bus.Publish(events.Event{
 					Kind: events.KindLogLine, BuildID: s.BuildID, Chroot: s.Chroot,
-					Stream: "builder-live", Seq: seq, Line: line,
+					Stream: "builder-live", Seq: s.seq, Line: line,
 				})
 			}
 		} else if len(line) > 0 {

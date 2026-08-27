@@ -6,6 +6,11 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Added GitHub Actions CI (test suite running `make check`, code
+  quality running `make lint` and `make drift`), a release workflow driven by
+  Release Please with a GoReleaser build and asset upload, a Dependabot config
+  for Go modules and GitHub Actions, and a `.gitattributes` marking `go.sum`
+  as generated.
 * **Creation**: Added `coprctl auth login`, which opens the instance API page
   (`<url>/api/`) in the browser and guides the user through pasting the
   `[copr-cli]` block, then writes a profile and reports expiry status. Supports

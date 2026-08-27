@@ -2,7 +2,7 @@ apiVersion: coprctl/v1
 kind: Project
 
 metadata:
-  owner: quadzero
+  owner: abn
   name: coprctl
   profile: fedora
 
@@ -10,7 +10,7 @@ spec:
   description: |
     A reimagined command-line and agent interface for the Fedora Copr
     build system.
-  instructions: dnf copr enable quadzero/coprctl && dnf install coprctl
+  instructions: dnf copr enable abn/coprctl && dnf install coprctl
 
   settings:
     enableNet: false
@@ -27,7 +27,7 @@ spec:
     - name: coprctl
       source:
         type: scm
-        cloneUrl: https://github.com/quadzero/coprctl.git
+        cloneUrl: https://github.com/abn/coprctl.git
         committish: main
         spec: coprctl.spec
         method: rpkg

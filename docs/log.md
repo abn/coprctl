@@ -6,6 +6,9 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Recorded ADR 0002 standardizing the project and binary name on
+  `coprctl` and retiring the *Coppersmith* working name. Updated the
+  self-hosting manifest and the blog post to reference `github.com/abn/coprctl`.
 * **Creation**: Expanded the agent skill into a namespaced bundle (`skill
   print/install [name]` for `coprctl` and `coprctl-debug`) and added
   build-debugging capabilities: `log failures` (extract failing region),

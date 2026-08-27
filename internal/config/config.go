@@ -259,15 +259,16 @@ func ParseLegacyBlock(data []byte) (Profile, error) {
 	return p, nil
 }
 
-// Instance names for the well-known Copr deployments.
+// Instance names for the well-known public Copr deployments.
 const (
 	InstanceProduction = "production"
 	InstanceStaging    = "staging"
+	InstanceOpenEuler  = "openEuler"
 )
 
-// DetectInstance infers the instance name from a base URL. There are two
-// well-known public deployments: production and staging. Anything else is a
-// self-hosted instance and returns the URL host as its name.
+// DetectInstance infers a profile name from a base URL. Copr is free software
+// and anyone can host an instance, so beyond the well-known public deployments
+// (production, staging, openEuler) the URL host is used as the profile name.
 func DetectInstance(baseURL string) string {
 	u := strings.TrimRight(baseURL, "/")
 	switch {
@@ -275,6 +276,8 @@ func DetectInstance(baseURL string) string {
 		return InstanceProduction
 	case strings.Contains(u, "copr.stg.fedoraproject.org"):
 		return InstanceStaging
+	case strings.Contains(u, "openeuler.openatom.cn") || strings.Contains(u, "openeuler.org"):
+		return InstanceOpenEuler
 	}
 	// Strip scheme and take the host.
 	if i := strings.Index(u, "://"); i >= 0 {

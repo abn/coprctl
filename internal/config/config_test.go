@@ -135,7 +135,9 @@ func TestDetectInstance(t *testing.T) {
 	tests := []struct{ url, want string }{
 		{"https://copr.fedorainfracloud.org", InstanceProduction},
 		{"https://copr.stg.fedoraproject.org", InstanceStaging},
+		{"https://eur.openeuler.openatom.cn", InstanceOpenEuler},
 		{"https://copr.internal.example.com", "copr.internal.example.com"},
+		{"https://copr.mycompany.dev", "copr.mycompany.dev"},
 	}
 	for _, tt := range tests {
 		if got := DetectInstance(tt.url); got != tt.want {

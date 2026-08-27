@@ -92,7 +92,7 @@ func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
 
 func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 	var repo, events string
-	var reveal bool
+	var reveal, tagOnly bool
 	cmd := &cobra.Command{
 		Use:   "enable REF --repo OWNER/REPO",
 		Short: "Enable a GitHub webhook for a project",
@@ -106,10 +106,9 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			if token == "" {
 				return fmt.Errorf("GITHUB_TOKEN or GH_TOKEN is required for the GitHub integration")
 			}
-			evs := []string{"push", "create"}
-			if events != "" {
-				evs = splitComma(events)
-			}
+			// Default to tag-only triggers (GitHub `create` fires on tag
+			// creation). `--events` overrides for full control.
+			evs := defaultHookEvents(tagOnly, events)
 			gh := forge.NewGitHub(token)
 			u, err := webhookURL(cmd.Context(), app, r)
 			if err != nil {
@@ -154,14 +153,29 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			return renderResult(cmd, out, map[string]any{
 				"enabled": true, "repo": repo, "hook_id": hook.ID,
-				"url": u, "ping_status": code,
+				"url": u, "ping_status": code, "events": evs,
 			})
 		},
 	}
 	cmd.Flags().StringVar(&repo, "repo", "", "GitHub repo owner/name")
-	cmd.Flags().StringVar(&events, "events", "push,create", "comma-separated events")
+	cmd.Flags().StringVar(&events, "events", "", "comma-separated events (overrides tag-only default)")
+	cmd.Flags().BoolVar(&tagOnly, "tag-only", true, "trigger only on push of a tag (GitHub create event)")
 	cmd.Flags().BoolVar(&reveal, "reveal", false, "reveal the secret in output")
 	return cmd
+}
+
+// defaultHookEvents resolves the hook events. The default is tag-only (the
+// GitHub `create` event fires when a tag is created, which drives Copr's
+// tag-triggered rebuilds). An explicit --events value overrides it; setting
+// --tag-only=false opts back in to branch pushes.
+func defaultHookEvents(tagOnly bool, events string) []string {
+	if events != "" {
+		return splitComma(events)
+	}
+	if tagOnly {
+		return []string{"create"}
+	}
+	return []string{"push", "create"}
 }
 
 func newIntegrationRotateCmd(app *App, out *outFlags) *cobra.Command {

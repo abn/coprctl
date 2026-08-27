@@ -43,8 +43,19 @@ surfaces as a 403 from the GitHub API when the hook is created or updated.
 export GH_TOKEN=<your-token>
 coprctl integration rotate-secret OWNER/PROJECT --yes
 coprctl integration github enable OWNER/PROJECT \
-    --repo OWNER/REPO --events push,create
+    --repo OWNER/REPO
 ```
+
+The default trigger is **tag-only**: the hook listens for the GitHub `create`
+event, which fires when a tag is created. Copr uses the tag name to rebuild the
+matching package (`PKGNAME-VERSION[-RELEASE]`). This means branch pushes do not
+trigger rebuilds by default.
+
+The trigger is configurable:
+
+- `--tag-only=false` opts back in to branch pushes (GitHub `push` event in
+  addition to `create`).
+- `--events push,create` overrides the default with an explicit event list.
 
 The command:
 

@@ -5,6 +5,8 @@
       - `coprctl build cancel` - Cancel a build
       - `coprctl build get` - Show a build
       - `coprctl build list` - List builds for a project
+      - `coprctl build rebuild` - Rebuild a package from its stored source definition
+      - `coprctl build reproduce` - Print the local mock reproduction recipe from a build log
       - `coprctl build submit` - Submit a build
     - `coprctl chroot` - The instance chroot catalog (mock chroots)
       - `coprctl chroot list` - List the chroot catalog
@@ -14,6 +16,9 @@
       - `coprctl completion fish` - Generate fish completion
       - `coprctl completion powershell` - Generate powershell completion
       - `coprctl completion zsh` - Generate zsh completion
+    - `coprctl config` - Manage configuration and profiles
+      - `coprctl config migrate` - Import the legacy ~/.config/copr config into a named profile
+      - `coprctl config show` - Show the effective configuration and where each value came from
     - `coprctl detect` - Read-only: infer a project setup from a source repository
     - `coprctl diff` - Show field-level drift between manifest and live project
     - `coprctl doctor` - Diagnose environment issues
@@ -25,6 +30,8 @@
       - `coprctl integration rotate-secret` - Generate a new webhook secret and cache it
       - `coprctl integration url` - Print the Copr webhook URL for a project
     - `coprctl log` - Tail and inspect build logs
+      - `coprctl log detective` - Ask log-detective.com to explain a failing build log
+      - `coprctl log failures` - Extract the failing region from each failed chroot of a build
       - `coprctl log tail` - Tail build logs (a build id, build/chroot, or ref)
     - `coprctl mcp` - Model Context Protocol server
       - `coprctl mcp serve` - Serve the command surface as MCP tools over stdio
@@ -40,9 +47,10 @@
       - `coprctl project get` - Show a project
       - `coprctl project list` - List projects
     - `coprctl schema` - Emit the command tree as JSON or markdown
-    - `coprctl skill` - Print or install the generated agent skill
-      - `coprctl skill install` - Install the skill into an agent skills directory
-      - `coprctl skill print` - Print the skill to stdout
+    - `coprctl skill` - Print or install bundled agent skills
+      - `coprctl skill install` - Install a skill into an agent skills directory
+      - `coprctl skill list` - List bundled skills
+      - `coprctl skill print` - Print a skill to stdout (default: coprctl)
     - `coprctl status` - One-shot project health summary; exits 4 on failed builds
     - `coprctl sync` - Reconcile the manifest against the source repo and Copr
     - `coprctl try` - Local clean-room preflight build in containers

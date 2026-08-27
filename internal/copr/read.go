@@ -158,12 +158,12 @@ func (t Timestamp) Time() time.Time {
 
 // BuildChroot is one execution of a build in one chroot.
 type BuildChroot struct {
-	BuildID   int    `json:"build_id"`
-	Chroot    string `json:"name"`
-	State     string `json:"state"`
-	ResultURL string `json:"result_url"`
-	StartedOn string `json:"started_on"`
-	EndedOn   string `json:"ended_on"`
+	BuildID   int       `json:"build_id"`
+	Chroot    string    `json:"name"`
+	State     string    `json:"state"`
+	ResultURL string    `json:"result_url"`
+	StartedOn Timestamp `json:"started_on"`
+	EndedOn   Timestamp `json:"ended_on"`
 }
 
 // GetBuild fetches a single build by id.
@@ -239,6 +239,20 @@ func (c *Client) ListPackages(ctx context.Context, owner, project string) ([]Pac
 		return nil, err
 	}
 	return pl.Items, nil
+}
+
+// GetPackage fetches a single package by name.
+func (c *Client) GetPackage(ctx context.Context, owner, project, name string) (*Package, error) {
+	pkgs, err := c.ListPackages(ctx, owner, project)
+	if err != nil {
+		return nil, err
+	}
+	for i := range pkgs {
+		if pkgs[i].Name == name {
+			return &pkgs[i], nil
+		}
+	}
+	return nil, fmt.Errorf("package %q not found in %s/%s", name, owner, project)
 }
 
 // Terminal build states.

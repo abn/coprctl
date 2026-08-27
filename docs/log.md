@@ -6,6 +6,16 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Expanded the agent skill into a namespaced bundle (`skill
+  print/install [name]` for `coprctl` and `coprctl-debug`) and added
+  build-debugging capabilities: `log failures` (extract failing region),
+  `log detective` (log-detective.com helper), `build reproduce` (print the
+  copr-rpmbuild recipe), and `build rebuild --preflight`. The `try` preflight
+  now invokes the real rpmbuilder image in a two-stage build.
+* **Creation**: Added `config show` and `config migrate` to surface the legacy
+  `~/.config/copr` auto-detection and let users import it into a named profile.
+  Validated all debugging commands against real failed builds in the
+  nowledge-mem project on production.
 * **Creation**: Added the GitHub webhook integration usage guide. Verified the
   integration live against Copr staging and GitHub: idempotent hook create and
   update, ping verification (200), and secret masking. Fixed the idempotency

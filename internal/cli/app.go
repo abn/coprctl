@@ -104,6 +104,7 @@ func Root(app *App) *cobra.Command {
 		newMonitorCmd(app),
 		newStatusCmd(app),
 		newCompatCmd(app),
+		newConfigCmd(app),
 		newSkillCmd(app),
 		newMCPCmd(app),
 		newApplyCmd(app),

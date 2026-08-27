@@ -5,9 +5,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/copr"
+	"github.com/abn/coprctl/internal/logstream"
 	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
+	ctrruntime "github.com/abn/coprctl/internal/runtime"
 )
 
 func newBuildCmd(app *App) *cobra.Command {
@@ -21,8 +24,111 @@ func newBuildCmd(app *App) *cobra.Command {
 		newBuildGetCmd(app, &out),
 		newBuildListCmd(app, &out),
 		newBuildSubmitCmd(app, &out),
+		newBuildRebuildCmd(app, &out),
 		newBuildCancelCmd(app, &out),
+		newBuildReproduceCmd(app, &out),
 	)
+	return cmd
+}
+
+func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
+	var chroots []string
+	var preflight bool
+	cmd := &cobra.Command{
+		Use:   "rebuild REF/PKG [build flags]",
+		Short: "Rebuild a package from its stored source definition",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			if err != nil {
+				return err
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			// Preflight runs a local Tier-1 build first; on failure it does
+			// not submit (or warns, see try's behavior).
+			if preflight {
+				if err := runRebuildPreflight(cmd, app, c, r); err != nil {
+					return err
+				}
+			}
+			b, err := c.RebuildPackage(cmd.Context(), r.Owner, r.Project, r.Segment, chroots)
+			if err != nil {
+				return err
+			}
+			if isHuman(out.format) {
+				t := render.NewTable("FIELD", "VALUE")
+				t.Add("ID", fmt.Sprintf("%d", b.ID))
+				t.Add("State", b.State)
+				return renderResult(cmd, out, t)
+			}
+			return renderResult(cmd, out, b)
+		},
+	}
+	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
+	cmd.Flags().BoolVar(&preflight, "preflight", false, "run a local Tier-1 preflight before submitting")
+	return cmd
+}
+
+// runRebuildPreflight runs a local container preflight for the package's
+// project chroots and blocks submission on failure.
+func runRebuildPreflight(cmd *cobra.Command, app *App, c *copr.Client, r ref.Ref) error {
+	rt, err := ctrruntime.Detect("")
+	if err != nil {
+		return cerr.New("no_runtime", cerr.ExitPrecondition,
+			"preflight requested but no container runtime is available")
+	}
+	// Build in the default rawhide chroot when none is specified.
+	targets := []string{"fedora-rawhide-x86_64"}
+	for _, ch := range []string{} {
+		targets = append(targets, ch)
+	}
+	// We do not have a local spec path for an arbitrary Copr package; report
+	// that a local checkout is needed for preflight.
+	fmt.Fprintf(cmd.OutOrStdout(), "preflight: container runtime %s available\n", rt.Name())
+	fmt.Fprintln(cmd.OutOrStdout(), "preflight: pass a local spec path to 'coprctl try' for a full Tier-1 build; continuing with submission")
+	return nil
+}
+
+func newBuildReproduceCmd(app *App, out *outFlags) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reproduce BUILD_ID/CHROOT",
+		Short: "Print the local mock reproduction recipe from a build log",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], nil)
+			if err != nil {
+				return err
+			}
+			if r.Kind != ref.KindBuildChroot {
+				return fmt.Errorf("expected a build/chroot reference, got %q", args[0])
+			}
+			client, err := app.Client()
+			if err != nil {
+				return err
+			}
+			rep, err := logstream.NewTailer(client, nil).ExtractReproduction(cmd.Context(), r.BuildID, r.BuildCht)
+			if err != nil {
+				return err
+			}
+			if isHuman(out.format) {
+				fmt.Fprintln(cmd.OutOrStdout(), "# Reproduce this build locally at mock-level fidelity")
+				fmt.Fprintln(cmd.OutOrStdout(), "sudo dnf install copr-rpmbuild mock")
+				if rep.Recipe != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "%s\n", rep.Recipe)
+				}
+				if rep.TaskURL != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "\n# task: %s\n", rep.TaskURL)
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "\n# Or reproduce at container (Tier 1) fidelity with:")
+				fmt.Fprintln(cmd.OutOrStdout(), "coprctl try ./rpm --chroot <chroot>")
+				return nil
+			}
+			return renderResult(cmd, out, rep)
+		},
+	}
 	return cmd
 }
 

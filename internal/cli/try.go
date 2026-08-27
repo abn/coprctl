@@ -137,11 +137,7 @@ func newTryCmd(app *App) *cobra.Command {
 				// Run the two-stage preflight.
 				var status string
 				if err := runPreflight(cmd.Context(), rt, m.Image, spec); err != nil {
-					if isNotImplemented(err) {
-						status = "unsupported"
-					} else {
-						status = "failed"
-					}
+					status = "failed"
 				} else {
 					status = "passed"
 				}
@@ -238,15 +234,26 @@ func normalizeArch(arch string) string {
 	return arch
 }
 
-// errNotImplemented marks a feature that is not yet implemented, so a stub
-// cannot be mistaken for a real preflight result.
-var errNotImplemented = fmt.Errorf("preflight execution not implemented yet")
-
-func isNotImplemented(err error) bool { return err == errNotImplemented }
-
 // runPreflight runs a two-stage build (SRPM, then rebuild) inside the image.
-// The actual rpmbuild invocation is not yet implemented; it returns
-// errNotImplemented rather than reporting a false pass.
+// Stage 1 (SRPM_ONLY=1) mirrors Copr's source build; stage 2 (FROM_SRPM=1)
+// rebuilds from the produced SRPM, mirroring the chroot build.
 func runPreflight(ctx context.Context, rt ctrruntime.Runtime, image, spec string) error {
-	return errNotImplemented
+	specDir := filepath.Dir(spec)
+	err := rt.Run(ctx, ctrruntime.RunSpec{
+		Image:   image,
+		WorkDir: specDir,
+		Env:     []string{"SRPM_ONLY=1"},
+		Args:    []string{"/usr/bin/rpmbuilder"},
+		Stdout:  os.Stdout,
+	})
+	if err != nil {
+		return err
+	}
+	return rt.Run(ctx, ctrruntime.RunSpec{
+		Image:   image,
+		WorkDir: specDir,
+		Env:     []string{"FROM_SRPM=1"},
+		Args:    []string{"/usr/bin/rpmbuilder"},
+		Stdout:  os.Stdout,
+	})
 }

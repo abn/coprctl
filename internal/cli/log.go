@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/abn/coprctl/internal/events"
+	"github.com/abn/coprctl/internal/logdetective"
 	"github.com/abn/coprctl/internal/logstream"
 	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
@@ -26,7 +27,49 @@ func newLogCmd(app *App) *cobra.Command {
 	out.bind(cmd)
 	cmd.AddCommand(
 		newLogTailCmd(app, &out),
+		newLogFailuresCmd(app, &out),
+		newLogDetectiveCmd(app, &out),
 	)
+	return cmd
+}
+
+func newLogFailuresCmd(app *App, out *outFlags) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "failures BUILD_ID",
+		Short: "Extract the failing region from each failed chroot of a build",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], nil)
+			if err != nil {
+				return err
+			}
+			if r.Kind != ref.KindBuild {
+				return fmt.Errorf("expected a build id, got %q", args[0])
+			}
+			client, err := app.Client()
+			if err != nil {
+				return err
+			}
+			failures, err := logstream.NewTailer(client, nil).ExtractFailures(cmd.Context(), r.BuildID)
+			if err != nil {
+				return err
+			}
+			if isHuman(out.format) {
+				for _, f := range failures {
+					fmt.Fprintf(cmd.OutOrStdout(), "== %s (%s)\n", f.Chroot, f.State)
+					if f.Head != "" {
+						fmt.Fprintf(cmd.OutOrStdout(), "   %s\n", f.Head)
+					}
+					for _, ln := range f.Lines {
+						fmt.Fprintf(cmd.OutOrStdout(), "   %s\n", ln)
+					}
+					fmt.Fprintln(cmd.OutOrStdout())
+				}
+				return nil
+			}
+			return renderResult(cmd, out, failures)
+		},
+	}
 	return cmd
 }
 
@@ -174,4 +217,37 @@ func pollInterval() time.Duration {
 		}
 	}
 	return 3 * time.Second
+}
+
+func newLogDetectiveCmd(app *App, out *outFlags) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "detective BUILD_ID/CHROOT",
+		Short: "Ask log-detective.com to explain a failing build log",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], nil)
+			if err != nil {
+				return err
+			}
+			if r.Kind != ref.KindBuildChroot {
+				return fmt.Errorf("expected a build/chroot reference, got %q", args[0])
+			}
+			ld := logdetective.New()
+			expl, err := ld.Explain(cmd.Context(), logdetective.ExplainRequest{
+				BuildID: r.BuildID, Chroot: r.BuildCht,
+			})
+			if err != nil {
+				return fmt.Errorf("log-detective: %w (fall back to 'coprctl log failures' for local analysis)", err)
+			}
+			if isHuman(out.format) {
+				fmt.Fprintf(cmd.OutOrStdout(), "Summary:\n%s\n", expl.Summary)
+				if expl.Suggestion != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "\nSuggestion:\n%s\n", expl.Suggestion)
+				}
+				return nil
+			}
+			return renderResult(cmd, out, expl)
+		},
+	}
+	return cmd
 }

@@ -185,6 +185,30 @@ func (c *Client) CancelBuild(ctx context.Context, id int) error {
 	return c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/build/cancel/%d", id), nil, nil)
 }
 
+// RebuildPackage submits a build for an existing package using its stored
+// source definition. The source_dict is resolved and passed to the build
+// endpoint.
+func (c *Client) RebuildPackage(ctx context.Context, owner, project, pkg string, chroots []string) (*Build, error) {
+	p, err := c.GetPackage(ctx, owner, project, pkg)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]any{
+		"ownername":    owner,
+		"projectname":  project,
+		"chroot_names": chroots,
+	}
+	for k, v := range p.SourceDict {
+		payload[k] = v
+	}
+	path := fmt.Sprintf("/build/create/%s", p.SourceType)
+	var b Build
+	if err := c.doJSON(ctx, http.MethodPost, path, payload, &b); err != nil {
+		return nil, err
+	}
+	return &b, nil
+}
+
 // DeleteBuild removes a build.
 func (c *Client) DeleteBuild(ctx context.Context, id int) error {
 	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/build/delete/%d", id), nil, nil)

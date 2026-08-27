@@ -2,7 +2,7 @@
 
 BIN := coprctl
 PKG := ./cmd/$(BIN)
-GENERATED := docs/reference/commands.md skills/coprctl/SKILL.md
+GENERATED := docs/reference/commands.md skills/coprctl/SKILL.md skills/coprctl-debug/SKILL.md
 
 .PHONY: help build check fmt lint test clean gen drift
 
@@ -24,7 +24,8 @@ fmt: ## Format code
 
 gen: ## Regenerate generated artefacts from the command registry
 	go run ./cmd/coprctl schema --format markdown > docs/reference/commands.md
-	go run ./cmd/coprctl skill print > skills/coprctl/SKILL.md
+	go run ./cmd/coprctl skill print coprctl > skills/coprctl/SKILL.md
+	go run ./cmd/coprctl skill print coprctl-debug > skills/coprctl-debug/SKILL.md
 
 drift: gen ## Fail if generated artefacts differ from the committed versions
 	@for f in $(GENERATED); do \

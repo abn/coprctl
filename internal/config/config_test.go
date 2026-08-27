@@ -85,3 +85,25 @@ func TestNoConfigError(t *testing.T) {
 		t.Errorf("expected exit code 3, got %d", cerr.ExitCodeFor(err))
 	}
 }
+
+func TestLegacyAutoDetectFallback(t *testing.T) {
+	// No coprctl config; only a legacy file. Profile() must fall back to it.
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	legacy := writeLegacy(t, `[copr-cli]
+login = "abc123"
+username = "devnullcake"
+token = "sekrit"
+copr_url = "https://copr.fedorainfracloud.org"
+`)
+	m := New(cfg, legacy)
+	p, err := m.Profile("")
+	if err != nil {
+		t.Fatalf("profile: %v", err)
+	}
+	if p.URL != "https://copr.fedorainfracloud.org" {
+		t.Errorf("URL = %q", p.URL)
+	}
+	if p.Username != "devnullcake" {
+		t.Errorf("Username = %q", p.Username)
+	}
+}

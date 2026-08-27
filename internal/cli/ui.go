@@ -2,24 +2,26 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/abn/coprctl/internal/render"
+	"github.com/abn/coprctl/internal/tui"
 )
 
-// newUICmd is a minimal full-view command. It renders a project's monitor
-// matrix; when stdout is not a TTY it degrades to plain table output rather
-// than entering an interactive view. The richer Bubble Tea dashboard is
-// deferred; this command keeps the TUI-degradation invariant real.
+// newUICmd renders a project dashboard. On an interactive TTY it opens the
+// Bubble Tea dashboard; off a TTY it degrades to a plain table so automation
+// is never blocked.
 func newUICmd(app *App) *cobra.Command {
 	var out outFlags
-	var ref string
 	cmd := &cobra.Command{
 		Use:   "ui [REF]",
-		Short: "Project dashboard view (degrades to plain output off a TTY)",
+		Short: "Interactive project dashboard (degrades to plain output off a TTY)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ref := ""
 			if len(args) == 1 {
 				ref = args[0]
 			}
@@ -34,6 +36,12 @@ func newUICmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Interactive TTY path: the Bubble Tea dashboard, unless the user
+			// asked for machine output or the environment forbids a UI.
+			if term.IsTerminal(int(os.Stdout.Fd())) && !isNoUI() && !cmd.Flags().Changed("output") {
+				return tui.Run(c, r.Owner, r.Project)
+			}
+			// Degraded path: plain table.
 			rows, err := c.Monitor(cmd.Context(), r.Owner, r.Project)
 			if err != nil {
 				return err
@@ -49,4 +57,8 @@ func newUICmd(app *App) *cobra.Command {
 	}
 	out.bind(cmd)
 	return cmd
+}
+
+func isNoUI() bool {
+	return os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" || os.Getenv("CI") != ""
 }

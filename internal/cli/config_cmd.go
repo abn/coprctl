@@ -11,6 +11,7 @@ import (
 
 	"github.com/abn/coprctl/internal/config"
 	"github.com/abn/coprctl/internal/render"
+	"github.com/abn/coprctl/internal/secrets"
 )
 
 func newConfigCmd(app *App) *cobra.Command {
@@ -22,10 +23,132 @@ func newConfigCmd(app *App) *cobra.Command {
 	out.bind(cmd)
 	cmd.AddCommand(
 		newConfigShowCmd(app, &out),
+		newConfigSetCmd(app, &out),
 		newConfigMigrateCmd(app, &out),
 		newConfigImportCmd(app, &out),
 	)
 	return cmd
+}
+
+// newConfigSetCmd sets a configuration value. For secrets (token) it stores the
+// value in a configured secret handler when one is available, else in the
+// config file with 0600 permissions.
+func newConfigSetCmd(app *App, out *outFlags) *cobra.Command {
+	var profile, secretHandler, secretKey string
+	cmd := &cobra.Command{
+		Use:   "set KEY [VALUE]",
+		Short: "Set a configuration value (token is read from a prompt, not argv)",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := args[0]
+			value := ""
+			if len(args) == 2 {
+				value = args[1]
+			}
+			if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
+				app.Cfg = config.New(app.cfgPath, app.legacy)
+			}
+			name := profile
+			if name == "" {
+				name = profileName(app)
+			}
+			prof, err := app.Cfg.Profile(name)
+			if err != nil {
+				// Bootstrap: a missing profile is created on first set.
+				prof = config.Profile{}
+			}
+			// Secret values are never taken from argv. Prompt for the token.
+			if key == "token" {
+				if value != "" {
+					return fmt.Errorf("do not pass a token as an argument (it leaks via argv); run without a value to prompt")
+				}
+				value, err = readSecret(cmd)
+				if err != nil {
+					return err
+				}
+			}
+			switch key {
+			case "token":
+				// Prefer a secret handler when one is configured or requested.
+				handlerName := secretHandler
+				if handlerName == "" {
+					handlerName = prof.SecretHandler
+				}
+				if handlerName != "" {
+					be := secrets.Detect(handlerName)
+					if be == nil {
+						return fmt.Errorf("secret handler %q is not available", handlerName)
+					}
+					k := secretKey
+					if k == "" {
+						k = prof.SecretKey
+					}
+					if k == "" {
+						k = defaultSecretKey(prof.BaseURL())
+					}
+					if err := be.Set(k, value); err != nil {
+						return err
+					}
+					prof.SecretHandler = handlerName
+					prof.SecretKey = k
+					prof.Token = "" // avoid duplicating the secret in the file
+				} else {
+					prof.Token = value
+				}
+			default:
+				switch key {
+				case "username":
+					prof.Username = value
+				case "login":
+					prof.Login = value
+				case "url":
+					prof.URL = value
+				case "profile":
+					// no-op placeholder
+				default:
+					return fmt.Errorf("unknown config key %q", key)
+				}
+			}
+			if err := app.Cfg.SetProfile(name, prof); err != nil {
+				return err
+			}
+			return renderResult(cmd, out, map[string]any{
+				"set":          key,
+				"profile":      name,
+				"secret_store": prof.SecretHandler,
+			})
+		},
+	}
+	cmd.Flags().StringVar(&profile, "profile", "", "profile name (default: current)")
+	cmd.Flags().StringVar(&secretHandler, "secret-handler", "", "secret handler to use (pass, gopass, secret-tool)")
+	cmd.Flags().StringVar(&secretKey, "secret-key", "", "secret key (default: copr/<instance>/token)")
+	return cmd
+}
+
+// readSecret prompts for a secret without echoing it.
+func readSecret(cmd *cobra.Command) (string, error) {
+	if !isTTY(cmd) {
+		// Read a single line from stdin (e.g. piped), which is not argv.
+		r := bufio.NewReader(os.Stdin)
+		line, err := r.ReadString('\n')
+		if err != nil && line == "" {
+			return "", err
+		}
+		return strings.TrimSpace(line), nil
+	}
+	fmt.Fprint(cmd.OutOrStdout(), "Secret: ")
+	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(cmd.OutOrStdout())
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(pw)), nil
+}
+
+// defaultSecretKey builds a namespaced secret key for an instance.
+func defaultSecretKey(baseURL string) string {
+	inst := config.DetectInstance(baseURL)
+	return "copr/" + inst + "/token"
 }
 
 func newConfigShowCmd(app *App, out *outFlags) *cobra.Command {

@@ -19,7 +19,10 @@ func newPackageCmd(app *App) *cobra.Command {
 	out.bind(cmd)
 	cmd.AddCommand(
 		newPackageCreateCmd(app, &out),
+		newPackageEditCmd(app, &out),
+		newPackageGetCmd(app, &out),
 		newPackageListCmd(app, &out),
+		newPackageResetCmd(app, &out),
 		newPackageDeleteCmd(app, &out),
 	)
 	return cmd
@@ -157,7 +160,7 @@ func newPackageCreateCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			if err := c.CreatePackage(cmd.Context(), copr.PackageCreate{
 				Owner: r.Owner, Project: r.Project, Name: r.Segment,
-				SourceType: st, Source: sm, AutoRebuild: src.autoRebuild,
+				SourceType: st, Source: sm, AutoRebuild: src.autoRebuild, SetAutoRebuild: true,
 			}); err != nil {
 				return err
 			}
@@ -165,6 +168,98 @@ func newPackageCreateCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	src.bind(cmd)
+	return cmd
+}
+
+func newPackageEditCmd(app *App, out *outFlags) *cobra.Command {
+	var src sourceFlags
+	cmd := &cobra.Command{
+		Use:   "edit REF/PKG",
+		Short: "Edit a package's source definition",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			if err != nil {
+				return err
+			}
+			st, sm, err := src.sourceMap()
+			if err != nil {
+				return err
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			if err := c.EditPackage(cmd.Context(), copr.PackageCreate{
+				Owner: r.Owner, Project: r.Project, Name: r.Segment,
+				SourceType: st, Source: sm, AutoRebuild: src.autoRebuild,
+				SetAutoRebuild: cmd.Flags().Changed("auto-rebuild"),
+			}); err != nil {
+				return err
+			}
+			return renderResult(cmd, out, map[string]any{"edited": args[0]})
+		},
+	}
+	src.bind(cmd)
+	return cmd
+}
+
+func newPackageGetCmd(app *App, out *outFlags) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get REF/PKG",
+		Short: "Show a package's source definition",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			if err != nil {
+				return err
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			p, err := c.GetPackage(cmd.Context(), r.Owner, r.Project, r.Segment)
+			if err != nil {
+				return err
+			}
+			if isHuman(out.format) {
+				t := render.NewTable("FIELD", "VALUE")
+				t.Add("Name", p.Name)
+				t.Add("Source type", string(p.SourceType))
+				t.Add("Auto rebuild", fmt.Sprintf("%v", p.AutoRebuild))
+				return renderResult(cmd, out, t)
+			}
+			return renderResult(cmd, out, p)
+		},
+	}
+	return cmd
+}
+
+func newPackageResetCmd(app *App, out *outFlags) *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "reset REF/PKG",
+		Short: "Clear a package's stored source definition",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			if err != nil {
+				return err
+			}
+			if !yes {
+				return confirmRequired("--yes")
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			if err := c.ResetPackage(cmd.Context(), r.Owner, r.Project, r.Segment); err != nil {
+				return err
+			}
+			return renderResult(cmd, out, map[string]any{"reset": args[0]})
+		},
+	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
 	return cmd
 }
 

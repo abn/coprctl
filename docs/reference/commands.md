@@ -6,11 +6,13 @@
       - `coprctl auth status` - Show who you are and whether the token is near expiry
     - `coprctl build` - Manage Copr builds
       - `coprctl build cancel` - Cancel a build
+      - `coprctl build delete` - Delete one or more builds
       - `coprctl build get` - Show a build
       - `coprctl build list` - List builds for a project
       - `coprctl build rebuild` - Rebuild a package from its stored source definition
       - `coprctl build reproduce` - Print the local mock reproduction recipe from a build log
       - `coprctl build submit` - Submit a build
+      - `coprctl build watch` - Watch a build until it reaches a terminal state
     - `coprctl chroot` - The instance chroot catalog (mock chroots)
       - `coprctl chroot list` - List the chroot catalog
     - `coprctl compat` - Translate a copr-cli invocation to coprctl
@@ -22,6 +24,7 @@
     - `coprctl config` - Manage configuration and profiles
       - `coprctl config import` - Import credentials from pasted copr config, flags, or prompts
       - `coprctl config migrate` - Import the legacy ~/.config/copr config into a named profile
+      - `coprctl config set` - Set a configuration value (token is read from a prompt, not argv)
       - `coprctl config show` - Show the effective configuration and where each value came from
     - `coprctl detect` - Read-only: infer a project setup from a source repository
     - `coprctl diff` - Show field-level drift between manifest and live project
@@ -43,13 +46,18 @@
     - `coprctl package` - Manage Copr packages
       - `coprctl package create` - Create a package
       - `coprctl package delete` - Delete a package
+      - `coprctl package edit` - Edit a package's source definition
+      - `coprctl package get` - Show a package's source definition
       - `coprctl package list` - List packages in a project
+      - `coprctl package reset` - Clear a package's stored source definition
     - `coprctl project` - Manage Copr projects
       - `coprctl project create` - Create a project
       - `coprctl project delete` - Delete a project
+      - `coprctl project edit` - Edit project settings
       - `coprctl project fork` - Fork a project
       - `coprctl project get` - Show a project
       - `coprctl project list` - List projects
+      - `coprctl project regenerate-repos` - Regenerate repository metadata for a project
     - `coprctl schema` - Emit the command tree as JSON or markdown
     - `coprctl skill` - Print or install bundled agent skills
       - `coprctl skill install` - Install a skill into an agent skills directory
@@ -58,6 +66,6 @@
     - `coprctl status` - One-shot project health summary; exits 4 on failed builds
     - `coprctl sync` - Reconcile the manifest against the source repo and Copr
     - `coprctl try` - Local clean-room preflight build in containers
-    - `coprctl ui` - Project dashboard view (degrades to plain output off a TTY)
+    - `coprctl ui` - Interactive project dashboard (degrades to plain output off a TTY)
     - `coprctl validate` - Validate a manifest without any network calls
     - `coprctl version` - Print version and build information

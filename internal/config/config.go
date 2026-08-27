@@ -14,6 +14,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/abn/coprctl/internal/cerr"
+	"github.com/abn/coprctl/internal/secrets"
 )
 
 // File is the on-disk configuration (TOML).
@@ -33,15 +34,17 @@ type Defaults struct {
 
 // Profile is a single instance configuration.
 type Profile struct {
-	URL          string `toml:"url"`
-	Username     string `toml:"username"`
-	Login        string `toml:"login"`
-	Token        string `toml:"token"`
-	TokenCommand string `toml:"token_command"`
-	GSSAPI       bool   `toml:"gssapi"`
-	LogOriginURL string `toml:"log_origin_url"`
-	Messaging    string `toml:"messaging"`
-	TokenExpiry  string `toml:"token_expiry"`
+	URL           string `toml:"url"`
+	Username      string `toml:"username"`
+	Login         string `toml:"login"`
+	Token         string `toml:"token"`
+	TokenCommand  string `toml:"token_command"`
+	SecretHandler string `toml:"secret_handler,omitempty"`
+	SecretKey     string `toml:"secret_key,omitempty"`
+	GSSAPI        bool   `toml:"gssapi"`
+	LogOriginURL  string `toml:"log_origin_url"`
+	Messaging     string `toml:"messaging"`
+	TokenExpiry   string `toml:"token_expiry"`
 }
 
 // Precedence names for provenance reporting.
@@ -320,15 +323,44 @@ func mergeLegacy(primary, legacy Profile) Profile {
 	return primary
 }
 
-// Auth returns the (login, token) credentials for the profile. A token_command
-// takes precedence over an inline token.
+// Auth returns the (login, token) credentials for the profile. Secret
+// resolution order: a configured secret handler, then a token_command, then an
+// inline token. The login always comes from the profile.
 func (p Profile) Auth() (string, string) {
+	if tok := p.secretToken(); tok != "" {
+		return p.Login, tok
+	}
 	if p.TokenCommand != "" {
 		if tok, err := runTokenCommand(p.TokenCommand); err == nil && tok != "" {
 			return p.Login, tok
 		}
 	}
 	return p.Login, p.Token
+}
+
+// secretToken returns the token from a configured secret handler, or "".
+func (p Profile) secretToken() string {
+	if p.SecretHandler == "" || p.SecretKey == "" {
+		return ""
+	}
+	be := secrets.Detect(p.SecretHandler)
+	if be == nil {
+		return ""
+	}
+	tok, err := be.Get(p.SecretKey)
+	if err != nil || tok == "" {
+		return ""
+	}
+	return tok
+}
+
+// SecretStore returns the configured secret handler for this profile, or nil
+// if none is usable.
+func (p Profile) SecretStore() secrets.Backend {
+	if p.SecretHandler == "" {
+		return nil
+	}
+	return secrets.Detect(p.SecretHandler)
 }
 
 // BaseURL returns the base URL trimmed of a trailing slash.

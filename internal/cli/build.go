@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/copr"
+	"github.com/abn/coprctl/internal/events"
 	"github.com/abn/coprctl/internal/logstream"
 	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
@@ -25,7 +27,9 @@ func newBuildCmd(app *App) *cobra.Command {
 		newBuildListCmd(app, &out),
 		newBuildSubmitCmd(app, &out),
 		newBuildRebuildCmd(app, &out),
+		newBuildWatchCmd(app, &out),
 		newBuildCancelCmd(app, &out),
+		newBuildDeleteCmd(app, &out),
 		newBuildReproduceCmd(app, &out),
 	)
 	return cmd
@@ -267,4 +271,111 @@ func newBuildCancelCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+func newBuildDeleteCmd(app *App, out *outFlags) *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "delete BUILD_ID...",
+		Short: "Delete one or more builds",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !yes {
+				return confirmRequired("--yes")
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			for _, a := range args {
+				r, err := ref.Parse(a, nil)
+				if err != nil {
+					return err
+				}
+				if r.Kind != ref.KindBuild {
+					return fmt.Errorf("expected a build id, got %q", a)
+				}
+				if err := c.DeleteBuild(cmd.Context(), r.BuildID); err != nil {
+					return err
+				}
+			}
+			return renderResult(cmd, out, map[string]any{"deleted": len(args)})
+		},
+	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	return cmd
+}
+
+// newBuildWatchCmd polls a build and prints state changes until it reaches a
+// terminal state. It is the plain-text rendering of the same event stream that
+// drives the TUI and JSONL output.
+func newBuildWatchCmd(app *App, out *outFlags) *cobra.Command {
+	var until, format string
+	cmd := &cobra.Command{
+		Use:   "watch BUILD_ID...",
+		Short: "Watch a build until it reaches a terminal state",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			var ids []int
+			for _, a := range args {
+				r, err := ref.Parse(a, nil)
+				if err != nil {
+					return err
+				}
+				if r.Kind != ref.KindBuild {
+					return fmt.Errorf("expected a build id, got %q", a)
+				}
+				ids = append(ids, r.BuildID)
+			}
+			bus := events.New()
+			defer bus.Close()
+			sub := bus.Subscribe(1024)
+			ctx, cancel := interruptible(cmd.Context())
+			defer cancel()
+			src := &events.PollSource{Client: c, BuildIDs: ids, Interval: pollInterval()}
+			go src.Run(ctx, bus)
+			return watchConsume(ctx, bus, sub, until, format, cmd)
+		},
+	}
+	cmd.Flags().StringVar(&until, "until", "terminal", "stop at state (succeeded, failed, canceled, terminal)")
+	cmd.Flags().StringVarP(&format, "output", "o", "plain", "output format: plain, jsonl")
+	return cmd
+}
+
+func watchConsume(ctx context.Context, bus *events.Bus, ch chan events.Event, until, format string, cmd *cobra.Command) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if ev.Kind == events.KindBuildState || ev.Kind == events.KindChrootState {
+				if format == "jsonl" {
+					printEvent(ev)
+				} else {
+					if ev.Chroot != "" {
+						fmt.Fprintf(cmd.OutOrStdout(), "build %d %s: %s -> %s\n", ev.BuildID, ev.Chroot, ev.Prev, ev.State)
+					} else {
+						fmt.Fprintf(cmd.OutOrStdout(), "build %d: %s\n", ev.BuildID, ev.State)
+					}
+				}
+				if ev.Kind == events.KindBuildState && reached(ev.State, until) {
+					return nil
+				}
+			}
+		}
+	}
+}
+
+func reached(state, until string) bool {
+	if until == "terminal" {
+		return copr.IsTerminal(state)
+	}
+	return state == until
 }

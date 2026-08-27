@@ -22,9 +22,73 @@ func newProjectCmd(app *App) *cobra.Command {
 		newProjectListCmd(app, &out),
 		newProjectGetCmd(app, &out),
 		newProjectCreateCmd(app, &out),
+		newProjectEditCmd(app, &out),
+		newProjectRegenCmd(app, &out),
 		newProjectDeleteCmd(app, &out),
 		newProjectForkCmd(app, &out),
 	)
+	return cmd
+}
+
+func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
+	var description, homepage, contact string
+	var develMode bool
+	var develSet bool
+	cmd := &cobra.Command{
+		Use:   "edit REF [settings...]",
+		Short: "Edit project settings",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := parseRef(args[0])
+			if err != nil {
+				return err
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			var devel *bool
+			if develSet {
+				devel = &develMode
+			}
+			if err := c.EditProject(cmd.Context(), copr.ProjectEdit{
+				Owner: r.Owner, Project: r.Project,
+				Description: description, Homepage: homepage, Contact: contact,
+				DevelMode: devel,
+			}); err != nil {
+				return err
+			}
+			return renderResult(cmd, out, map[string]any{"edited": r.String()})
+		},
+	}
+	cmd.Flags().StringVar(&description, "description", "", "project description")
+	cmd.Flags().StringVar(&homepage, "homepage", "", "project homepage")
+	cmd.Flags().StringVar(&contact, "contact", "", "project contact")
+	cmd.Flags().BoolVar(&develMode, "devel-mode", false, "enable devel mode")
+	cmd.Flags().BoolVar(&develSet, "devel-mode-set", false, "set devel mode (use with --devel-mode)")
+	return cmd
+}
+
+func newProjectRegenCmd(app *App, out *outFlags) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "regenerate-repos REF",
+		Short: "Regenerate repository metadata for a project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := parseRef(args[0])
+			if err != nil {
+				return err
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			if err := c.RegenerateRepos(cmd.Context(), r.Owner, r.Project); err != nil {
+				return err
+			}
+			return renderResult(cmd, out, map[string]any{"regenerated": r.String()})
+		},
+	}
 	return cmd
 }
 

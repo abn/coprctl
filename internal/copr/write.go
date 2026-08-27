@@ -60,12 +60,19 @@ type ProjectEdit struct {
 	EnableNet                      *bool
 }
 
-// EditProject updates a project.
+// EditProject updates project settings. Only fields that are non-empty (or
+// explicitly set via pointers) are sent, so a partial edit does not clobber
+// the others.
 func (c *Client) EditProject(ctx context.Context, in ProjectEdit) error {
-	payload := map[string]any{
-		"description": in.Description,
-		"homepage":    in.Homepage,
-		"contact":     in.Contact,
+	payload := map[string]any{}
+	if in.Description != "" {
+		payload["description"] = in.Description
+	}
+	if in.Homepage != "" {
+		payload["homepage"] = in.Homepage
+	}
+	if in.Contact != "" {
+		payload["contact"] = in.Contact
 	}
 	if in.DevelMode != nil {
 		payload["devel_mode"] = *in.DevelMode
@@ -117,7 +124,11 @@ type PackageCreate struct {
 	Owner, Project, Name string
 	SourceType           SourceType
 	Source               map[string]any
-	AutoRebuild          bool
+	// AutoRebuild is sent on create; on edit it is only sent when
+	// SetAutoRebuild is true, so an edit that does not touch the flag does not
+	// clobber it.
+	AutoRebuild    bool
+	SetAutoRebuild bool
 }
 
 // CreatePackage adds a package with a source definition.
@@ -128,14 +139,14 @@ func (c *Client) CreatePackage(ctx context.Context, in PackageCreate) error {
 
 // EditPackage updates a package's source definition.
 func (c *Client) EditPackage(ctx context.Context, in PackageCreate) error {
-	path := fmt.Sprintf("/package/edit/%s/%s/%s", in.Owner, in.Project, in.Name)
+	path := fmt.Sprintf("/package/edit/%s/%s/%s/%s", in.Owner, in.Project, in.Name, in.SourceType)
 	return c.doJSON(ctx, http.MethodPost, path, packagePayload(in), nil)
 }
 
 func packagePayload(in PackageCreate) map[string]any {
-	payload := map[string]any{
-		"package_name":    in.Name,
-		"webhook_rebuild": in.AutoRebuild,
+	payload := map[string]any{"package_name": in.Name}
+	if in.SetAutoRebuild {
+		payload["webhook_rebuild"] = in.AutoRebuild
 	}
 	for k, v := range in.Source {
 		payload[k] = v
@@ -148,6 +159,14 @@ func (c *Client) DeletePackage(ctx context.Context, owner, project, name string)
 	payload := map[string]any{"packagename": name}
 	path := fmt.Sprintf("/package/delete/%s/%s", owner, project)
 	return c.doJSON(ctx, http.MethodDelete, path, payload, nil)
+}
+
+// ResetPackage clears a package's stored source definition (source_type and
+// source_dict), so it reverts to having no configured source. This matches the
+// upstream PUT /package/reset operation.
+func (c *Client) ResetPackage(ctx context.Context, owner, project, name string) error {
+	payload := map[string]any{"ownername": owner, "projectname": project, "package_name": name}
+	return c.doJSON(ctx, http.MethodPut, "/package/reset", payload, nil)
 }
 
 // BuildSubmit submits a build from a source definition.

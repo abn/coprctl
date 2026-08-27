@@ -6,6 +6,13 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Added secret-handler support (pass, gopass, secret-tool) so
+  tokens can be stored in a system secret handler instead of the config file;
+  `config set token` reads from a prompt or stdin, never argv. Added full
+  project/package edit coverage (`project edit`, `project regenerate-repos`,
+  `package edit/get/reset`), `build delete` and `build watch`, and an
+  interactive Bubble Tea dashboard (`coprctl ui`) that degrades to plain output
+  off a TTY. Tokens can be rotated via `auth token rotate`.
 * **Creation**: Added credential management: `auth status` (who you are, warns
   a month before token expiry, exits 13 when expired) and `auth token rotate`
   (POST /api_3/api-token, updates the profile in place). Added `config import`

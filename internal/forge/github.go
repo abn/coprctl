@@ -14,10 +14,16 @@ import (
 
 // Hook is a forge webhook.
 type Hook struct {
-	ID     int64    `json:"id"`
-	URL    string   `json:"url"`
-	Active bool     `json:"active"`
-	Events []string `json:"events"`
+	ID     int64      `json:"id"`
+	URL    string     `json:"url"`
+	Active bool       `json:"active"`
+	Events []string   `json:"events"`
+	Config HookConfig `json:"config"`
+}
+
+// HookConfig carries the webhook destination and delivery settings.
+type HookConfig struct {
+	URL string `json:"url"`
 }
 
 // GitHub is a thin client for the subset of the GitHub API the integration
@@ -107,22 +113,29 @@ func (g *GitHub) DeleteHook(ctx context.Context, owner, repo string, id int64) e
 	return g.do(ctx, http.MethodDelete, fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, repo, id), nil, nil)
 }
 
-// PingHook triggers a ping and returns the latest delivery's status code.
+// PingHook triggers a ping and returns the latest delivery's status code,
+// polling deliveries until one appears or the deadline passes.
 func (g *GitHub) PingHook(ctx context.Context, owner, repo string, id int64) (int, error) {
 	if err := g.do(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/%s/hooks/%d/pings", owner, repo, id), nil, nil); err != nil {
 		return 0, err
 	}
-	// Give the delivery a moment to be recorded, then read it back.
-	time.Sleep(2 * time.Second)
-	var deliveries []struct {
-		Status     string `json:"status"`
-		StatusCode int    `json:"status_code"`
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		var deliveries []struct {
+			Status     string `json:"status"`
+			StatusCode int    `json:"status_code"`
+		}
+		if err := g.do(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/%s/hooks/%d/deliveries", owner, repo, id), nil, &deliveries); err != nil {
+			return 0, err
+		}
+		if len(deliveries) > 0 {
+			return deliveries[0].StatusCode, nil
+		}
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
 	}
-	if err := g.do(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/%s/hooks/%d/deliveries", owner, repo, id), nil, &deliveries); err != nil {
-		return 0, err
-	}
-	if len(deliveries) == 0 {
-		return 0, fmt.Errorf("no delivery recorded")
-	}
-	return deliveries[0].StatusCode, nil
+	return 0, fmt.Errorf("no delivery recorded within 15s")
 }

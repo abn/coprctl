@@ -123,7 +123,9 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			var hook *forge.Hook
 			for i := range hooks {
-				if strings.Contains(hooks[i].URL, "/webhooks/") {
+				// Match on the configured webhook destination, not the API
+				// resource URL (hooks[i].URL is the GitHub API endpoint).
+				if strings.Contains(hooks[i].Config.URL, "/webhooks/") {
 					hook = &hooks[i]
 					break
 				}

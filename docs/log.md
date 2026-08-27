@@ -6,6 +6,11 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Creation**: Added the GitHub webhook integration usage guide. Verified the
+  integration live against Copr staging and GitHub: idempotent hook create and
+  update, ping verification (200), and secret masking. Fixed the idempotency
+  check to match on the configured webhook destination rather than the GitHub
+  API resource URL, and made ping delivery polling retry until recorded.
 * **Creation**: Implemented Wave 08 (M5 polish): shell completions generated
   from the registry, an environment doctor with structured exit codes, version
   injection, GoReleaser/nfpm packaging, the self-hosting `copr.yaml` and spec,

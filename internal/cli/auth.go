@@ -119,16 +119,27 @@ func newAuthTokenCmd(app *App, out *outFlags) *cobra.Command {
 				return err
 			}
 			name := profileName(app)
-			if err := app.Cfg.SetProfileToken(name, nt.APILogin, nt.APIToken, nt.Expiration); err != nil {
-				return err
+			// When the effective profile comes from the legacy config file
+			// (no coprctl profile), write the rotated credentials back to the
+			// legacy file so the user's source of truth reflects the rotation.
+			legacySourced := legacySourced(app)
+			if legacySourced {
+				if err := app.Cfg.WriteLegacyCredentials(nt.APILogin, nt.APIToken, nt.Expiration); err != nil {
+					return err
+				}
+			} else {
+				if err := app.Cfg.SetProfileToken(name, nt.APILogin, nt.APIToken, nt.Expiration); err != nil {
+					return err
+				}
 			}
 			// Invalidate the cached client so subsequent calls use the new token.
 			app.ResetClient()
 			return renderResult(cmd, out, map[string]any{
-				"rotated":     true,
-				"profile":     name,
-				"expiration":  nt.Expiration,
-				"config_file": app.cfgPath,
+				"rotated":        true,
+				"profile":        name,
+				"expiration":     nt.Expiration,
+				"config_file":    app.cfgPath,
+				"legacy_sourced": legacySourced,
 			})
 		},
 	}
@@ -154,4 +165,16 @@ func parseExpiry(s string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("unrecognized expiry %q", s)
+}
+
+// legacySourced reports whether the effective profile comes from the legacy
+// config file rather than a coprctl profile. This is the case when no coprctl
+// config file exists (or it has no profile), so the legacy file is the only
+// source of credentials.
+func legacySourced(app *App) bool {
+	if app.Cfg == nil {
+		return false
+	}
+	name := profileName(app)
+	return app.Cfg.HasProfile(name) == false
 }

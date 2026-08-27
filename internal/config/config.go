@@ -185,6 +185,59 @@ func (m *Manager) save() error {
 	return os.WriteFile(m.path, data, 0o600)
 }
 
+// WriteLegacyCredentials updates login/token/expiry in the legacy [copr-cli]
+// config file in place, preserving other lines. Used when a profile is sourced
+// from the legacy file so rotation reflects where the user reads the token.
+func (m *Manager) WriteLegacyCredentials(login, token, expiry string) error {
+	data, err := os.ReadFile(m.legacy)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	seen := map[string]bool{}
+	for i, ln := range lines {
+		trimmed := strings.TrimSpace(ln)
+		if strings.HasPrefix(trimmed, "#") {
+			// Update the expiration comment if present.
+			if strings.Contains(trimmed, "expiration") && expiry != "" {
+				lines[i] = "# expiration date: " + expiry
+				seen["expiration"] = true
+			}
+			continue
+		}
+		eq := strings.Index(trimmed, "=")
+		if eq < 0 {
+			continue
+		}
+		key := strings.TrimSpace(trimmed[:eq])
+		switch key {
+		case "login":
+			lines[i] = "login = " + login
+			seen["login"] = true
+		case "token":
+			lines[i] = "token = " + token
+			seen["token"] = true
+		}
+	}
+	// Append any keys that were not present.
+	var out []string
+	for _, ln := range lines {
+		out = append(out, ln)
+	}
+	appendLine := func(key, val string) {
+		if !seen[key] {
+			out = append(out, key+" = "+val)
+			seen[key] = true
+		}
+	}
+	appendLine("login", login)
+	appendLine("token", token)
+	if expiry != "" && !seen["expiration"] {
+		out = append(out, "# expiration date: "+expiry)
+	}
+	return os.WriteFile(m.legacy, []byte(strings.Join(out, "\n")), 0o600)
+}
+
 // ProfileNames returns configured profile names (excluding legacy-only).
 func (m *Manager) ProfileNames() []string {
 	_ = m.Load()
@@ -196,6 +249,19 @@ func (m *Manager) ProfileNames() []string {
 		}
 	}
 	return names
+}
+
+// HasProfile reports whether the coprctl config file defines a profile with the
+// given name. It does not consider the legacy fallback.
+func (m *Manager) HasProfile(name string) bool {
+	if err := m.Load(); err != nil {
+		return false
+	}
+	if name == "" {
+		name = m.file.DefaultProfile
+	}
+	_, ok := m.file.Profiles[name]
+	return ok
 }
 
 // DefaultProfileName returns the configured default profile name.

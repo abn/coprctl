@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/abn/coprctl/internal/cerr"
@@ -164,5 +165,29 @@ func TestSetProfileSetsDefault(t *testing.T) {
 	}
 	if got := m.DefaultProfileName(); got != "production" {
 		t.Errorf("default profile changed to %q", got)
+	}
+}
+
+func TestWriteLegacyCredentials(t *testing.T) {
+	legacy := writeLegacy(t, `[copr-cli]
+login = "oldlogin"
+username = "devnullcake"
+token = "oldtoken"
+copr_url = "https://copr.stg.fedoraproject.org"
+# expiration date: 2027-02-23
+`)
+	m := New("/nonexistent.toml", legacy)
+	if err := m.WriteLegacyCredentials("newlogin", "newtoken", "2028-01-01"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(legacy)
+	s := string(data)
+	for _, want := range []string{"login = newlogin", "token = newtoken", "# expiration date: 2028-01-01"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q in:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "oldtoken") {
+		t.Error("old token still present")
 	}
 }

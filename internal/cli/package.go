@@ -214,7 +214,7 @@ func newPackageGetCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
@@ -273,7 +273,7 @@ func newPackageListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}

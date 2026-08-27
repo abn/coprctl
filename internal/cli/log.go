@@ -46,7 +46,7 @@ func newLogFailuresCmd(app *App, out *outFlags) *cobra.Command {
 			if r.Kind != ref.KindBuild {
 				return fmt.Errorf("expected a build id, got %q", args[0])
 			}
-			client, err := app.Client()
+			client, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
@@ -136,7 +136,7 @@ func newLogTailCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Tail build logs (a build id, build/chroot, or ref)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := app.Client()
+			client, err := app.ReadClient()
 			if err != nil {
 				return err
 			}

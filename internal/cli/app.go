@@ -69,6 +69,32 @@ func (a *App) Client() (*copr.Client, error) {
 // it with the current profile credentials.
 func (a *App) ResetClient() { a.client = nil }
 
+// ReadClient returns an API client for read-only operations. It uses the
+// configured profile when one exists, and otherwise falls back to an anonymous
+// production client, because browsing, monitoring, and log reading are all
+// anonymous operations that should not require configuration.
+func (a *App) ReadClient() (*copr.Client, error) {
+	if a.client != nil {
+		return a.client, nil
+	}
+	if a.Cfg == nil || !a.Cfg.Matches(a.cfgPath, a.legacy) {
+		a.Cfg = config.New(a.cfgPath, a.legacy)
+	}
+	prof, err := a.Cfg.Profile(a.profile)
+	if err != nil {
+		// No profile or legacy config: use anonymous production reads.
+		c := copr.New(config.DefaultProductionURL, nil)
+		a.client = c
+		a.installChrootCatalog()
+		return c, nil
+	}
+	login, token := prof.Auth()
+	c := copr.New(prof.BaseURL(), copr.TokenAuth(login, token))
+	a.client = c
+	a.installChrootCatalog()
+	return c, nil
+}
+
 // profileName returns the effective profile name (flag or default).
 func profileName(a *App) string {
 	if a.profile != "" {

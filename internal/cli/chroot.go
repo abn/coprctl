@@ -25,7 +25,7 @@ func newChrootListCmd(app *App, out *outFlags) *cobra.Command {
 		Use:   "list",
 		Short: "List the chroot catalog",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}

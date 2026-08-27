@@ -40,7 +40,7 @@ func newDoctorCmd(app *App) *cobra.Command {
 				fmt.Fprintf(out, "ok   auth: token expiry %s\n", prof.TokenExpiry)
 			}
 
-			c, cerrr := app.Client()
+			c, cerrr := app.ReadClient()
 			if cerrr != nil {
 				fmt.Fprintf(out, "FAIL network: %v\n", cerrr)
 				return cerrr

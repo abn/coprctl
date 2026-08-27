@@ -109,7 +109,7 @@ func newBuildReproduceCmd(app *App, out *outFlags) *cobra.Command {
 			if r.Kind != ref.KindBuildChroot {
 				return fmt.Errorf("expected a build/chroot reference, got %q", args[0])
 			}
-			client, err := app.Client()
+			client, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
@@ -149,7 +149,7 @@ func newBuildGetCmd(app *App, out *outFlags) *cobra.Command {
 			if r.Kind != ref.KindBuild {
 				return fmt.Errorf("expected a build id, got %q", args[0])
 			}
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
@@ -182,7 +182,7 @@ func newBuildListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
@@ -316,7 +316,7 @@ func newBuildWatchCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Watch a build until it reaches a terminal state",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}

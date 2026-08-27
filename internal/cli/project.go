@@ -99,7 +99,7 @@ func newProjectListCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "List projects",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
@@ -143,7 +143,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 			if r.Owner == "" {
 				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
 			}
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}

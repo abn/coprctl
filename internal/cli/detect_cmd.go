@@ -134,7 +134,7 @@ func newSyncCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c, err := app.Client()
+			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}

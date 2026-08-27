@@ -2,14 +2,14 @@
 type: Decision
 title: ADR 0001 - Implementation language
 description: Choose Go for the coprctl binary.
-status: draft
+status: stable
 ---
 
 # ADR 0001: Implementation language
 
 ## Status
 
-Draft, pending confirmation during the M0 milestone.
+Stable. The Go implementation is complete across all milestones.
 
 ## Context
 

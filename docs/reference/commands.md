@@ -1,3 +1,9 @@
+---
+type: Reference
+title: Command reference
+description: The full coprctl command tree, generated from the registry.
+---
+
 # coprctl commands
   - `coprctl` - A reimagined CLI for the Fedora Copr build system
     - `coprctl apply` - Reconcile a project to match the manifest

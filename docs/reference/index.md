@@ -2,8 +2,7 @@
 
 Machine-generated command reference and schemas.
 
-* [Reference index](index.md) - generated reference
+* [Command reference](commands.md) - the full command tree
 
-The command reference, exit codes, event schemas, and the `copr.yaml` manifest
-schema are generated from the command registry so they cannot drift from the
-binary. They appear here as the milestones that generate them land.
+The command reference is generated from the command registry so it cannot
+drift from the binary.

@@ -6,6 +6,14 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Update**: Filled in the wiki pages that were placeholders, so the docs now
+  reflect status quo. Added the canonical terminology and reference syntax,
+  the CLI grammar, the log-streaming architecture, the agent contract (exit
+  codes, error objects, event schema, MCP, skills), and a real quick start.
+  Marked the decided ADR 0001 and the overview/maintainer pages stable, listed
+  the full implemented package layers, and added OKF frontmatter to the
+  generated command reference. The wiki is now content-complete and
+  OKF-conformant with all internal links resolving.
 * **Creation**: Documented the release process (normal and NVR releases, the
   Release Please PR-only and squash-merge conventions, and bump procedures for
   packaging-only changes) at `docs/contribution/release-process.md`. Linked it

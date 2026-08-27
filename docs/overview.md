@@ -3,7 +3,7 @@ type: Reference
 title: Overview
 description: What coprctl is and why it exists.
 tags: [project, introduction]
-status: draft
+status: stable
 ---
 
 # Overview

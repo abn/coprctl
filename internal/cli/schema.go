@@ -23,6 +23,12 @@ func newSchemaCmd(app *App) *cobra.Command {
 				tools := schemaMCP(Root(app))
 				return render.Render(cmd.OutOrStdout(), render.FormatJSON, tools)
 			case "markdown":
+				fmt.Fprintln(cmd.OutOrStdout(), "---")
+				fmt.Fprintln(cmd.OutOrStdout(), "type: Reference")
+				fmt.Fprintln(cmd.OutOrStdout(), "title: Command reference")
+				fmt.Fprintln(cmd.OutOrStdout(), "description: The full coprctl command tree, generated from the registry.")
+				fmt.Fprintln(cmd.OutOrStdout(), "---")
+				fmt.Fprintln(cmd.OutOrStdout())
 				fmt.Fprintln(cmd.OutOrStdout(), "# coprctl commands")
 				walkSchema(Root(app), cmd, 1)
 				return nil

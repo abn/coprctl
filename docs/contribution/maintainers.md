@@ -2,7 +2,7 @@
 type: Guide
 title: Maintainer guide
 description: Process guidance for maintainers of the project.
-status: draft
+status: stable
 ---
 
 # Maintainer guide

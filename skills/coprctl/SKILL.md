@@ -60,5 +60,6 @@ Generated from the command registry; every command below exists.
   - `coprctl status` - One-shot project health summary; exits 4 on failed builds
   - `coprctl sync` - Reconcile the manifest against the source repo and Copr
   - `coprctl try` - Local clean-room preflight build in containers
+  - `coprctl ui` - Project dashboard view (degrades to plain output off a TTY)
   - `coprctl validate` - Validate a manifest without any network calls
   - `coprctl version` - Print version and build information

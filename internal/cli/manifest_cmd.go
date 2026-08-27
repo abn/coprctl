@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -39,64 +40,10 @@ func newApplyCmd(app *App) *cobra.Command {
 				}
 				return renderResult(cmd, &out, map[string]any{"dry_run": true, "diffs": diffs})
 			}
-			// Create or update the project. Create tolerates an existing
-			// project; updates apply the manifest's settings via edit.
-			owner, project := m.Metadata.Owner, m.Metadata.Name
-			_, gerr := c.GetProject(cmd.Context(), owner, project)
-			exists := gerr == nil
-			if exists {
-				var devel *bool
-				dv := m.Spec.Settings.DevelMode
-				devel = &dv
-				if err := c.EditProject(cmd.Context(), copr.ProjectEdit{
-					Owner: owner, Project: project,
-					Description: m.Spec.Description,
-					Homepage:    m.Spec.Homepage,
-					Contact:     m.Spec.Contact,
-					DevelMode:   devel,
-				}); err != nil {
-					return err
-				}
-			} else {
-				if err := c.CreateProject(cmd.Context(), copr.ProjectCreate{
-					Owner: owner, Name: project,
-					Chroots:     m.Spec.Chroots.Enabled,
-					Description: m.Spec.Description,
-					Homepage:    m.Spec.Homepage,
-					Contact:     m.Spec.Contact,
-					DevelMode:   m.Spec.Settings.DevelMode,
-				}, true); err != nil {
-					return err
-				}
+			if err := applyManifest(cmd.Context(), app, m); err != nil {
+				return err
 			}
-			// Apply chroot config.
-			for ch, cfg := range m.Spec.Chroots.Config {
-				if err := c.EditProjectChroot(cmd.Context(), copr.MockChrootEdit{
-					Owner: owner, Project: project, Chroot: ch,
-					AdditionalPackages: cfg.AdditionalPackages,
-					AdditionalRepos:    cfg.AdditionalRepos,
-					AdditionalModules:  cfg.Modules,
-					WithOpts:           cfg.With,
-					WithoutOpts:        cfg.Without,
-					Isolation:          cfg.Isolation,
-				}); err != nil {
-					return err
-				}
-			}
-			// Create packages, tolerating existing ones (re-runnable).
-			for _, p := range m.Spec.Packages {
-				src, st, err := packageToSource(p)
-				if err != nil {
-					return err
-				}
-				if err := c.UpsertPackage(cmd.Context(), copr.PackageCreate{
-					Owner: owner, Project: project, Name: p.Name,
-					SourceType: st, Source: src, AutoRebuild: p.AutoRebuild,
-				}); err != nil {
-					return err
-				}
-			}
-			return renderResult(cmd, &out, map[string]any{"applied": owner + "/" + project})
+			return renderResult(cmd, &out, map[string]any{"applied": m.Metadata.Owner + "/" + m.Metadata.Name})
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "manifest file")
@@ -205,6 +152,69 @@ func newValidateCmd(app *App) *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "manifest file")
 	return cmd
+}
+
+// applyManifest creates or updates a project, chroots, and packages to match
+// the manifest. Additive and safe to re-run after a partial failure.
+func applyManifest(ctx context.Context, app *App, m *manifest.Manifest) error {
+	c, err := app.Client()
+	if err != nil {
+		return err
+	}
+	owner, project := m.Metadata.Owner, m.Metadata.Name
+	_, gerr := c.GetProject(ctx, owner, project)
+	exists := gerr == nil
+	if exists {
+		var devel *bool
+		dv := m.Spec.Settings.DevelMode
+		devel = &dv
+		if err := c.EditProject(ctx, copr.ProjectEdit{
+			Owner: owner, Project: project,
+			Description: m.Spec.Description,
+			Homepage:    m.Spec.Homepage,
+			Contact:     m.Spec.Contact,
+			DevelMode:   devel,
+		}); err != nil {
+			return err
+		}
+	} else {
+		if err := c.CreateProject(ctx, copr.ProjectCreate{
+			Owner: owner, Name: project,
+			Chroots:     m.Spec.Chroots.Enabled,
+			Description: m.Spec.Description,
+			Homepage:    m.Spec.Homepage,
+			Contact:     m.Spec.Contact,
+			DevelMode:   m.Spec.Settings.DevelMode,
+		}, true); err != nil {
+			return err
+		}
+	}
+	for ch, cfg := range m.Spec.Chroots.Config {
+		if err := c.EditProjectChroot(ctx, copr.MockChrootEdit{
+			Owner: owner, Project: project, Chroot: ch,
+			AdditionalPackages: cfg.AdditionalPackages,
+			AdditionalRepos:    cfg.AdditionalRepos,
+			AdditionalModules:  cfg.Modules,
+			WithOpts:           cfg.With,
+			WithoutOpts:        cfg.Without,
+			Isolation:          cfg.Isolation,
+		}); err != nil {
+			return err
+		}
+	}
+	for _, p := range m.Spec.Packages {
+		src, st, err := packageToSource(p)
+		if err != nil {
+			return err
+		}
+		if err := c.UpsertPackage(ctx, copr.PackageCreate{
+			Owner: owner, Project: project, Name: p.Name,
+			SourceType: st, Source: src, AutoRebuild: p.AutoRebuild,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func loadManifest(file string) (*manifest.Manifest, error) {

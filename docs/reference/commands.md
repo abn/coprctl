@@ -9,8 +9,10 @@
     - `coprctl chroot` - The instance chroot catalog (mock chroots)
       - `coprctl chroot list` - List the chroot catalog
     - `coprctl compat` - Translate a copr-cli invocation to coprctl
+    - `coprctl detect` - Read-only: infer a project setup from a source repository
     - `coprctl diff` - Show field-level drift between manifest and live project
     - `coprctl export` - Generate a manifest from a live project
+    - `coprctl init` - Scaffold a manifest and create a working Copr project
     - `coprctl integration` - Configure forge webhook integrations
       - `coprctl integration github` - GitHub webhook integration
         - `coprctl integration github enable` - Enable a GitHub webhook for a project
@@ -36,5 +38,6 @@
       - `coprctl skill install` - Install the skill into an agent skills directory
       - `coprctl skill print` - Print the skill to stdout
     - `coprctl status` - One-shot project health summary; exits 4 on failed builds
+    - `coprctl sync` - Reconcile the manifest against the source repo and Copr
     - `coprctl validate` - Validate a manifest without any network calls
     - `coprctl version` - Print version and build information

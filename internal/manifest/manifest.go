@@ -15,6 +15,16 @@ type Manifest struct {
 	Kind       string   `yaml:"kind" json:"kind"`
 	Metadata   Metadata `yaml:"metadata" json:"metadata"`
 	Spec       Spec     `yaml:"spec" json:"spec"`
+	XCoprctl   XCoprctl `yaml:"x-coprctl,omitempty" json:"x-coprctl,omitempty"`
+}
+
+// XCoprctl is the provenance extension: it records which fields were inferred
+// from the source repo so sync may only auto-update those paths. Anything not
+// listed here is human-owned and never auto-overwritten.
+type XCoprctl struct {
+	GeneratedBy          string   `yaml:"generatedBy,omitempty" json:"generatedBy,omitempty"`
+	DetectionFingerprint string   `yaml:"detectionFingerprint,omitempty" json:"detectionFingerprint,omitempty"`
+	Inferred             []string `yaml:"inferred,omitempty" json:"inferred,omitempty"`
 }
 
 // Metadata identifies the target project.

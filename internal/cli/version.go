@@ -22,3 +22,6 @@ func newVersionCmd() *cobra.Command {
 		},
 	}
 }
+
+// Version returns the version string (injectable via ldflags).
+func Version() string { return version }

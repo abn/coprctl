@@ -1,0 +1,64 @@
+version: 2
+
+project_name: coprctl
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: coprctl
+    main: ./cmd/coprctl
+    binary: coprctl
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/abn/coprctl/internal/cli.version={{.Version}}
+      - -X github.com/abn/coprctl/internal/cli.commit={{.Commit}}
+      - -X github.com/abn/coprctl/internal/cli.date={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+nfpms:
+  - id: default
+    package_name: coprctl
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+    homepage: https://example.org/coprctl
+    description: A reimagined CLI and agent interface for the Fedora Copr build system
+    maintainer: coprctl contributors
+    license: MIT
+    formats:
+      - rpm
+      - deb
+    contents:
+      - src: LICENSE
+        dst: /usr/share/licenses/coprctl/LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"

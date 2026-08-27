@@ -1,0 +1,34 @@
+apiVersion: coprctl/v1
+kind: Project
+
+metadata:
+  owner: quadzero
+  name: coprctl
+  profile: fedora
+
+spec:
+  description: |
+    A reimagined command-line and agent interface for the Fedora Copr
+    build system.
+  instructions: dnf copr enable quadzero/coprctl && dnf install coprctl
+
+  settings:
+    enableNet: false
+    develMode: false
+    autoPrune: true
+    followFedoraBranching: true
+
+  chroots:
+    enabled:
+      - fedora-44-x86_64
+      - fedora-rawhide-x86_64
+
+  packages:
+    - name: coprctl
+      source:
+        type: scm
+        cloneUrl: https://github.com/quadzero/coprctl.git
+        committish: main
+        spec: coprctl.spec
+        method: rpkg
+      autoRebuild: true

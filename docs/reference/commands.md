@@ -9,8 +9,14 @@
     - `coprctl chroot` - The instance chroot catalog (mock chroots)
       - `coprctl chroot list` - List the chroot catalog
     - `coprctl compat` - Translate a copr-cli invocation to coprctl
+    - `coprctl completion` - Generate shell completion scripts
+      - `coprctl completion bash` - Generate bash completion
+      - `coprctl completion fish` - Generate fish completion
+      - `coprctl completion powershell` - Generate powershell completion
+      - `coprctl completion zsh` - Generate zsh completion
     - `coprctl detect` - Read-only: infer a project setup from a source repository
     - `coprctl diff` - Show field-level drift between manifest and live project
+    - `coprctl doctor` - Diagnose environment issues
     - `coprctl export` - Generate a manifest from a live project
     - `coprctl init` - Scaffold a manifest and create a working Copr project
     - `coprctl integration` - Configure forge webhook integrations

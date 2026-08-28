@@ -22,8 +22,8 @@ easy cross-compilation for a solo maintainer.
 ## Decision
 
 Implement in Go. Cobra provides the command framework, Bubble Tea provides
-the TUI, the standard library covers HTTP and gzip, and Koanf handles layered
-configuration. GoReleaser handles release packaging.
+the TUI, the standard library covers HTTP and gzip, and BurntSushi/toml
+handles the layered configuration file. GoReleaser handles release packaging.
 
 A fallback to a Python-based stack (Textual plus the official client) is
 documented as a trigger if API-client parity turns out to be expensive, but is

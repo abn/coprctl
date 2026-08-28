@@ -38,16 +38,24 @@ coprctl build reproduce BUILD_ID/CHROOT
 This prints the `copr-rpmbuild --task-url ...` invocation for mock-level
 fidelity.
 
-If you have a container runtime (podman or docker), `coprctl try` runs a local
-clean-room preflight build:
+`coprctl try` runs a local preflight build, choosing a backend by intent:
 
 ```bash
-coprctl try ./rpm --chroot fedora-rawhide-x86_64
+coprctl try ./rpm --chroot fedora-rawhide-x86_64        # container (default)
+coprctl try ./rpm --chroot fedora-rawhide-x86_64 --runtime native  # host rpmbuild
+coprctl try ./rpm --chroot fedora-rawhide-x86_64 --runtime mock    # clean-room
 ```
 
-`try` resolves the Copr chroot to an rpmbuilder image, runs the source-build
-then chroot-build stages, and reports coverage and a fidelity report. Mock is
-the fallback when no runtime is available (needs mock and privileges).
+The default `--runtime auto` prefers the rpmbuilder container, then mock for a
+clean-room buildroot, then native host tools. Native is not a clean-room
+buildroot: it warns that mock is the higher-fidelity fallback. Mock needs the
+`mock` package and the `mock` group; when it is missing or misconfigured, the
+tool says how to set it up. `build srpm` and `build submit --from` accept the
+same `--runtime` values.
+
+For a container preflight, `try` resolves the Copr chroot to an rpmbuilder
+image, runs the source-build then chroot-build stages, and reports coverage and
+a fidelity report.
 
 ## 3. Test a fix before pushing
 
@@ -73,11 +81,13 @@ just those. A build with no failed chroots reports nothing to do and exits 0.
 
 ## Building and submitting a source RPM
 
-To produce a source RPM from a local spec without a local `rpmbuild`, use a
-container:
+To produce a source RPM from a local spec, use a container by default, or
+host tools:
 
 ```bash
-coprctl build srpm ./rpm --chroot fedora-rawhide-x86_64
+coprctl build srpm ./rpm --chroot fedora-rawhide-x86_64          # container
+coprctl build srpm ./rpm --runtime native                        # spectool + rpmbuild
+coprctl build srpm ./rpm --runtime mock                          # clean-room SRPM
 ```
 
 This runs the same `SRPM_ONLY` stage as `try` inside an rpmbuilder image and

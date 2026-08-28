@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/render"
-	ctrruntime "github.com/abn/coprctl/internal/runtime"
 )
 
 // rpmbuilderRegistry is the container registry for preflight images.
@@ -76,12 +74,12 @@ func newTryCmd(app *App) *cobra.Command {
 	var emulate, matchSubstitute, requireFullCoverage bool
 	cmd := &cobra.Command{
 		Use:   "try [REF|PATH]",
-		Short: "Local clean-room preflight build in containers",
+		Short: "Local preflight build (container, mock, or native)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rt, err := ctrruntime.Detect(runtimeName)
+			b, err := resolveBuilder(runtimeName, "preflight")
 			if err != nil {
-				return cerr.New("no_runtime", cerr.ExitPrecondition, err.Error())
+				return err
 			}
 			srcPath := "."
 			if len(args) == 1 {
@@ -106,45 +104,62 @@ func newTryCmd(app *App) *cobra.Command {
 			var results []map[string]any
 			matched := 0
 			uncovered := []string{}
+			container := b.Name() == "container"
 			for _, ch := range targetChroots {
-				m := resolveChrootImage(ch)
-				if m.Match == "none" {
-					uncovered = append(uncovered, ch)
+				// Container preflight gates on image match, substitution, and
+				// host arch. Native and mock backends run the chroot directly.
+				if container {
+					m := resolveChrootImage(ch)
+					if m.Match == "none" {
+						uncovered = append(uncovered, ch)
+						results = append(results, map[string]any{
+							"chroot": ch, "match": "none", "reason": m.Reason,
+						})
+						continue
+					}
+					// Strict match is the default: substitutions require opt-in.
+					if m.Match == "substitute" && !matchSubstitute {
+						uncovered = append(uncovered, ch)
+						results = append(results, map[string]any{
+							"chroot": ch, "match": "substitute", "status": "skipped",
+							"reason": m.Reason + "; pass --match substitute to allow",
+						})
+						continue
+					}
+					matched++
+					if !emulate && !sameArch(ch, m.Chroot) {
+						uncovered = append(uncovered, ch)
+						m.Confidence = "low"
+						results = append(results, map[string]any{
+							"chroot": ch, "image": m.Image, "match": m.Match,
+							"status": "skipped", "reason": "arch mismatch", "confidence": m.Confidence,
+						})
+						continue
+					}
+					// Run the two-stage preflight.
+					var status string
+					if err := b.Preflight(cmd.Context(), spec, ch, cmd.OutOrStdout()); err != nil {
+						status = "failed"
+					} else {
+						status = "passed"
+					}
 					results = append(results, map[string]any{
-						"chroot": ch, "match": "none", "reason": m.Reason,
-					})
-					continue
-				}
-				// Strict match is the default: substitutions require opt-in.
-				if m.Match == "substitute" && !matchSubstitute {
-					uncovered = append(uncovered, ch)
-					results = append(results, map[string]any{
-						"chroot": ch, "match": "substitute", "status": "skipped",
-						"reason": m.Reason + "; pass --match substitute to allow",
+						"chroot": ch, "image": m.Image, "match": m.Match,
+						"status": status, "confidence": m.Confidence,
+						"backend": "container",
 					})
 					continue
 				}
 				matched++
-				if !emulate && !sameArch(ch, m.Chroot) {
-					uncovered = append(uncovered, ch)
-					m.Confidence = "low"
-					results = append(results, map[string]any{
-						"chroot": ch, "image": m.Image, "match": m.Match,
-						"status": "skipped", "reason": "arch mismatch", "confidence": m.Confidence,
-					})
-					continue
-				}
-				// Run the two-stage preflight.
 				var status string
-				if err := runPreflight(cmd.Context(), rt, m.Image, spec); err != nil {
+				if err := b.Preflight(cmd.Context(), spec, ch, cmd.OutOrStdout()); err != nil {
 					status = "failed"
 				} else {
 					status = "passed"
 				}
 				results = append(results, map[string]any{
-					"chroot": ch, "image": m.Image, "match": m.Match,
-					"status": status, "confidence": m.Confidence,
-					"not_reproduced": fidelityGap,
+					"chroot": ch, "match": "native", "status": status,
+					"confidence": "low", "backend": b.Name(),
 				})
 			}
 
@@ -192,7 +207,7 @@ func newTryCmd(app *App) *cobra.Command {
 	out.bind(cmd)
 	cmd.Flags().StringVar(&path, "path", "", "path to the spec directory")
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build (default fedora-rawhide-x86_64)")
-	cmd.Flags().StringVar(&runtimeName, "runtime", "", "container runtime (podman, docker, auto)")
+	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend: auto, container, native, mock")
 	cmd.Flags().BoolVar(&emulate, "emulate", false, "allow emulated (non-host) architectures")
 	cmd.Flags().BoolVar(&matchSubstitute, "match", false, "allow substitute images (strict by default)")
 	cmd.Flags().BoolVar(&requireFullCoverage, "require-full-coverage", false, "exit 12 if any chroot is uncovered")
@@ -213,11 +228,10 @@ func findSpec(dir string) (string, error) {
 }
 
 // findSRPM locates the most recently produced source RPM under a directory.
-// The container SRPM_ONLY build writes into <workdir>/.rpmbuild/ (the
-// rpmbuilder OUTPUT default), so both the dir root and the subdirectory are
-// searched.
+// The container SRPM_ONLY build writes into <workdir>/.rpmbuild/, and native
+// rpmbuild writes into <workdir>/.rpmbuild/SRPMS/, so both are searched.
 func findSRPM(dir string) (string, error) {
-	candidates := []string{dir, filepath.Join(dir, ".rpmbuild")}
+	candidates := []string{dir, filepath.Join(dir, ".rpmbuild"), filepath.Join(dir, ".rpmbuild", "SRPMS")}
 	var best string
 	var bestMod int64
 	for _, d := range candidates {
@@ -265,30 +279,4 @@ func normalizeArch(arch string) string {
 		return "386"
 	}
 	return arch
-}
-
-// runPreflight runs a two-stage build (SRPM, then rebuild) inside the image.
-// Stage 1 (SRPM_ONLY=1) mirrors Copr's source build; stage 2 (FROM_SRPM=1)
-// rebuilds from the produced SRPM, mirroring the chroot build.
-func runPreflight(ctx context.Context, rt ctrruntime.Runtime, image, spec string) error {
-	specDir := filepath.Dir(spec)
-	err := rt.Run(ctx, ctrruntime.RunSpec{
-		Image:   image,
-		WorkDir: specDir,
-		Mount:   "/sources",
-		Env:     []string{"SRPM_ONLY=1", "OUTPUT=/sources/.rpmbuild"},
-		Args:    []string{"/usr/bin/rpmbuilder"},
-		Stdout:  os.Stdout,
-	})
-	if err != nil {
-		return err
-	}
-	return rt.Run(ctx, ctrruntime.RunSpec{
-		Image:   image,
-		WorkDir: specDir,
-		Mount:   "/sources",
-		Env:     []string{"FROM_SRPM=1", "OUTPUT=/sources/.rpmbuild"},
-		Args:    []string{"/usr/bin/rpmbuilder"},
-		Stdout:  os.Stdout,
-	})
 }

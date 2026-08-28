@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 
@@ -278,10 +277,6 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if _, statErr := os.Stat(from); statErr != nil {
 					return fmt.Errorf("path %q not found; pass a local spec directory", from)
 				}
-				rt, err := ctrruntime.Detect(runtimeName)
-				if err != nil {
-					return cerr.New("no_runtime", cerr.ExitPrecondition, err.Error())
-				}
 				spec, err := findSpec(from)
 				if err != nil {
 					return err
@@ -290,21 +285,11 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if len(chroots) > 0 {
 					ch = chroots[0]
 				}
-				m := resolveChrootImage(ch)
-				if m.Match == "none" {
-					return cerr.New("no_image", cerr.ExitPrecondition, m.Reason)
+				br, err := resolveBuilder(runtimeName, "srpm")
+				if err != nil {
+					return err
 				}
-				if err := rt.Run(cmd.Context(), ctrruntime.RunSpec{
-					Image:   m.Image,
-					WorkDir: filepath.Dir(spec),
-					Mount:   "/sources",
-					Env:     []string{"SRPM_ONLY=1", "OUTPUT=/sources/.rpmbuild"},
-					Args:    []string{"/usr/bin/rpmbuilder"},
-					Stdout:  cmd.OutOrStdout(),
-				}); err != nil {
-					return cerr.New("srpm_failed", cerr.ExitBuildFailed, "source RPM build failed")
-				}
-				srpm, err := findSRPM(filepath.Dir(spec))
+				srpm, err := br.BuildSRPM(cmd.Context(), spec, ch, cmd.OutOrStdout())
 				if err != nil {
 					return err
 				}
@@ -316,6 +301,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 					t := render.NewTable("FIELD", "VALUE")
 					t.Add("ID", fmt.Sprintf("%d", b.ID))
 					t.Add("State", b.State)
+					t.Add("Backend", br.Name())
 					t.Add("SRPM", srpm)
 					return renderResult(cmd, out, t)
 				}
@@ -346,7 +332,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
 	cmd.Flags().StringVar(&dir, "dir", "", "side repo / project directory")
 	cmd.Flags().StringVar(&from, "from", "", "build a local SRPM from this spec directory, then upload and submit")
-	cmd.Flags().StringVar(&runtimeName, "runtime", "", "container runtime for --from (podman, docker, auto)")
+	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend for --from: auto, container, native, mock")
 	return cmd
 }
 
@@ -489,13 +475,9 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 	var path, chroot, runtimeName string
 	cmd := &cobra.Command{
 		Use:   "srpm [PATH]",
-		Short: "Build a source RPM from a local spec using a container",
+		Short: "Build a source RPM from a local spec (container, native, or mock)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rt, err := ctrruntime.Detect(runtimeName)
-			if err != nil {
-				return cerr.New("no_runtime", cerr.ExitPrecondition, err.Error())
-			}
 			srcPath := "."
 			if len(args) == 1 {
 				if _, statErr := os.Stat(args[0]); statErr != nil {
@@ -513,29 +495,19 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 			if chroot == "" {
 				chroot = "fedora-rawhide-x86_64"
 			}
-			m := resolveChrootImage(chroot)
-			if m.Match == "none" {
-				return cerr.New("no_image", cerr.ExitPrecondition, m.Reason)
+			b, err := resolveBuilder(runtimeName, "srpm")
+			if err != nil {
+				return err
 			}
-			if err := rt.Run(cmd.Context(), ctrruntime.RunSpec{
-				Image:   m.Image,
-				WorkDir: filepath.Dir(spec),
-				Mount:   "/sources",
-				Env:     []string{"SRPM_ONLY=1", "OUTPUT=/sources/.rpmbuild"},
-				Args:    []string{"/usr/bin/rpmbuilder"},
-				Stdout:  cmd.OutOrStdout(),
-			}); err != nil {
-				return cerr.New("srpm_failed", cerr.ExitBuildFailed, "source RPM build failed")
-			}
-			srpm, err := findSRPM(filepath.Dir(spec))
+			srpm, err := b.BuildSRPM(cmd.Context(), spec, chroot, cmd.OutOrStdout())
 			if err != nil {
 				return err
 			}
 			result := map[string]any{
-				"image":  m.Image,
-				"chroot": chroot,
-				"spec":   spec,
-				"output": srpm,
+				"backend": b.Name(),
+				"chroot":  chroot,
+				"spec":    spec,
+				"output":  srpm,
 			}
 			return renderResult(cmd, out, result)
 		},
@@ -543,6 +515,6 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 	out.bind(cmd)
 	cmd.Flags().StringVar(&path, "path", "", "path to the spec directory")
 	cmd.Flags().StringVar(&chroot, "chroot", "fedora-rawhide-x86_64", "chroot to build against")
-	cmd.Flags().StringVar(&runtimeName, "runtime", "", "container runtime (podman, docker, auto)")
+	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend: auto, container, native, mock")
 	return cmd
 }

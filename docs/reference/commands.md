@@ -18,7 +18,7 @@ description: The full coprctl command tree, generated from the registry.
       - `coprctl build list` - List builds for a project
       - `coprctl build rebuild` - Rebuild a package from its stored source definition
       - `coprctl build reproduce` - Print the local mock reproduction recipe from a build log
-      - `coprctl build srpm` - Build a source RPM from a local spec using a container
+      - `coprctl build srpm` - Build a source RPM from a local spec (container, native, or mock)
       - `coprctl build submit` - Submit a build
       - `coprctl build watch` - Watch a build until it reaches a terminal state
     - `coprctl chroot` - The instance chroot catalog (mock chroots)
@@ -77,7 +77,7 @@ description: The full coprctl command tree, generated from the registry.
       - `coprctl skill print` - Print a skill to stdout (default: coprctl)
     - `coprctl status` - One-shot project health summary; exits 4 on failed builds
     - `coprctl sync` - Reconcile the manifest against the source repo and Copr
-    - `coprctl try` - Local clean-room preflight build in containers
+    - `coprctl try` - Local preflight build (container, mock, or native)
     - `coprctl ui` - Interactive project dashboard (degrades to plain output off a TTY)
     - `coprctl validate` - Validate a manifest without any network calls
     - `coprctl version` - Print version and build information

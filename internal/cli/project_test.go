@@ -58,3 +58,18 @@ func TestResolveInstructions(t *testing.T) {
 		t.Errorf("file = %q, %v", got, err)
 	}
 }
+
+func TestGithubRepoLinks(t *testing.T) {
+	home, contact := githubRepoLinks("abn/coprctl")
+	if home != "https://github.com/abn/coprctl" {
+		t.Errorf("homepage = %q", home)
+	}
+	if contact != "https://github.com/abn/coprctl/issues" {
+		t.Errorf("contact = %q", contact)
+	}
+	// Handles a full URL input too.
+	home2, contact2 := githubRepoLinks("https://github.com/abn/coprctl")
+	if home2 != "https://github.com/abn/coprctl" || contact2 != "https://github.com/abn/coprctl/issues" {
+		t.Errorf("url input = %q, %q", home2, contact2)
+	}
+}

@@ -55,9 +55,13 @@ coprctl project create you/mypkg --chroot fedora-rawhide-x86_64 \
   --contact "https://github.com/you/mypkg/issues" \
   --instructions install.md          # a markdown file, or inline text
 
+# link a GitHub repo; homepage and issues contact are derived when unset
+coprctl project create you/mypkg --github-repo you/mypkg \
+  --instructions install.md
+
 # or edit it later
 coprctl project edit you/mypkg --description "..." --homepage ... \
-  --contact ... --instructions install.md
+  --contact ... --instructions install.md --github-repo you/mypkg
 
 # from a local spec, let coprctl infer the setup first
 coprctl detect ./rpm --output json

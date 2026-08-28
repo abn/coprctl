@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -34,7 +35,7 @@ func newProjectCmd(app *App) *cobra.Command {
 }
 
 func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
-	var description, homepage, contact, instructions string
+	var description, homepage, contact, instructions, githubRepo string
 	var develMode bool
 	var develSet bool
 	cmd := &cobra.Command{
@@ -53,6 +54,17 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 			inst, err := resolveInstructions(instructions)
 			if err != nil {
 				return err
+			}
+			// Derive homepage and contact from a linked GitHub repo when the
+			// user did not set them explicitly.
+			if githubRepo != "" {
+				repoHome, repoContact := githubRepoLinks(githubRepo)
+				if homepage == "" {
+					homepage = repoHome
+				}
+				if contact == "" {
+					contact = repoContact
+				}
 			}
 			var devel *bool
 			if develSet {
@@ -73,9 +85,16 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&instructions, "instructions", "", "installation instructions (inline or a markdown file path)")
 	cmd.Flags().StringVar(&homepage, "homepage", "", "project homepage")
 	cmd.Flags().StringVar(&contact, "contact", "", "project contact")
+	cmd.Flags().StringVar(&githubRepo, "github-repo", "", "linked GitHub repo OWNER/REPO; derives homepage and issues contact when unset")
 	cmd.Flags().BoolVar(&develMode, "devel-mode", false, "enable devel mode")
 	cmd.Flags().BoolVar(&develSet, "devel-mode-set", false, "set devel mode (use with --devel-mode)")
 	return cmd
+}
+
+// githubRepoLinks derives the homepage and issues contact for a GitHub repo.
+func githubRepoLinks(repo string) (homepage, contact string) {
+	home := "https://github.com/" + strings.TrimPrefix(repo, "https://github.com/")
+	return strings.TrimSuffix(home, "/"), home + "/issues"
 }
 
 // resolveInstructions returns the installation instructions. If value names an
@@ -190,7 +209,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 
 func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 	var chroots []string
-	var description, instructions, homepage, contact string
+	var description, instructions, homepage, contact, githubRepo string
 	var ifNotExists, develMode bool
 	cmd := &cobra.Command{
 		Use:   "create REF",
@@ -219,6 +238,17 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Derive homepage and contact from a linked GitHub repo when the
+			// user did not set them explicitly.
+			if githubRepo != "" {
+				repoHome, repoContact := githubRepoLinks(githubRepo)
+				if homepage == "" {
+					homepage = repoHome
+				}
+				if contact == "" {
+					contact = repoContact
+				}
+			}
 			err = c.CreateProject(cmd.Context(), copr.ProjectCreate{
 				Owner:        r.Owner,
 				Name:         r.Project,
@@ -243,6 +273,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&instructions, "instructions", "", "installation instructions (inline or a markdown file path)")
 	cmd.Flags().StringVar(&homepage, "homepage", "", "project homepage")
 	cmd.Flags().StringVar(&contact, "contact", "", "project contact")
+	cmd.Flags().StringVar(&githubRepo, "github-repo", "", "linked GitHub repo OWNER/REPO; derives homepage and issues contact when unset")
 	cmd.Flags().BoolVar(&ifNotExists, "if-not-exists", false, "do not fail if the project exists")
 	cmd.Flags().BoolVar(&develMode, "devel-mode", false, "enable devel mode")
 	return cmd

@@ -102,7 +102,12 @@ coprctl build submit OWNER/PROJECT --from ./rpm
 
 `--from` builds the SRPM locally via the container, then uploads it to Copr
 and queues the build. It needs a container runtime and write access to the
-project.
+project. Add `--watch` to wait for the submitted build to reach a terminal
+state instead of returning after the queue:
+
+```bash
+coprctl build submit OWNER/PROJECT --from ./rpm --watch
+```
 
 ## Rules
 

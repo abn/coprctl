@@ -252,6 +252,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	var chroots []string
 	var dir string
 	var from, runtimeName string
+	var watch bool
 	cmd := &cobra.Command{
 		Use:   "submit REF --source TYPE [flags]",
 		Short: "Submit a build",
@@ -304,9 +305,18 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 					t.Add("State", b.State)
 					t.Add("Backend", br.Name())
 					t.Add("SRPM", srpm)
-					return renderResult(cmd, out, t)
+					if err := renderResult(cmd, out, t); err != nil {
+						return err
+					}
+				} else {
+					if err := renderResult(cmd, out, b); err != nil {
+						return err
+					}
 				}
-				return renderResult(cmd, out, b)
+				if watch {
+					return watchBuild(cmd, app, b.ID)
+				}
+				return nil
 			}
 
 			st, sm, err := src.sourceMap()
@@ -324,9 +334,18 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("State", b.State)
-				return renderResult(cmd, out, t)
+				if err := renderResult(cmd, out, t); err != nil {
+					return err
+				}
+			} else {
+				if err := renderResult(cmd, out, b); err != nil {
+					return err
+				}
 			}
-			return renderResult(cmd, out, b)
+			if watch {
+				return watchBuild(cmd, app, b.ID)
+			}
+			return nil
 		},
 	}
 	src.bind(cmd)
@@ -334,6 +353,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&dir, "dir", "", "side repo / project directory")
 	cmd.Flags().StringVar(&from, "from", "", "build a local SRPM from this spec directory, then upload and submit")
 	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend for --from: auto, container, native, mock")
+	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "wait for the submitted build to reach a terminal state")
 	bindChrootCompletion(app, cmd, "chroot")
 	bindRefCompletion(app, cmd)
 	return cmd
@@ -470,6 +490,23 @@ func reached(state, until string) bool {
 		return copr.IsTerminal(state)
 	}
 	return state == until
+}
+
+// watchBuild polls a single build until it reaches a terminal state, printing
+// state changes. It is the chain target for build submit --watch.
+func watchBuild(cmd *cobra.Command, app *App, buildID int) error {
+	c, err := app.ReadClient()
+	if err != nil {
+		return err
+	}
+	bus := events.New()
+	defer bus.Close()
+	sub := bus.Subscribe(1024)
+	ctx, cancel := interruptible(cmd.Context())
+	defer cancel()
+	src := &events.PollSource{Client: c, BuildIDs: []int{buildID}, Interval: pollInterval()}
+	go src.Run(ctx, bus)
+	return watchConsume(ctx, bus, sub, "terminal", "plain", cmd)
 }
 
 // newBuildSrpmCmd builds a source RPM from a local spec directory using the

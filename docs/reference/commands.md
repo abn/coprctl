@@ -18,6 +18,7 @@ description: The full coprctl command tree, generated from the registry.
       - `coprctl build list` - List builds for a project
       - `coprctl build rebuild` - Rebuild a package from its stored source definition
       - `coprctl build reproduce` - Print the local mock reproduction recipe from a build log
+      - `coprctl build srpm` - Build a source RPM from a local spec using a container
       - `coprctl build submit` - Submit a build
       - `coprctl build watch` - Watch a build until it reaches a terminal state
     - `coprctl chroot` - The instance chroot catalog (mock chroots)

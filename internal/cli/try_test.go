@@ -1,6 +1,10 @@
 package cli
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestResolveChrootImage(t *testing.T) {
 	tests := []struct {
@@ -29,5 +33,28 @@ func TestResolveChrootImage(t *testing.T) {
 				t.Errorf("Confidence = %q, want %q", got.Confidence, tt.confidence)
 			}
 		})
+	}
+}
+
+func TestFindSRPM(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := findSRPM(dir); err == nil {
+		t.Fatal("expected error with no SRPMs")
+	}
+	a := filepath.Join(dir, "old-0.1-1.src.rpm")
+	b := filepath.Join(dir, "new-0.2-1.src.rpm")
+	if err := os.WriteFile(a, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// b has a newer mtime (created after a), so findSRPM should pick b.
+	got, err := findSRPM(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != b {
+		t.Errorf("findSRPM = %q, want %q", got, b)
 	}
 }

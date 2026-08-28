@@ -61,6 +61,29 @@ the fallback when no runtime is available (needs mock and privileges).
 coprctl build rebuild OWNER/PROJECT/PKG --preflight
 ```
 
+## Building and submitting a source RPM
+
+To produce a source RPM from a local spec without a local `rpmbuild`, use a
+container:
+
+```bash
+coprctl build srpm ./rpm --chroot fedora-rawhide-x86_64
+```
+
+This runs the same `SRPM_ONLY` stage as `try` inside an rpmbuilder image and
+writes the `.src.rpm` into the spec directory.
+
+To build the source RPM and submit it in one step, `build submit` chains the
+two:
+
+```bash
+coprctl build submit OWNER/PROJECT --from ./rpm
+```
+
+`--from` builds the SRPM locally via the container, then uploads it to Copr
+and queues the build. It needs a container runtime and write access to the
+project.
+
 ## Rules
 
 1. Start with `coprctl log failures BUILD_ID`, never a full log dump.

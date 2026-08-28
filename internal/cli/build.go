@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -31,6 +33,7 @@ func newBuildCmd(app *App) *cobra.Command {
 		newBuildCancelCmd(app, &out),
 		newBuildDeleteCmd(app, &out),
 		newBuildReproduceCmd(app, &out),
+		newBuildSrpmCmd(app, &out),
 	)
 	return cmd
 }
@@ -208,6 +211,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	var src sourceFlags
 	var chroots []string
 	var dir string
+	var from, runtimeName string
 	cmd := &cobra.Command{
 		Use:   "submit REF --source TYPE [flags]",
 		Short: "Submit a build",
@@ -217,11 +221,64 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			st, sm, err := src.sourceMap()
+			if r.Owner == "" {
+				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
+			}
+			c, err := app.Client()
 			if err != nil {
 				return err
 			}
-			c, err := app.Client()
+
+			// --from builds a source RPM locally from a spec directory, then
+			// uploads and submits it, chaining build srpm into submit.
+			if from != "" {
+				if _, statErr := os.Stat(from); statErr != nil {
+					return fmt.Errorf("path %q not found; pass a local spec directory", from)
+				}
+				rt, err := ctrruntime.Detect(runtimeName)
+				if err != nil {
+					return cerr.New("no_runtime", cerr.ExitPrecondition, err.Error())
+				}
+				spec, err := findSpec(from)
+				if err != nil {
+					return err
+				}
+				ch := "fedora-rawhide-x86_64"
+				if len(chroots) > 0 {
+					ch = chroots[0]
+				}
+				m := resolveChrootImage(ch)
+				if m.Match == "none" {
+					return cerr.New("no_image", cerr.ExitPrecondition, m.Reason)
+				}
+				if err := rt.Run(cmd.Context(), ctrruntime.RunSpec{
+					Image:   m.Image,
+					WorkDir: filepath.Dir(spec),
+					Env:     []string{"SRPM_ONLY=1"},
+					Args:    []string{"/usr/bin/rpmbuilder"},
+					Stdout:  cmd.OutOrStdout(),
+				}); err != nil {
+					return cerr.New("srpm_failed", cerr.ExitBuildFailed, "source RPM build failed")
+				}
+				srpm, err := findSRPM(filepath.Dir(spec))
+				if err != nil {
+					return err
+				}
+				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, srpm)
+				if err != nil {
+					return err
+				}
+				if isHuman(out.format) {
+					t := render.NewTable("FIELD", "VALUE")
+					t.Add("ID", fmt.Sprintf("%d", b.ID))
+					t.Add("State", b.State)
+					t.Add("SRPM", srpm)
+					return renderResult(cmd, out, t)
+				}
+				return renderResult(cmd, out, b)
+			}
+
+			st, sm, err := src.sourceMap()
 			if err != nil {
 				return err
 			}
@@ -244,6 +301,8 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	src.bind(cmd)
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
 	cmd.Flags().StringVar(&dir, "dir", "", "side repo / project directory")
+	cmd.Flags().StringVar(&from, "from", "", "build a local SRPM from this spec directory, then upload and submit")
+	cmd.Flags().StringVar(&runtimeName, "runtime", "", "container runtime for --from (podman, docker, auto)")
 	return cmd
 }
 
@@ -378,4 +437,63 @@ func reached(state, until string) bool {
 		return copr.IsTerminal(state)
 	}
 	return state == until
+}
+
+// newBuildSrpmCmd builds a source RPM from a local spec directory using the
+// rpmbuilder container, mirroring the SRPM_ONLY stage of the try preflight.
+func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
+	var path, chroot, runtimeName, output string
+	cmd := &cobra.Command{
+		Use:   "srpm [PATH]",
+		Short: "Build a source RPM from a local spec using a container",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rt, err := ctrruntime.Detect(runtimeName)
+			if err != nil {
+				return cerr.New("no_runtime", cerr.ExitPrecondition, err.Error())
+			}
+			srcPath := "."
+			if len(args) == 1 {
+				if _, statErr := os.Stat(args[0]); statErr != nil {
+					return fmt.Errorf("path %q not found; pass a local spec directory", args[0])
+				}
+				srcPath = args[0]
+			}
+			if path != "" {
+				srcPath = path
+			}
+			spec, err := findSpec(srcPath)
+			if err != nil {
+				return err
+			}
+			if chroot == "" {
+				chroot = "fedora-rawhide-x86_64"
+			}
+			m := resolveChrootImage(chroot)
+			if m.Match == "none" {
+				return cerr.New("no_image", cerr.ExitPrecondition, m.Reason)
+			}
+			if err := rt.Run(cmd.Context(), ctrruntime.RunSpec{
+				Image:   m.Image,
+				WorkDir: filepath.Dir(spec),
+				Env:     []string{"SRPM_ONLY=1"},
+				Args:    []string{"/usr/bin/rpmbuilder"},
+				Stdout:  cmd.OutOrStdout(),
+			}); err != nil {
+				return cerr.New("srpm_failed", cerr.ExitBuildFailed, "source RPM build failed")
+			}
+			result := map[string]any{
+				"image":  m.Image,
+				"chroot": chroot,
+				"spec":   spec,
+				"output": output,
+			}
+			return renderResult(cmd, out, result)
+		},
+	}
+	out.bind(cmd)
+	cmd.Flags().StringVar(&path, "path", "", "path to the spec directory")
+	cmd.Flags().StringVar(&chroot, "chroot", "fedora-rawhide-x86_64", "chroot to build against")
+	cmd.Flags().StringVar(&runtimeName, "runtime", "", "container runtime (podman, docker, auto)")
+	return cmd
 }

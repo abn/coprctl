@@ -212,6 +212,34 @@ func findSpec(dir string) (string, error) {
 	return "", fmt.Errorf("no .spec file found in %s", dir)
 }
 
+// findSRPM locates the most recently produced source RPM in a directory. The
+// container SRPM_ONLY build writes into the mounted workdir.
+func findSRPM(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	var best string
+	var bestMod int64
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".src.rpm") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Unix() > bestMod {
+			bestMod = info.ModTime().Unix()
+			best = filepath.Join(dir, e.Name())
+		}
+	}
+	if best == "" {
+		return "", fmt.Errorf("no .src.rpm found in %s (did the container build produce one?)", dir)
+	}
+	return best, nil
+}
+
 // sameArch reports whether the chroot's architecture matches the host. Copr
 // arch names differ from Go GOARCH values (x86_64 vs amd64, aarch64 vs arm64).
 func sameArch(chroot, _ string) bool {

@@ -35,21 +35,6 @@ archives:
       - LICENSE
       - README.md
 
-nfpms:
-  - id: default
-    package_name: coprctl
-    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
-    homepage: https://coprctl.lab.abn.is/
-    description: A reimagined CLI and agent interface for the Fedora Copr build system
-    maintainer: coprctl contributors
-    license: MIT
-    formats:
-      - rpm
-      - deb
-    contents:
-      - src: LICENSE
-        dst: /usr/share/licenses/coprctl/LICENSE
-
 checksum:
   name_template: "checksums.txt"
 

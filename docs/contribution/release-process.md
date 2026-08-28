@@ -61,7 +61,7 @@ A normal release publishes a new semantic version:
    `Version:` field.
 3. Review and squash-merge the release PR.
 4. The `v<semver>` tag is created and the GitHub release is published.
-5. GoReleaser builds and uploads artifacts (tarballs, RPM, deb, checksums).
+5. GoReleaser builds and uploads artifacts (tarballs and checksums).
 6. Copr rebuilds `coprctl` from `main` (auto-rebuild on the SCM source), so
    `dnf copr enable abn/coprctl && dnf install coprctl` installs the new
    version.

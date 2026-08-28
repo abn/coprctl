@@ -6,6 +6,10 @@ or implementation milestones; repository changes belong in the commit history.
 
 ## 2026-08-28
 
+* **Update**: Added a "Ground truth" section to the maintainer guide and a
+  matching note in AGENTS.md, establishing the upstream Copr source
+  (`github.com/fedora-copr/copr`) as the authoritative reference for the
+  server, the API, and existing clients, ahead of the incomplete swagger.
 * **Update**: Removed the redundant H1 title from the ADR bodies (the
   frontmatter `title` is the display name), and added ADRs 0003-0006 covering
   the anonymous-read fallback, secret-handler support, the tag-only webhook
@@ -35,4 +39,3 @@ or implementation milestones; repository changes belong in the commit history.
   architecture section index files so only the bundle root carries frontmatter.
   Added stub pages for the referenced-but-missing concepts (terminology, CLI
   grammar, log streaming, agent contract) to fix broken cross-links. Audit
-  found no privacy leaks or em-dashes.

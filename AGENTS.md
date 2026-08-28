@@ -51,6 +51,14 @@ build system. Full design and rationale live in the wiki under `docs/`.
   green, with real captured output.
 - `docs/log.md` is updated as the wiki evolves.
 
+## Upstream ground truth
+
+The server, the API, and existing clients are best understood from the
+upstream Copr source (`github.com/fedora-copr/copr`), not from the swagger
+alone: request bodies are often unmodeled there, and the web UI uses
+endpoints the swagger never documents. See the
+[maintainer guide](docs/contribution/maintainers.md) for the hierarchy.
+
 ## Contributor guide
 
 See `docs/contribution/`, especially the [release process](docs/contribution/release-process.md)

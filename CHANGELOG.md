@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/abn/coprctl/compare/v0.4.0...v0.4.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* scope the webhook to a package so bare release tags match ([7703c33](https://github.com/abn/coprctl/commit/7703c337ba217500dee741671d459bcbc5175e1f))
+
 ## [0.4.0](https://github.com/abn/coprctl/compare/coprctl-v0.3.0...coprctl-v0.4.0) (2026-08-28)
 
 

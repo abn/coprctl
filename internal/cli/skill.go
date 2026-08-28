@@ -124,29 +124,36 @@ func newSkillCmd(app *App) *cobra.Command {
 			Short: "Install a skill into an agent skills directory",
 			Args:  cobra.MaximumNArgs(1),
 			RunE: func(c *cobra.Command, args []string) error {
-				name := "coprctl"
-				if len(args) == 1 {
-					name = args[0]
-				}
-				sp, err := findSkill(name)
-				if err != nil {
-					return err
-				}
 				// Install namespaced under the target's skills root.
 				base := target
 				if base == "" {
 					cwd, _ := os.Getwd()
-					base = filepath.Join(cwd, ".claude", "skills")
+					base = filepath.Join(cwd, ".agents", "skills")
 				}
-				dir := filepath.Join(base, sp.name)
-				if err := os.MkdirAll(dir, 0o755); err != nil {
-					return err
+				// With no name, install every bundled skill so the main skill's
+				// "Related skills" section never points at something missing.
+				skills := bundledSkills()
+				if len(args) == 1 {
+					sp, err := findSkill(args[0])
+					if err != nil {
+						return err
+					}
+					skills = []skillSpec{*sp}
 				}
-				return os.WriteFile(filepath.Join(dir, "SKILL.md"),
-					[]byte(sp.build(Root(app), app)), 0o644)
+				for _, s := range skills {
+					dir := filepath.Join(base, s.name)
+					if err := os.MkdirAll(dir, 0o755); err != nil {
+						return err
+					}
+					if err := os.WriteFile(filepath.Join(dir, "SKILL.md"),
+						[]byte(s.build(Root(app), app)), 0o644); err != nil {
+						return err
+					}
+				}
+				return nil
 			},
 		},
 	)
-	cmd.PersistentFlags().StringVar(&target, "target", "", "agent skills root directory")
+	cmd.PersistentFlags().StringVar(&target, "target", "", "agent skills root directory (default: ./.agents/skills)")
 	return cmd
 }

@@ -75,5 +75,31 @@ coprctl validate -f copr.yaml
 coprctl apply -f copr.yaml
 ```
 
+## Chroot lifecycle
+
+`chroot list` shows the instance catalog with each chroot's EOL state, so you
+can see at a glance which releases are retired:
+
+```bash
+coprctl chroot list --state active      # only current releases
+coprctl chroot list --distro fedora
+```
+
+Targeting an EOL chroot for a build warns that it will not accept new builds.
+
+To add or remove chroots on a project:
+
+```bash
+coprctl project chroot enable you/mypkg --chroot fedora-45-x86_64
+coprctl project chroot disable you/mypkg --chroot fedora-42-x86_64 --yes
+```
+
+Or reconcile chroots from a manifest, pruning those the manifest no longer
+lists:
+
+```bash
+coprctl apply -f copr.yaml --prune --yes
+```
+
 See the [usage index](index.md) for the full guides, and the
 [GitHub integration](github-integration.md) guide to wire webhooks.

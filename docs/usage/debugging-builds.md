@@ -61,6 +61,16 @@ the fallback when no runtime is available (needs mock and privileges).
 coprctl build rebuild OWNER/PROJECT/PKG --preflight
 ```
 
+To retry only the chroots that failed in an earlier build, pass the build id
+instead of naming chroots yourself:
+
+```bash
+coprctl build rebuild OWNER/PROJECT/PKG --only-failed BUILD_ID
+```
+
+`--only-failed` fetches the build, collects the failed chroots, and rebuilds
+just those. A build with no failed chroots reports nothing to do and exits 0.
+
 ## Building and submitting a source RPM
 
 To produce a source RPM from a local spec without a local `rpmbuild`, use a

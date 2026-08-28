@@ -59,6 +59,10 @@ description: The full coprctl command tree, generated from the registry.
       - `coprctl package list` - List packages in a project
       - `coprctl package reset` - Clear a package's stored source definition
     - `coprctl project` - Manage Copr projects
+      - `coprctl project chroot` - Manage project chroots
+        - `coprctl project chroot disable` - Disable chroots on a project
+        - `coprctl project chroot enable` - Enable chroots on a project (additive)
+        - `coprctl project chroot list` - List the chroots enabled on a project
       - `coprctl project create` - Create a project
       - `coprctl project delete` - Delete a project
       - `coprctl project edit` - Edit project settings

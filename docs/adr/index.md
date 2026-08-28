@@ -11,3 +11,4 @@ evolves.
 * [ADR 0005](0005-tag-only-webhook.md) - tag-only webhook default
 * [ADR 0006](0006-instance-detection.md) - instance detection
 * [ADR 0007](0007-cross-platform-releases.md) - cross-platform releases
+* [ADR 0008](0008-chroot-lifecycle.md) - chroot lifecycle and EOL surfacing

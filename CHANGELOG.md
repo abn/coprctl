@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.7](https://github.com/abn/coprctl/compare/v0.4.6...v0.4.7) (2026-08-28)
+
+
+### Bug Fixes
+
+* lower the go toolchain floor so all Copr chroots can build ([#16](https://github.com/abn/coprctl/issues/16)) ([c9f81a4](https://github.com/abn/coprctl/commit/c9f81a4813c4ec1b66d5291df491357464aef423))
+
+
+### Miscellaneous Chores
+
+* trigger 0.4.7 release ([736882d](https://github.com/abn/coprctl/commit/736882ddae573fe90a11c74a09eb502f8ae66d6a))
+
 ## [0.4.6](https://github.com/abn/coprctl/compare/v0.4.5...v0.4.6) (2026-08-28)
 
 

@@ -113,8 +113,11 @@ same pull request and squash-merge convention.
 
 - **Do not edit `CHANGELOG.md` or the version by hand.** Release Please owns
   both. Edit only through its release PR.
-- **Keep `coprctl.spec`'s `Version:` in sync.** The `x-release-please-version`
-  annotation marks the line Release Please updates; do not remove it.
+- **Keep `coprctl.spec`'s `Version:` in sync.** The `Version:` tag sits inside
+  a release-please version block (`x-release-please-start-version` ... `end`
+  comment lines). The markers are plain spec comments so rpmbuild parses the
+  tag cleanly; do not move them back onto the `Version:` line as a trailing
+  comment, which rpmbuild rejects with "Tag takes single token only".
 - **Respect the manifest.** `.release-please-manifest.json` records the last
   released version. Do not edit it by hand except during bootstrap.
 - **Preview the next release.** Run `release-please release-pr` locally (or in

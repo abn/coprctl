@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.4](https://github.com/abn/coprctl/compare/v0.4.3...v0.4.4) (2026-08-28)
+
+
+### Bug Fixes
+
+* **packaging:** use a release-please version block so rpmbuild can parse the spec ([#10](https://github.com/abn/coprctl/issues/10)) ([77c9ae7](https://github.com/abn/coprctl/commit/77c9ae7e5fb4b168ecbb9a35117024e0724072a5))
+
+
+### Miscellaneous Chores
+
+* trigger 0.4.4 release ([65e9166](https://github.com/abn/coprctl/commit/65e9166ce461f6a13b101de924f1edf8c84a2289))
+
 ## [0.4.3](https://github.com/abn/coprctl/compare/v0.4.2...v0.4.3) (2026-08-28)
 
 

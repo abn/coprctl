@@ -59,7 +59,9 @@ The trigger is configurable:
 
 The command:
 
-- resolves the Copr webhook URL from the project id and the cached secret;
+- resolves the Copr webhook URL from the project id and the cached secret,
+  scoped to the matching SCM package so a bare `v<semver>` tag matches that
+  package by name;
 - enables auto-rebuild on the relevant packages;
 - creates the GitHub hook (or updates an existing one that points at the same
   instance, so it never duplicates hooks);

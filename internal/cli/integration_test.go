@@ -26,3 +26,17 @@ func TestDefaultHookEvents(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeCloneURL(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://github.com/abn/coprctl.git", "github.com/abn/coprctl"},
+		{"https://github.com/abn/coprctl", "github.com/abn/coprctl"},
+		{"git@github.com:abn/coprctl.git", "github.com/abn/coprctl"},
+		{"http://github.com/abn/coprctl", "github.com/abn/coprctl"},
+	}
+	for _, tc := range cases {
+		if got := normalizeCloneURL(tc.in); got != tc.want {
+			t.Errorf("normalizeCloneURL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

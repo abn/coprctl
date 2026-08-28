@@ -44,8 +44,11 @@ func newIntegrationCmd(app *App) *cobra.Command {
 
 // webhookURL builds the Copr webhook URL. The upstream-documented shape is
 // https://<instance>/webhooks/<forge>/<project_id>/<secret>/. Project id is
-// fetched live; the secret comes from local state (never invented).
-func webhookURL(ctx context.Context, app *App, r ref.Ref) (string, error) {
+// webhookURL returns the Copr webhook URL for a project. When pkgName is
+// non-empty the URL is package-scoped, which lets Copr match the tag to that
+// package by name (so a bare v<semver> tag works regardless of the package
+// name). The secret comes from local state (never invented).
+func webhookURL(ctx context.Context, app *App, r ref.Ref, pkgName string) (string, error) {
 	c, err := app.Client()
 	if err != nil {
 		return "", err
@@ -62,7 +65,11 @@ func webhookURL(ctx context.Context, app *App, r ref.Ref) (string, error) {
 	if err != nil || secret == "" {
 		return "", fmt.Errorf("no webhook secret known for %s; run 'integration rotate-secret' first", r.String())
 	}
-	return fmt.Sprintf("%s/webhooks/github/%d/%s/", profileURL(app), proj.ID, secret), nil
+	u := fmt.Sprintf("%s/webhooks/github/%d/%s/", profileURL(app), proj.ID, secret)
+	if pkgName != "" {
+		u += pkgName + "/"
+	}
+	return u, nil
 }
 
 func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
@@ -76,7 +83,7 @@ func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			u, err := webhookURL(cmd.Context(), app, r)
+			u, err := webhookURL(cmd.Context(), app, r, "")
 			if err != nil {
 				return err
 			}
@@ -111,11 +118,22 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			// creation). `--events` overrides for full control.
 			evs := defaultHookEvents(tagOnly, events)
 			gh := forge.NewGitHub(token)
-			u, err := webhookURL(cmd.Context(), app, r)
+			owner, repoName := splitRepo(repo)
+			// Resolve the project's SCM packages that belong to this repo, so
+			// the webhook can be package-scoped (letting Copr match a bare
+			// v<semver> tag by package name) and auto-rebuild can be enabled.
+			pkgs, err := scmPackages(cmd.Context(), app, r, "https://github.com/"+repo)
 			if err != nil {
 				return err
 			}
-			owner, repoName := splitRepo(repo)
+			pkgScope := ""
+			if len(pkgs) > 0 {
+				pkgScope = pkgs[0].Name
+			}
+			u, err := webhookURL(cmd.Context(), app, r, pkgScope)
+			if err != nil {
+				return err
+			}
 			// Idempotent: reuse an existing hook pointing at this instance.
 			hooks, err := gh.ListHooks(cmd.Context(), owner, repoName)
 			if err != nil {
@@ -154,7 +172,7 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			// unless the user opts out.
 			autoRebuilt := false
 			if !noAutoRebuild {
-				autoRebuilt, err = enableAutoRebuild(cmd, app, r)
+				autoRebuilt, err = enableAutoRebuild(cmd, app, r, pkgs)
 				if err != nil {
 					return err
 				}
@@ -165,7 +183,7 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			return renderResult(cmd, out, map[string]any{
 				"enabled": true, "repo": repo, "hook_id": hook.ID,
 				"url": u, "ping_status": code, "events": evs,
-				"auto_rebuild": autoRebuilt,
+				"auto_rebuild": autoRebuilt, "package": pkgScope,
 			})
 		},
 	}
@@ -275,21 +293,41 @@ func splitComma(s string) []string {
 	return out
 }
 
-// enableAutoRebuild turns on webhook auto-rebuild for every SCM package in a
-// project, so tag pushes trigger Copr rebuilds. It returns whether any package
-// was updated.
-func enableAutoRebuild(cmd *cobra.Command, app *App, r ref.Ref) (bool, error) {
+// scmPackages returns the SCM packages in a project that belong to the given
+// GitHub clone URL (or all SCM packages when cloneURL is empty).
+func scmPackages(ctx context.Context, app *App, r ref.Ref, cloneURL string) ([]copr.Package, error) {
 	c, err := app.Client()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	pkgs, err := c.ListPackages(cmd.Context(), r.Owner, r.Project)
+	pkgs, err := c.ListPackages(ctx, r.Owner, r.Project)
+	if err != nil {
+		return nil, err
+	}
+	normalized := normalizeCloneURL(cloneURL)
+	var out []copr.Package
+	for _, p := range pkgs {
+		if p.SourceType != copr.SourceSCM {
+			continue
+		}
+		if normalized != "" && normalizeCloneURL(p.SourceDict["clone_url"]) != normalized {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// enableAutoRebuild turns on webhook auto-rebuild for the given packages, so
+// tag pushes trigger Copr rebuilds. It returns whether any package was updated.
+func enableAutoRebuild(cmd *cobra.Command, app *App, r ref.Ref, pkgs []copr.Package) (bool, error) {
+	c, err := app.Client()
 	if err != nil {
 		return false, err
 	}
 	updated := false
 	for _, p := range pkgs {
-		if p.SourceType != copr.SourceSCM || p.AutoRebuild {
+		if p.AutoRebuild {
 			continue
 		}
 		src := make(map[string]any, len(p.SourceDict))
@@ -306,6 +344,18 @@ func enableAutoRebuild(cmd *cobra.Command, app *App, r ref.Ref) (bool, error) {
 		updated = true
 	}
 	return updated, nil
+}
+
+// normalizeCloneURL normalizes a GitHub clone URL for comparison, producing
+// the canonical github.com/OWNER/REPO form.
+func normalizeCloneURL(u string) string {
+	u = strings.TrimSuffix(strings.TrimSpace(u), ".git")
+	if strings.HasPrefix(u, "git@github.com:") {
+		u = "github.com/" + strings.TrimPrefix(u, "git@github.com:")
+	}
+	u = strings.TrimPrefix(u, "https://")
+	u = strings.TrimPrefix(u, "http://")
+	return strings.Trim(u, "/")
 }
 
 func splitRepo(s string) (string, string) {

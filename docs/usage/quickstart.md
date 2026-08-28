@@ -11,8 +11,25 @@ This walkthrough takes you from a fresh install to a running Copr build.
 
 ## Install
 
+The easiest way is from this Copr repository, which keeps the binary updated
+with your distro:
+
+```bash
+sudo dnf copr enable abn/coprctl
+sudo dnf install coprctl
+```
+
+Or build from source with the Go toolchain:
+
 ```bash
 go install github.com/abn/coprctl/cmd/coprctl@latest
+```
+
+Verify the setup:
+
+```bash
+coprctl auth status
+coprctl doctor
 ```
 
 ## Authenticate

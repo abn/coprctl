@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -326,8 +327,8 @@ func readPasted(cmd *cobra.Command) string {
 		}
 		return ""
 	}
-	if !isTTY(cmd) {
-		data, err := os.ReadFile("/dev/stdin")
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		data, err := io.ReadAll(os.Stdin)
 		if err == nil {
 			return string(data)
 		}

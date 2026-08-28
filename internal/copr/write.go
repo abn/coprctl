@@ -58,6 +58,7 @@ type ProjectEdit struct {
 	Description, Homepage, Contact string
 	DevelMode                      *bool
 	EnableNet                      *bool
+	Chroots                        *[]string
 }
 
 // EditProject updates project settings. Only fields that are non-empty (or
@@ -80,17 +81,11 @@ func (c *Client) EditProject(ctx context.Context, in ProjectEdit) error {
 	if in.EnableNet != nil {
 		payload["enable_net"] = *in.EnableNet
 	}
+	if in.Chroots != nil {
+		payload["chroots"] = *in.Chroots
+	}
 	return c.doJSON(ctx, http.MethodPut,
 		fmt.Sprintf("/project/edit/%s/%s", in.Owner, in.Project), payload, nil)
-}
-
-// EditProjectChroots sets the enabled chroot set on a project. The value
-// replaces the whole set, so a caller resolves the delta first (enable or
-// disable).
-func (c *Client) EditProjectChroots(ctx context.Context, owner, project string, chroots []string) error {
-	return c.doJSON(ctx, http.MethodPut,
-		fmt.Sprintf("/project/edit/%s/%s", owner, project),
-		map[string]any{"chroot_names": chroots}, nil)
 }
 
 // DeleteProject removes a project.

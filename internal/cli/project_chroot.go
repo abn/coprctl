@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"sort"
 
 	"github.com/spf13/cobra"
 
 	"github.com/abn/coprctl/internal/cerr"
+	"github.com/abn/coprctl/internal/chroot"
+	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 )
@@ -44,10 +48,15 @@ func newProjectChrootListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			names := make([]string, 0, len(p.ChrootRepos))
+			for name := range p.ChrootRepos {
+				names = append(names, name)
+			}
+			sort.Strings(names)
 			if isHuman(out.format) {
-				t := render.NewTable("CHROOT", "REPO")
-				for name, repo := range p.ChrootRepos {
-					t.Add(name, repo)
+				t := render.NewTable("CHROOT", "STATE", "REPO")
+				for _, name := range names {
+					t.Add(name, string(chroot.Classify(name, true)), p.ChrootRepos[name])
 				}
 				return renderResult(cmd, out, t)
 			}
@@ -55,6 +64,27 @@ func newProjectChrootListCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+// currentChroots returns the enabled chroot names of a project, sorted.
+func currentChroots(c *copr.Client, ctx context.Context, owner, project string) ([]string, error) {
+	p, err := c.GetProject(ctx, owner, project)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(p.ChrootRepos))
+	for name := range p.ChrootRepos {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// setChroots replaces the enabled chroot set on a project.
+func setChroots(c *copr.Client, ctx context.Context, owner, project string, chroots []string) error {
+	return c.EditProject(ctx, copr.ProjectEdit{
+		Owner: owner, Project: project, Chroots: &chroots,
+	})
 }
 
 func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
@@ -78,28 +108,25 @@ func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			p, err := c.GetProject(cmd.Context(), r.Owner, r.Project)
+			existing, err := currentChroots(c, cmd.Context(), r.Owner, r.Project)
 			if err != nil {
 				return err
-			}
-			// Additive: union the existing set with the new chroots.
-			existing := make([]string, 0, len(p.ChrootRepos)+len(chroots))
-			for name := range p.ChrootRepos {
-				existing = append(existing, name)
 			}
 			seen := map[string]bool{}
 			for _, name := range existing {
 				seen[name] = true
 			}
+			next := existing
 			for _, ch := range chroots {
 				if !seen[ch] {
-					existing = append(existing, ch)
+					next = append(next, ch)
 				}
 			}
-			if err := c.EditProjectChroots(cmd.Context(), r.Owner, r.Project, existing); err != nil {
+			sort.Strings(next)
+			if err := setChroots(c, cmd.Context(), r.Owner, r.Project, next); err != nil {
 				return err
 			}
-			return renderResult(cmd, out, map[string]any{"enabled": chroots, "chroots": existing})
+			return renderResult(cmd, out, map[string]any{"enabled": chroots, "chroots": next})
 		},
 	}
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to enable")
@@ -131,33 +158,27 @@ func newProjectChrootDisableCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			p, err := c.GetProject(cmd.Context(), r.Owner, r.Project)
+			existing, err := currentChroots(c, cmd.Context(), r.Owner, r.Project)
 			if err != nil {
 				return err
-			}
-			// Disabling a chroot stops new builds but keeps existing repos.
-			warnInactiveChroots(cmd, chroots, app)
-			remaining := make([]string, 0, len(p.ChrootRepos))
-			for name := range p.ChrootRepos {
-				remaining = append(remaining, name)
 			}
 			drop := map[string]bool{}
 			for _, ch := range chroots {
 				drop[ch] = true
 			}
-			out2 := remaining[:0]
-			for _, name := range remaining {
+			remaining := make([]string, 0, len(existing))
+			for _, name := range existing {
 				if !drop[name] {
-					out2 = append(out2, name)
+					remaining = append(remaining, name)
 				}
 			}
-			if len(out2) == len(remaining) {
-				return renderResult(cmd, out, map[string]any{"disabled": []string{}, "chroots": remaining})
+			if len(remaining) == len(existing) {
+				return renderResult(cmd, out, map[string]any{"disabled": []string{}, "chroots": existing})
 			}
-			if err := c.EditProjectChroots(cmd.Context(), r.Owner, r.Project, out2); err != nil {
+			if err := setChroots(c, cmd.Context(), r.Owner, r.Project, remaining); err != nil {
 				return err
 			}
-			return renderResult(cmd, out, map[string]any{"disabled": chroots, "chroots": out2})
+			return renderResult(cmd, out, map[string]any{"disabled": chroots, "chroots": remaining})
 		},
 	}
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to disable")

@@ -37,9 +37,12 @@ Surface and act on the state:
 - `apply --prune` disables chroots the manifest no longer lists (requires
   `--yes`), so retiring a chroot is a one-line manifest change.
 
-The project chroot set is set via the project edit endpoint with
-`chroot_names`; the exact upstream endpoint for enabling and disabling is a
-future live-verification item against the instance's `/api_3/swagger.json`.
+The project chroot set is set via the project edit endpoint
+(`PUT /api_3/project/edit/{owner}/{project}`) with a `chroots` array. The
+Copr source (`apiv3_projects.py`, `CoprChrootsLogic.update_from_names`)
+reconciles the set: chroots in the array are enabled, those omitted are
+disabled. This was verified live against Copr staging: enable, disable,
+additive apply, and apply --prune all mutated the chroot set as intended.
 
 ## Consequences
 
@@ -50,3 +53,6 @@ future live-verification item against the instance's `/api_3/swagger.json`.
   build.
 - `disable` and `--prune` are destructive and require `--yes`, consistent with
   the explicit-destructive-operations invariant.
+- Additive `apply` also reconciles chroots: chroots in the manifest that are
+  not live are enabled, and live chroots the manifest does not mention are kept
+  (unless `--prune`).

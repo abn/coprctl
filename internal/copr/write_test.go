@@ -230,14 +230,18 @@ func TestEditProjectChroots(t *testing.T) {
 		}
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
-		cn, ok := body["chroot_names"].([]any)
+		cn, ok := body["chroots"].([]any)
 		if !ok || len(cn) != 2 {
-			t.Errorf("chroot_names = %v", body["chroot_names"])
+			t.Errorf("chroots = %v", body["chroots"])
 		}
 		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "proj"})
 	})
 	c := New(srv.URL, TokenAuth("l", "t"))
-	if err := c.EditProjectChroots(context.Background(), "owner", "proj", []string{"fedora-42-x86_64", "epel-9-x86_64"}); err != nil {
+	chroots := []string{"fedora-42-x86_64", "epel-9-x86_64"}
+	if err := c.EditProject(context.Background(), ProjectEdit{
+		Owner: "owner", Project: "proj", Chroots: &chroots,
+	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

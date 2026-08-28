@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -159,7 +160,9 @@ func newValidateCmd(app *App) *cobra.Command {
 
 // applyManifest creates or updates a project, chroots, and packages to match
 // the manifest. Additive and safe to re-run after a partial failure. When
-// prune is set, chroots enabled live but absent from the manifest are disabled.
+// prune is set, the enabled chroot set is set to exactly the manifest's list;
+// otherwise chroots in the manifest are enabled additively alongside the live
+// set.
 func applyManifest(ctx context.Context, app *App, m *manifest.Manifest, prune bool) error {
 	c, err := app.Client()
 	if err != nil {
@@ -193,26 +196,38 @@ func applyManifest(ctx context.Context, app *App, m *manifest.Manifest, prune bo
 			return err
 		}
 	}
-	// Prune: disable chroots enabled live that the manifest no longer lists.
-	if prune {
-		if p, err := c.GetProject(ctx, owner, project); err == nil {
-			want := map[string]bool{}
-			for _, ch := range m.Spec.Chroots.Enabled {
-				want[ch] = true
-			}
-			var keep []string
-			removed := []string{}
+	// Reconcile the enabled chroot set. Additive apply enables chroots listed
+	// in the manifest that are not yet live; prune sets the set to exactly the
+	// manifest's list, disabling anything the manifest no longer lists.
+	if p, err := c.GetProject(ctx, owner, project); err == nil {
+		want := map[string]bool{}
+		for _, ch := range m.Spec.Chroots.Enabled {
+			want[ch] = true
+		}
+		next := make([]string, 0, len(m.Spec.Chroots.Enabled))
+		for _, ch := range m.Spec.Chroots.Enabled {
+			next = append(next, ch)
+		}
+		if !prune {
+			// Additive: keep chroots live that the manifest does not mention.
 			for name := range p.ChrootRepos {
 				if !want[name] {
-					removed = append(removed, name)
-				} else {
-					keep = append(keep, name)
+					next = append(next, name)
 				}
 			}
-			if len(removed) > 0 {
-				if err := c.EditProjectChroots(ctx, owner, project, keep); err != nil {
-					return err
-				}
+		}
+		sort.Strings(next)
+		// Only call the API when the set actually differs from live.
+		live := make([]string, 0, len(p.ChrootRepos))
+		for name := range p.ChrootRepos {
+			live = append(live, name)
+		}
+		sort.Strings(live)
+		if !equalStrings(live, next) {
+			if err := c.EditProject(ctx, copr.ProjectEdit{
+				Owner: owner, Project: project, Chroots: &next,
+			}); err != nil {
+				return err
 			}
 		}
 	}
@@ -288,4 +303,22 @@ func packageToSource(p manifest.Package) (map[string]any, copr.SourceType, error
 		return nil, st, fmt.Errorf("unsupported source type %q in manifest", p.Source.Type)
 	}
 	return m, st, nil
+}
+
+// equalStrings reports whether two slices contain the same strings, ignoring
+// order.
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]bool, len(a))
+	for _, s := range a {
+		seen[s] = true
+	}
+	for _, s := range b {
+		if !seen[s] {
+			return false
+		}
+	}
+	return true
 }

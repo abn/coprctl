@@ -102,6 +102,7 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
 	cmd.Flags().BoolVar(&preflight, "preflight", false, "run a local Tier-1 preflight before submitting")
 	cmd.Flags().StringVar(&onlyFailed, "only-failed", "", "rebuild only chroots that failed in this build id (overrides --chroot)")
+	bindChrootCompletion(app, cmd, "chroot")
 	return cmd
 }
 
@@ -333,6 +334,8 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&dir, "dir", "", "side repo / project directory")
 	cmd.Flags().StringVar(&from, "from", "", "build a local SRPM from this spec directory, then upload and submit")
 	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend for --from: auto, container, native, mock")
+	bindChrootCompletion(app, cmd, "chroot")
+	bindRefCompletion(app, cmd)
 	return cmd
 }
 
@@ -516,5 +519,6 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&path, "path", "", "path to the spec directory")
 	cmd.Flags().StringVar(&chroot, "chroot", "fedora-rawhide-x86_64", "chroot to build against")
 	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend: auto, container, native, mock")
+	bindChrootCompletion(app, cmd, "chroot")
 	return cmd
 }

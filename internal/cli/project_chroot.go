@@ -130,6 +130,8 @@ func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to enable")
+	bindChrootCompletion(app, cmd, "chroot")
+	bindRefCompletion(app, cmd)
 	return cmd
 }
 
@@ -182,6 +184,7 @@ func newProjectChrootDisableCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to disable")
+	bindChrootCompletion(app, cmd, "chroot")
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm the disable")
 	return cmd
 }

@@ -114,6 +114,7 @@ func newInitCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&owner, "owner", "", "owner of the Copr project")
 	cmd.Flags().StringVar(&name, "name", "", "Copr project name (default: repo name)")
 	cmd.Flags().StringSliceVar(&chroots, "chroot", nil, "chroots to enable")
+	bindChrootCompletion(app, cmd, "chroot")
 	cmd.Flags().BoolVar(&yes, "yes", false, "assume yes")
 	cmd.Flags().BoolVar(&writeCI, "write-ci", false, "write a CI workflow")
 	return cmd

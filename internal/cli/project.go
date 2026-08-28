@@ -162,6 +162,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 			return renderResult(cmd, out, p)
 		},
 	}
+	bindRefCompletion(app, cmd)
 	return cmd
 }
 
@@ -211,6 +212,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to enable (repeatable)")
+	bindChrootCompletion(app, cmd, "chroot")
 	cmd.Flags().StringVar(&description, "description", "", "project description")
 	cmd.Flags().StringVar(&instructions, "instructions", "", "project instructions")
 	cmd.Flags().StringVar(&homepage, "homepage", "", "project homepage")

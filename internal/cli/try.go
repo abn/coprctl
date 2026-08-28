@@ -208,6 +208,7 @@ func newTryCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&path, "path", "", "path to the spec directory")
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build (default fedora-rawhide-x86_64)")
 	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend: auto, container, native, mock")
+	bindChrootCompletion(app, cmd, "chroot")
 	cmd.Flags().BoolVar(&emulate, "emulate", false, "allow emulated (non-host) architectures")
 	cmd.Flags().BoolVar(&matchSubstitute, "match", false, "allow substitute images (strict by default)")
 	cmd.Flags().BoolVar(&requireFullCoverage, "require-full-coverage", false, "exit 12 if any chroot is uncovered")

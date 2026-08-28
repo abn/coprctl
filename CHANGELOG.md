@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/abn/coprctl/compare/v0.4.2...v0.4.3) (2026-08-28)
+
+
+### Miscellaneous Chores
+
+* trigger 0.4.3 release ([1ca9399](https://github.com/abn/coprctl/commit/1ca9399e764dfdc49d858a232305dea49192bfdd))
+
 ## [0.4.2](https://github.com/abn/coprctl/compare/v0.4.1...v0.4.2) (2026-08-28)
 
 

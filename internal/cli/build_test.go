@@ -9,9 +9,9 @@ import (
 
 func TestFailedChroots(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		build *copr.Build
-		want []string
+		want  []string
 	}{
 		{
 			name: "detailed builds map",

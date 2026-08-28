@@ -84,6 +84,15 @@ func (c *Client) EditProject(ctx context.Context, in ProjectEdit) error {
 		fmt.Sprintf("/project/edit/%s/%s", in.Owner, in.Project), payload, nil)
 }
 
+// EditProjectChroots sets the enabled chroot set on a project. The value
+// replaces the whole set, so a caller resolves the delta first (enable or
+// disable).
+func (c *Client) EditProjectChroots(ctx context.Context, owner, project string, chroots []string) error {
+	return c.doJSON(ctx, http.MethodPut,
+		fmt.Sprintf("/project/edit/%s/%s", owner, project),
+		map[string]any{"chroot_names": chroots}, nil)
+}
+
 // DeleteProject removes a project.
 func (c *Client) DeleteProject(ctx context.Context, owner, project string) error {
 	return c.doJSON(ctx, http.MethodDelete,

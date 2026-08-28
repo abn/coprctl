@@ -219,3 +219,25 @@ func TestRotateAPIToken(t *testing.T) {
 		t.Errorf("token = %+v", nt)
 	}
 }
+
+func TestEditProjectChroots(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("method = %s", r.Method)
+		}
+		if r.URL.Path != "/api_3/project/edit/owner/proj" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		cn, ok := body["chroot_names"].([]any)
+		if !ok || len(cn) != 2 {
+			t.Errorf("chroot_names = %v", body["chroot_names"])
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	if err := c.EditProjectChroots(context.Background(), "owner", "proj", []string{"fedora-42-x86_64", "epel-9-x86_64"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

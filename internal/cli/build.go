@@ -269,6 +269,9 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				return err
 			}
 
+			// Warn when a targeted chroot is EOL and will not accept builds.
+			warnInactiveChroots(cmd, chroots, app)
+
 			// --from builds a source RPM locally from a spec directory, then
 			// uploads and submits it, chaining build srpm into submit.
 			if from != "" {

@@ -26,6 +26,7 @@ func newProjectCmd(app *App) *cobra.Command {
 		newProjectRegenCmd(app, &out),
 		newProjectDeleteCmd(app, &out),
 		newProjectForkCmd(app, &out),
+		newProjectChrootCmd(app, &out),
 	)
 	return cmd
 }

@@ -17,7 +17,7 @@ import (
 func newApplyCmd(app *App) *cobra.Command {
 	var out outFlags
 	var file string
-	var dryRun, prune bool
+	var dryRun, prune, yes bool
 	cmd := &cobra.Command{
 		Use:   "apply -f copr.yaml",
 		Short: "Reconcile a project to match the manifest",
@@ -40,7 +40,10 @@ func newApplyCmd(app *App) *cobra.Command {
 				}
 				return renderResult(cmd, &out, map[string]any{"dry_run": true, "diffs": diffs})
 			}
-			if err := applyManifest(cmd.Context(), app, m); err != nil {
+			if prune && !yes {
+				return confirmRequired("--yes")
+			}
+			if err := applyManifest(cmd.Context(), app, m, prune); err != nil {
 				return err
 			}
 			return renderResult(cmd, &out, map[string]any{"applied": m.Metadata.Owner + "/" + m.Metadata.Name})
@@ -48,9 +51,9 @@ func newApplyCmd(app *App) *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "manifest file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would change")
-	cmd.Flags().BoolVar(&prune, "prune", false, "remove state absent from the manifest")
+	cmd.Flags().BoolVar(&prune, "prune", false, "disable chroots absent from the manifest")
+	cmd.Flags().BoolVar(&yes, "yes", false, "confirm --prune")
 	out.bind(cmd)
-	_ = prune
 	return cmd
 }
 
@@ -155,8 +158,9 @@ func newValidateCmd(app *App) *cobra.Command {
 }
 
 // applyManifest creates or updates a project, chroots, and packages to match
-// the manifest. Additive and safe to re-run after a partial failure.
-func applyManifest(ctx context.Context, app *App, m *manifest.Manifest) error {
+// the manifest. Additive and safe to re-run after a partial failure. When
+// prune is set, chroots enabled live but absent from the manifest are disabled.
+func applyManifest(ctx context.Context, app *App, m *manifest.Manifest, prune bool) error {
 	c, err := app.Client()
 	if err != nil {
 		return err
@@ -187,6 +191,29 @@ func applyManifest(ctx context.Context, app *App, m *manifest.Manifest) error {
 			DevelMode:   m.Spec.Settings.DevelMode,
 		}, true); err != nil {
 			return err
+		}
+	}
+	// Prune: disable chroots enabled live that the manifest no longer lists.
+	if prune {
+		if p, err := c.GetProject(ctx, owner, project); err == nil {
+			want := map[string]bool{}
+			for _, ch := range m.Spec.Chroots.Enabled {
+				want[ch] = true
+			}
+			var keep []string
+			removed := []string{}
+			for name := range p.ChrootRepos {
+				if !want[name] {
+					removed = append(removed, name)
+				} else {
+					keep = append(keep, name)
+				}
+			}
+			if len(removed) > 0 {
+				if err := c.EditProjectChroots(ctx, owner, project, keep); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	for ch, cfg := range m.Spec.Chroots.Config {

@@ -94,7 +94,7 @@ func newInitCmd(app *App) *cobra.Command {
 			}
 			_ = c
 			// Reuse the apply logic: create the project and packages.
-			if err := applyManifest(cmd.Context(), app, m); err != nil {
+			if err := applyManifest(cmd.Context(), app, m, false); err != nil {
 				return err
 			}
 			_ = writeCI

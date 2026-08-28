@@ -142,3 +142,37 @@ func TestPermissionDeniedExitCode(t *testing.T) {
 		t.Errorf("expected exit code 9 (permission), got %d", cerr.ExitCodeFor(err))
 	}
 }
+
+func TestAuthCheck(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api_3/auth-check" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		// Simulate a valid token.
+		if u, p, ok := r.BasicAuth(); !ok || u != "l" || p != "t" {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"name": "alice", "id": 42})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	id, err := c.AuthCheck(context.Background())
+	if err != nil {
+		t.Fatalf("auth-check: %v", err)
+	}
+	if id.Name != "alice" || id.ID != 42 {
+		t.Errorf("identity = %+v", id)
+	}
+}
+
+func TestAuthCheckInvalid(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
+	})
+	c := New(srv.URL, TokenAuth("bad", "bad"))
+	if _, err := c.AuthCheck(context.Background()); err == nil {
+		t.Fatal("expected auth error for bad token")
+	}
+}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/config"
+	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/render"
 )
 
@@ -168,8 +169,9 @@ func readMultiline(cmd *cobra.Command) string {
 type expiryWarning struct {
 	Profile   string `json:"profile"`
 	Expiry    string `json:"expiry,omitempty"`
-	Status    string `json:"status"` // ok | warning | expired
+	Status    string `json:"status"` // valid | warning | expired | invalid | error
 	Remaining string `json:"remaining,omitempty"`
+	Username  string `json:"username,omitempty"`
 }
 
 func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
@@ -188,7 +190,24 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 			if login == "" || token == "" {
 				return cerr.Auth("no credentials configured for this profile")
 			}
-			w := expiryWarning{Profile: profileName(app), Expiry: prof.TokenExpiry}
+			w := expiryWarning{Profile: profileName(app), Expiry: prof.TokenExpiry, Username: prof.Username}
+			// Live check: is the token accepted by the instance?
+			c := copr.New(prof.BaseURL(), copr.TokenAuth(login, token))
+			if live, err := c.AuthCheck(cmd.Context()); err == nil {
+				if live.Name != "" {
+					w.Username = live.Name
+				}
+				w.Status = "valid"
+			} else {
+				if cerr.ExitCodeFor(err) == cerr.ExitAuth {
+					w.Status = "invalid"
+					w.Remaining = "token rejected by the instance; run 'coprctl auth token rotate'"
+				} else {
+					w.Status = "error"
+					w.Remaining = fmt.Sprintf("could not reach the instance: %v", err)
+				}
+			}
+			// Overlay config-derived expiry when present.
 			if prof.TokenExpiry != "" {
 				if exp, perr := parseExpiry(prof.TokenExpiry); perr == nil {
 					rem := time.Until(exp)
@@ -196,11 +215,10 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 					case rem < 0:
 						w.Status = "expired"
 						w.Remaining = "expired"
-					case rem < warnThreshold:
+					case rem < warnThreshold && w.Status == "valid":
 						w.Status = "warning"
 						w.Remaining = fmt.Sprintf("%s", roundDuration(rem))
 					default:
-						w.Status = "ok"
 						w.Remaining = fmt.Sprintf("%s", roundDuration(rem))
 					}
 				}
@@ -211,7 +229,7 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 			if isHuman(out.format) {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("Profile", w.Profile)
-				t.Add("Username", prof.Username)
+				t.Add("Username", w.Username)
 				t.Add("Login", prof.Login)
 				t.Add("Expiry", w.Expiry)
 				t.Add("Status", w.Status)
@@ -228,6 +246,10 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 			if w.Status == "expired" {
 				return cerr.New("token_expired", cerr.ExitPrecondition,
 					"the API token has expired; run 'coprctl auth token rotate'")
+			}
+			if w.Status == "invalid" {
+				return cerr.New("token_invalid", cerr.ExitAuth,
+					"the API token was rejected by the instance; run 'coprctl auth token rotate'")
 			}
 			return nil
 		},

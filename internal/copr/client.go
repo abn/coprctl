@@ -4,6 +4,7 @@
 package copr
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,6 +58,28 @@ func (c *Client) Get(path string, query url.Values, v any) error {
 	}
 	defer resp.Body.Close()
 	return decode(resp, v)
+}
+
+// AuthIdentity is the user object returned by the auth-check endpoint.
+type AuthIdentity struct {
+	Name string `json:"name"`
+	ID   int    `json:"id"`
+}
+
+// AuthCheck verifies the configured credentials live against the instance and
+// returns the authenticated user's identity. A valid token returns nil with
+// the identity; an invalid token returns an auth error.
+func (c *Client) AuthCheck(ctx context.Context) (*AuthIdentity, error) {
+	resp, err := c.do("GET", "/auth-check", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var id AuthIdentity
+	if err := decode(resp, &id); err != nil {
+		return nil, err
+	}
+	return &id, nil
 }
 
 // Do performs a request and returns the raw response. Caller closes the body.

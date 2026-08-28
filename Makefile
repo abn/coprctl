@@ -12,6 +12,18 @@ help: ## Show this help
 build: ## Build the binary
 	go build -o bin/$(BIN) $(PKG)
 
+# Platforms GoReleaser ships for; verified in CI so a release never surprises us.
+GOOS_LIST := linux darwin windows
+GOARCH_LIST := amd64 arm64
+
+build-all: ## Cross-compile for every release platform (no binaries written)
+	@for os in $(GOOS_LIST); do \
+		for arch in $(GOARCH_LIST); do \
+			echo "building $$os/$$arch"; \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $(PKG) || exit 1; \
+		done; \
+	done
+
 test: ## Run all tests
 	go test ./...
 

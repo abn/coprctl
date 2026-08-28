@@ -20,12 +20,16 @@ source with auto-rebuild. The full workflow lives in
 
 There is one source of truth for the version: the Release Please manifest
 (`.release-please-manifest.json`), which drives a semantic version
-(`v0.1.0`, `v0.2.0`, ...). Release Please owns:
+(`0.1.0`, `0.2.0`, ...). Release Please owns:
 
-- the semantic version and the `v<semver>` git tag,
+- the semantic version and the `coprctl-v<semver>` git tag,
 - the `CHANGELOG.md` and the GitHub release,
 - and, via the `extra-files` configuration, the `Version:` line in
   `coprctl.spec`, so the RPM version always matches the semantic version.
+
+The tag is named `coprctl-v<semver>` (for example `coprctl-v0.3.0`) so Copr's
+tag-triggered rebuild can match the tag to the `coprctl` package: Copr strips
+the trailing version and compares the remainder to the package name.
 
 The RPM **Release** field is separate and independent. It is how Copr
 distinguishes multiple builds of the same version. This gives two release
@@ -49,7 +53,7 @@ repo follows these rules:
 Release Please opens a release pull request (titled
 `chore: release <branch>`) that bumps the version, updates `coprctl.spec`
 `Version:`, and rewrites `CHANGELOG.md`. Merging that PR publishes the
-`v<semver>` tag and the GitHub release, which triggers the GoReleaser build.
+`coprctl-v<semver>` tag and the GitHub release, which triggers the GoReleaser build.
 
 ## Normal releases
 
@@ -60,7 +64,7 @@ A normal release publishes a new semantic version:
 2. Release Please opens a release PR that bumps the version and the spec
    `Version:` field.
 3. Review and squash-merge the release PR.
-4. The `v<semver>` tag is created and the GitHub release is published.
+4. The `coprctl-v<semver>` tag is created and the GitHub release is published.
 5. GoReleaser builds and uploads artifacts (tarballs and checksums).
 6. Copr rebuilds `coprctl` from `main` (auto-rebuild on the SCM source), so
    `dnf copr enable abn/coprctl && dnf install coprctl` installs the new
@@ -84,7 +88,7 @@ The RPM **Release** field starts at `1` and is bumped manually:
 3. Squash-merge the PR.
 4. Copr auto-rebuilds from `main` and produces `coprctl-<version>-2.fcNN`.
 
-The semantic version and the `v<semver>` tag are unchanged. NVR releases are
+The semantic version and the `coprctl-v<semver>` tag are unchanged. NVR releases are
 common and inexpensive; there is no need to bump the version for a packaging
 fix.
 

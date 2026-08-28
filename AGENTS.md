@@ -33,6 +33,10 @@ working spec is at `.scratch/inbox/spec.md`.
 - **Prefer automation over manual conformance.** Hooks and `make check` own
   style, conventions, and quality gates. Do not hand-polish what a tool can
   enforce.
+- **Tool-specific assets stay out of the repo.** A tool's own working files
+  (shims, local state, per-tool prompts) belong in `/.agents/brain/`, which is
+  git-ignored. Never commit a tool-specific asset. `.scratch/` is the project's
+  working brain for now and is also git-ignored.
 - **Makefile** is the single automation entrypoint (`make help` by default).
   Targets: `build`, `check`, `fmt`, `lint`, `test`.
 - **Commits** follow Conventional Commits. No trailers (no Co-Authored-By, no

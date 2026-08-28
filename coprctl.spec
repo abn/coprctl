@@ -1,4 +1,5 @@
 Name:           coprctl
+%global debug_package %{nil}
 # x-release-please-start-version
 Version:        0.4.5
 # x-release-please-end

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/abn/coprctl/compare/v0.2.0...v0.3.0) (2026-08-28)
+
+
+### Features
+
+* derive homepage and issues contact from a linked GitHub repo ([80a070c](https://github.com/abn/coprctl/commit/80a070cde4e402136a7cccb01f0f881b4aa2fc36))
+* enable webhook auto-rebuild implicitly when adding an integration ([ee40113](https://github.com/abn/coprctl/commit/ee40113baca6c8e3b37b699ee831e5ec05370071))
+* support installation instructions on project create and edit ([1379e08](https://github.com/abn/coprctl/commit/1379e08d8cd355b3f3b8b68884574297e8f314fb))
+
+
+### Documentation
+
+* fold install instructions into the quick start ([b34c6c2](https://github.com/abn/coprctl/commit/b34c6c256dc1ee4385a992484b198bc0346ded92))
+
+
+### Build & Packaging
+
+* **deps:** bump the github-actions group across 1 directory with 3 updates ([#1](https://github.com/abn/coprctl/issues/1)) ([5598c50](https://github.com/abn/coprctl/commit/5598c50fd14c60b10a9ed916a8775223697e4718))
+* drop rpm and deb packages from releases ([dafc4ec](https://github.com/abn/coprctl/commit/dafc4ec3ab32e271338bedb221f95c9c5dd14a27))
+
 ## [0.2.0](https://github.com/abn/coprctl/compare/v0.1.0...v0.2.0) (2026-08-28)
 
 

@@ -52,3 +52,27 @@ func TestParseFormat(t *testing.T) {
 		t.Errorf("expected error for unknown format")
 	}
 }
+
+func TestRenderColoredTable(t *testing.T) {
+	tbl := NewTable("NAME", "VALUE")
+	tbl.Add("foo", "bar")
+	var buf bytes.Buffer
+	if err := RenderColored(&buf, FormatTable, tbl, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "\x1b[") {
+		t.Errorf("expected ANSI codes, got %q", buf.String())
+	}
+	// Without color there are no escape sequences.
+	var plain bytes.Buffer
+	if err := Render(&buf, FormatTable, tbl); err != nil {
+		t.Fatal(err)
+	}
+	_ = plain
+	if err := Render(&plain, FormatTable, tbl); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(plain.String(), "\x1b[") {
+		t.Errorf("unexpected ANSI codes: %q", plain.String())
+	}
+}

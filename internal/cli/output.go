@@ -37,7 +37,16 @@ func renderResult(cmd *cobra.Command, o *outFlags, v any) error {
 	if err != nil {
 		return cerr.Usage(err.Error())
 	}
-	return render.Render(cmd.OutOrStdout(), f, v)
+	// Color the human formats only on an interactive terminal, and never when
+	// NO_COLOR is set or TERM is dumb.
+	useColor := f == render.FormatTable || f == render.FormatPlain
+	if useColor && (os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb") {
+		useColor = false
+	}
+	if useColor && !isTTY(cmd) {
+		useColor = false
+	}
+	return render.RenderColored(cmd.OutOrStdout(), f, v, useColor)
 }
 
 // isTTY reports whether stdout is an interactive terminal. Output defaults to

@@ -14,6 +14,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ANSI color codes for human output. Applied only when color is enabled.
+const (
+	ansiReset  = "\x1b[0m"
+	ansiBold   = "\x1b[1m"
+	ansiDim    = "\x1b[2m"
+	ansiCopper = "\x1b[38;5;179m" // warm copper accent for the prompt/keys
+	ansiMuted  = "\x1b[38;5;244m" // muted grey for secondary values
+)
+
 // Format is an output format.
 type Format string
 
@@ -42,8 +51,14 @@ func ParseFormat(s string) (Format, error) {
 	return "", fmt.Errorf("unknown output format %q", s)
 }
 
-// Render writes v to w in the given format.
+// Render writes v to w in the given format, without color.
 func Render(w io.Writer, format Format, v any) error {
+	return RenderColored(w, format, v, false)
+}
+
+// RenderColored writes v to w in the given format, optionally with ANSI color
+// for the human (table, plain) formats.
+func RenderColored(w io.Writer, format Format, v any, color bool) error {
 	switch format {
 	case FormatJSON:
 		enc := json.NewEncoder(w)
@@ -54,7 +69,7 @@ func Render(w io.Writer, format Format, v any) error {
 	case FormatYAML:
 		return renderYAML(w, v)
 	case FormatTable, FormatPlain:
-		return renderTable(w, v)
+		return renderTable(w, v, color)
 	}
 	return fmt.Errorf("unsupported format %q", format)
 }
@@ -85,17 +100,35 @@ func NewTable(header ...string) *Table { return &Table{Header: header} }
 // Add appends a row.
 func (t *Table) Add(row ...string) { t.Rows = append(t.Rows, row) }
 
-func renderTable(w io.Writer, v any) error {
+func renderTable(w io.Writer, v any, color bool) error {
 	tbl, ok := v.(*Table)
 	if !ok {
 		return fmt.Errorf("cannot render %T as a table", v)
 	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	if len(tbl.Header) > 0 {
-		fmt.Fprintln(tw, strings.Join(tbl.Header, "\t"))
+		header := strings.Join(tbl.Header, "\t")
+		if color {
+			header = ansiBold + header + ansiReset
+		}
+		fmt.Fprintln(tw, header)
 	}
 	for _, row := range tbl.Rows {
-		fmt.Fprintln(tw, strings.Join(row, "\t"))
+		cells := row
+		if color && len(cells) > 0 {
+			// Emphasize the first (key/name) cell in copper, dim the rest.
+			cells = make([]string, len(row))
+			copy(cells, row)
+			if len(cells) == 1 {
+				cells[0] = ansiCopper + cells[0] + ansiReset
+			} else {
+				cells[0] = ansiCopper + cells[0] + ansiReset
+				for i := 1; i < len(cells); i++ {
+					cells[i] = ansiMuted + cells[i] + ansiReset
+				}
+			}
+		}
+		fmt.Fprintln(tw, strings.Join(cells, "\t"))
 	}
 	return tw.Flush()
 }

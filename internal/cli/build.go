@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -41,6 +43,7 @@ func newBuildCmd(app *App) *cobra.Command {
 func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 	var chroots []string
 	var preflight bool
+	var onlyFailed string
 	cmd := &cobra.Command{
 		Use:   "rebuild REF/PKG [build flags]",
 		Short: "Rebuild a package from its stored source definition",
@@ -53,6 +56,26 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 			c, err := app.Client()
 			if err != nil {
 				return err
+			}
+			if onlyFailed != "" {
+				buildID, err := strconv.Atoi(onlyFailed)
+				if err != nil {
+					return cerr.New("invalid_build_id", cerr.ExitUsage,
+						"--only-failed expects a numeric build id")
+				}
+				prev, err := c.GetBuild(cmd.Context(), buildID)
+				if err != nil {
+					return err
+				}
+				failed := failedChroots(prev)
+				if len(failed) == 0 {
+					if isHuman(out.format) {
+						fmt.Fprintf(cmd.OutOrStdout(), "no failed chroots to rebuild for build %d\n", buildID)
+						return nil
+					}
+					return renderResult(cmd, out, map[string]any{"build_id": buildID, "rebuilt": 0})
+				}
+				chroots = failed
 			}
 			// Preflight runs a local Tier-1 build first; on failure it does
 			// not submit (or warns, see try's behavior).
@@ -69,6 +92,9 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("State", b.State)
+				if onlyFailed != "" {
+					t.Add("Rebuilt chroots", fmt.Sprintf("%d", len(chroots)))
+				}
 				return renderResult(cmd, out, t)
 			}
 			return renderResult(cmd, out, b)
@@ -76,7 +102,21 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 	}
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
 	cmd.Flags().BoolVar(&preflight, "preflight", false, "run a local Tier-1 preflight before submitting")
+	cmd.Flags().StringVar(&onlyFailed, "only-failed", "", "rebuild only chroots that failed in this build id (overrides --chroot)")
 	return cmd
+}
+
+// failedChroots returns the sorted chroot names of a build whose state is
+// "failed".
+func failedChroots(b *copr.Build) []string {
+	var names []string
+	for name, state := range b.ChrootStates() {
+		if state == "failed" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // runRebuildPreflight runs a local container preflight for the package's

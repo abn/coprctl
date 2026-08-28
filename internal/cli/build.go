@@ -297,7 +297,8 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if err := rt.Run(cmd.Context(), ctrruntime.RunSpec{
 					Image:   m.Image,
 					WorkDir: filepath.Dir(spec),
-					Env:     []string{"SRPM_ONLY=1"},
+					Mount:   "/sources",
+					Env:     []string{"SRPM_ONLY=1", "OUTPUT=/sources/.rpmbuild"},
 					Args:    []string{"/usr/bin/rpmbuilder"},
 					Stdout:  cmd.OutOrStdout(),
 				}); err != nil {
@@ -485,7 +486,7 @@ func reached(state, until string) bool {
 // newBuildSrpmCmd builds a source RPM from a local spec directory using the
 // rpmbuilder container, mirroring the SRPM_ONLY stage of the try preflight.
 func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
-	var path, chroot, runtimeName, output string
+	var path, chroot, runtimeName string
 	cmd := &cobra.Command{
 		Use:   "srpm [PATH]",
 		Short: "Build a source RPM from a local spec using a container",
@@ -519,17 +520,22 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 			if err := rt.Run(cmd.Context(), ctrruntime.RunSpec{
 				Image:   m.Image,
 				WorkDir: filepath.Dir(spec),
-				Env:     []string{"SRPM_ONLY=1"},
+				Mount:   "/sources",
+				Env:     []string{"SRPM_ONLY=1", "OUTPUT=/sources/.rpmbuild"},
 				Args:    []string{"/usr/bin/rpmbuilder"},
 				Stdout:  cmd.OutOrStdout(),
 			}); err != nil {
 				return cerr.New("srpm_failed", cerr.ExitBuildFailed, "source RPM build failed")
 			}
+			srpm, err := findSRPM(filepath.Dir(spec))
+			if err != nil {
+				return err
+			}
 			result := map[string]any{
 				"image":  m.Image,
 				"chroot": chroot,
 				"spec":   spec,
-				"output": output,
+				"output": srpm,
 			}
 			return renderResult(cmd, out, result)
 		},

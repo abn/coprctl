@@ -318,16 +318,33 @@ func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath strin
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	fw, err := mw.CreateFormFile("pkgs", filepath.Base(srpmPath))
+
+	// The upstream client sends a "json" file part carrying the JSON payload,
+	// alongside the SRPM as a "pkgs" file part. Without the json part the
+	// endpoint rejects the request with HTTP 415.
+	formData, err := json.Marshal(map[string]string{
+		"ownername":   owner,
+		"projectname": project,
+	})
 	if err != nil {
 		return nil, err
 	}
-	if _, err := io.Copy(fw, f); err != nil {
+	jsonPart, err := mw.CreateFormFile("json", "json")
+	if err != nil {
+		return nil, err
+	}
+	jsonPart.Write(formData)
+
+	pkgsPart, err := mw.CreateFormFile("pkgs", filepath.Base(srpmPath))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(pkgsPart, f); err != nil {
 		return nil, err
 	}
 	_ = mw.Close()
 
-	u := fmt.Sprintf("%s/api_3/build/create/upload?ownername=%s&projectname=%s", c.BaseURL, owner, project)
+	u := fmt.Sprintf("%s/api_3/build/create/upload", c.BaseURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &buf)
 	if err != nil {
 		return nil, err

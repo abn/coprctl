@@ -33,6 +33,7 @@ type Runtime interface {
 type RunSpec struct {
 	Image    string
 	WorkDir  string // host directory mounted as the working directory
+	Mount    string // container mount target (default /work)
 	Env      []string
 	Args     []string // command and arguments inside the container
 	Platform string   // optional --platform
@@ -72,7 +73,11 @@ func (r *cliRuntime) Run(ctx context.Context, spec RunSpec) error {
 		args = append(args, "--network", "none")
 	}
 	if spec.WorkDir != "" {
-		args = append(args, "-v", mountArg(spec.WorkDir), "-w", "/work")
+		mount := spec.Mount
+		if mount == "" {
+			mount = "/work"
+		}
+		args = append(args, "-v", mountArgAt(spec.WorkDir, mount), "-w", mount)
 	}
 	for _, e := range spec.Env {
 		args = append(args, "-e", e)
@@ -98,17 +103,16 @@ func (r *cliRuntime) Build(ctx context.Context, spec BuildSpec) error {
 	return nil
 }
 
-// mountArg builds a host:container mount argument. The container target is
-// always a Linux path, but the host path and the SELinux relabel differ by
-// platform: Windows paths use forward slashes (which Docker Desktop and
-// podman accept) and the :z label only applies on Linux.
-func mountArg(hostDir string) string {
+// mountArgAt builds a host:container mount argument. The host path is
+// slash-normalized (filepath.ToSlash) and the SELinux :z relabel applies only
+// on Linux.
+func mountArgAt(hostDir, mount string) string {
 	host := filepath.ToSlash(hostDir)
 	label := ""
 	if stdruntime.GOOS == "linux" {
 		label = ":z"
 	}
-	return host + ":/work" + label
+	return host + ":" + mount + label
 }
 
 // Detect returns the best available runtime.

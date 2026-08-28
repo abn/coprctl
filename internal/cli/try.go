@@ -212,26 +212,31 @@ func findSpec(dir string) (string, error) {
 	return "", fmt.Errorf("no .spec file found in %s", dir)
 }
 
-// findSRPM locates the most recently produced source RPM in a directory. The
-// container SRPM_ONLY build writes into the mounted workdir.
+// findSRPM locates the most recently produced source RPM under a directory.
+// The container SRPM_ONLY build writes into <workdir>/.rpmbuild/ (the
+// rpmbuilder OUTPUT default), so both the dir root and the subdirectory are
+// searched.
 func findSRPM(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", err
-	}
+	candidates := []string{dir, filepath.Join(dir, ".rpmbuild")}
 	var best string
 	var bestMod int64
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".src.rpm") {
-			continue
-		}
-		info, err := e.Info()
+	for _, d := range candidates {
+		entries, err := os.ReadDir(d)
 		if err != nil {
 			continue
 		}
-		if info.ModTime().Unix() > bestMod {
-			bestMod = info.ModTime().Unix()
-			best = filepath.Join(dir, e.Name())
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".src.rpm") {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			if info.ModTime().Unix() > bestMod {
+				bestMod = info.ModTime().Unix()
+				best = filepath.Join(d, e.Name())
+			}
 		}
 	}
 	if best == "" {
@@ -270,7 +275,8 @@ func runPreflight(ctx context.Context, rt ctrruntime.Runtime, image, spec string
 	err := rt.Run(ctx, ctrruntime.RunSpec{
 		Image:   image,
 		WorkDir: specDir,
-		Env:     []string{"SRPM_ONLY=1"},
+		Mount:   "/sources",
+		Env:     []string{"SRPM_ONLY=1", "OUTPUT=/sources/.rpmbuild"},
 		Args:    []string{"/usr/bin/rpmbuilder"},
 		Stdout:  os.Stdout,
 	})
@@ -280,7 +286,8 @@ func runPreflight(ctx context.Context, rt ctrruntime.Runtime, image, spec string
 	return rt.Run(ctx, ctrruntime.RunSpec{
 		Image:   image,
 		WorkDir: specDir,
-		Env:     []string{"FROM_SRPM=1"},
+		Mount:   "/sources",
+		Env:     []string{"FROM_SRPM=1", "OUTPUT=/sources/.rpmbuild"},
 		Args:    []string{"/usr/bin/rpmbuilder"},
 		Stdout:  os.Stdout,
 	})

@@ -46,10 +46,10 @@ func TestFakeRuntimeRun(t *testing.T) {
 }
 
 func TestMountArg(t *testing.T) {
-	got := mountArg("/tmp/work")
+	got := mountArgAt("/tmp/work", "/sources")
 	// Host prefix is OS-dependent; assert the container mount tail with the
 	// optional Linux SELinux relabel.
-	if !strings.HasSuffix(got, ":/work") && !strings.HasSuffix(got, ":/work:z") {
-		t.Errorf("mountArg(/tmp/work) = %q, want container mount tail", got)
+	if !strings.HasSuffix(got, ":/sources") && !strings.HasSuffix(got, ":/sources:z") {
+		t.Errorf("mountArgAt(/tmp/work, /sources) = %q, want container mount tail", got)
 	}
 }

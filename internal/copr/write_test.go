@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -243,5 +246,48 @@ func TestEditProjectChroots(t *testing.T) {
 		Owner: "owner", Project: "proj", Chroots: &chroots,
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestUploadBuildPayload(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s", r.Method)
+		}
+		if r.URL.Path != "/api_3/build/create/upload" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		ct := r.Header.Get("Content-Type")
+		if !strings.Contains(ct, "multipart/form-data") {
+			t.Errorf("Content-Type = %q, want multipart", ct)
+		}
+		// Verify the multipart body has both a json part and a pkgs part.
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(body)
+		if !strings.Contains(s, `name="json"`) || !strings.Contains(s, `name="pkgs"`) {
+			t.Errorf("multipart body missing json/pkgs parts: %.300s", s)
+		}
+		if !strings.Contains(s, "ownername") {
+			t.Errorf("json part missing ownername: %.300s", s)
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"id": 99, "state": "pending"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	// Write a temp srpm file.
+	dir := t.TempDir()
+	srpm := filepath.Join(dir, "x.src.rpm")
+	if err := os.WriteFile(srpm, []byte("fake rpm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := c.UploadBuild(context.Background(), "owner", "proj", srpm)
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	if b.ID != 99 {
+		t.Errorf("build id = %d", b.ID)
 	}
 }

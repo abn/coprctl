@@ -67,6 +67,10 @@ The command:
   returned;
 - persists the hook id in local state for later reconciliation.
 
+Enabling a webhook implies the tag pushes should rebuild the package, so
+auto-rebuild is turned on for the project's SCM packages automatically. Pass
+`--no-auto-rebuild` to opt out and only wire the hook.
+
 Both sides are reported in the result, and the webhook URL is masked unless
 `--reveal` is passed.
 

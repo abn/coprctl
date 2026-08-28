@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/forge"
 	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/state"
@@ -92,7 +93,7 @@ func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
 
 func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 	var repo, events string
-	var reveal, tagOnly bool
+	var reveal, tagOnly, noAutoRebuild bool
 	cmd := &cobra.Command{
 		Use:   "enable REF --repo OWNER/REPO",
 		Short: "Enable a GitHub webhook for a project",
@@ -148,12 +149,23 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Enabling a webhook implies the tag pushes should rebuild the
+			// package. Enable webhook auto-rebuild on the project's packages
+			// unless the user opts out.
+			autoRebuilt := false
+			if !noAutoRebuild {
+				autoRebuilt, err = enableAutoRebuild(cmd, app, r)
+				if err != nil {
+					return err
+				}
+			}
 			if !reveal {
 				u = maskSecret(u)
 			}
 			return renderResult(cmd, out, map[string]any{
 				"enabled": true, "repo": repo, "hook_id": hook.ID,
 				"url": u, "ping_status": code, "events": evs,
+				"auto_rebuild": autoRebuilt,
 			})
 		},
 	}
@@ -161,6 +173,7 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&events, "events", "", "comma-separated events (overrides tag-only default)")
 	cmd.Flags().BoolVar(&tagOnly, "tag-only", true, "trigger only on push of a tag (GitHub create event)")
 	cmd.Flags().BoolVar(&reveal, "reveal", false, "reveal the secret in output")
+	cmd.Flags().BoolVar(&noAutoRebuild, "no-auto-rebuild", false, "do not enable webhook auto-rebuild on the project's packages")
 	return cmd
 }
 
@@ -260,6 +273,39 @@ func splitComma(s string) []string {
 		}
 	}
 	return out
+}
+
+// enableAutoRebuild turns on webhook auto-rebuild for every SCM package in a
+// project, so tag pushes trigger Copr rebuilds. It returns whether any package
+// was updated.
+func enableAutoRebuild(cmd *cobra.Command, app *App, r ref.Ref) (bool, error) {
+	c, err := app.Client()
+	if err != nil {
+		return false, err
+	}
+	pkgs, err := c.ListPackages(cmd.Context(), r.Owner, r.Project)
+	if err != nil {
+		return false, err
+	}
+	updated := false
+	for _, p := range pkgs {
+		if p.SourceType != copr.SourceSCM || p.AutoRebuild {
+			continue
+		}
+		src := make(map[string]any, len(p.SourceDict))
+		for k, v := range p.SourceDict {
+			src[k] = v
+		}
+		if err := c.EditPackage(cmd.Context(), copr.PackageCreate{
+			Owner: r.Owner, Project: r.Project, Name: p.Name,
+			SourceType: p.SourceType, Source: src,
+			AutoRebuild: true, SetAutoRebuild: true,
+		}); err != nil {
+			return updated, err
+		}
+		updated = true
+	}
+	return updated, nil
 }
 
 func splitRepo(s string) (string, string) {

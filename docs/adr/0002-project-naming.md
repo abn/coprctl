@@ -5,8 +5,6 @@ description: Standardize on coprctl as the project and binary name; retire Coppe
 status: stable
 ---
 
-# ADR 0002: Project and binary naming
-
 ## Status
 
 Stable.

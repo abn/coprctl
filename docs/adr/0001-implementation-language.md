@@ -5,8 +5,6 @@ description: Choose Go for the coprctl binary.
 status: stable
 ---
 
-# ADR 0001: Implementation language
-
 ## Status
 
 Stable. The Go implementation is complete across all milestones.

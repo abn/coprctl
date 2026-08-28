@@ -6,6 +6,10 @@ repository changes belong in the commit history.
 
 ## 2026-08-27
 
+* **Update**: Removed the redundant H1 title from the ADR bodies (the frontmatter
+  `title` is the display name), and added ADRs 0003-0006 covering the
+  anonymous-read fallback, secret-handler support, the tag-only webhook default,
+  and instance detection. The ADR register now records the implemented decisions.
 * **Update**: Filled in the wiki pages that were placeholders, so the docs now
   reflect status quo. Added the canonical terminology and reference syntax,
   the CLI grammar, the log-streaming architecture, the agent contract (exit

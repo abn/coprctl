@@ -36,5 +36,4 @@ for any agent or human working in this repository.
 ## Verification gate
 
 - A change is done only when `make check` passes and the relevant tests are
-  green, with real captured output. `docs/log.md` and `.scratch/outbox/log.md`
-  reflect the change.
+  green, with real captured output. Wiki changes are reflected in `docs/log.md`.

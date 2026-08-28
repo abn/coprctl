@@ -17,7 +17,7 @@ This is the self-review gate, not a rubber stamp.
   (one registry, machine-readable output, instance-agnostic, public-ready docs,
   no AI slop)?
 - **Tests and docs**: are the tests meaningful (no fluffy tests) and do the
-  docs reflect reality? Was `docs/log.md` updated?
+  docs reflect reality? Was `docs/log.md` updated for wiki changes?
 - **Regressions**: could the change break existing behaviour? Does it respect
   the API contract, exit codes, and error-object schema?
 

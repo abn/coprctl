@@ -1,25 +1,19 @@
 # Documentation update log
 
 This log tracks the evolution of the knowledge base: page additions,
-deprecations, and structural refactors. It does not track software releases;
-repository changes belong in the commit history.
+deprecations, and structural refactors. It does not track software releases
+or implementation milestones; repository changes belong in the commit history.
 
 ## 2026-08-28
 
-* **Update**: Made the tool portable across macOS and native Windows, not just
-  Linux. Replaced the Linux-only `/dev/stdin` read in config import with a
-  portable `os.Stdin` read, and made container mounts slash-normalize the host
-  path and apply the SELinux `:z` relabel only on Linux. Added a cross-compile
-  target (`make build-all`) and wired it plus native macOS/Windows test runs
-  into CI, so every release platform is built and tested on every push instead
-  of only at release time.
+* **Update**: Removed the redundant H1 title from the ADR bodies (the
+  frontmatter `title` is the display name), and added ADRs 0003-0006 covering
+  the anonymous-read fallback, secret-handler support, the tag-only webhook
+  default, and instance detection. The ADR register now records the implemented
+  decisions.
 
 ## 2026-08-27
 
-* **Update**: Removed the redundant H1 title from the ADR bodies (the frontmatter
-  `title` is the display name), and added ADRs 0003-0006 covering the
-  anonymous-read fallback, secret-handler support, the tag-only webhook default,
-  and instance detection. The ADR register now records the implemented decisions.
 * **Update**: Filled in the wiki pages that were placeholders, so the docs now
   reflect status quo. Added the canonical terminology and reference syntax,
   the CLI grammar, the log-streaming architecture, the agent contract (exit
@@ -31,85 +25,9 @@ repository changes belong in the commit history.
 * **Creation**: Documented the release process (normal and NVR releases, the
   Release Please PR-only and squash-merge conventions, and bump procedures for
   packaging-only changes) at `docs/contribution/release-process.md`. Linked it
-  from the contribution index, maintainer guide, README, and AGENTS.md. Wired
-  Release Please to sync `coprctl.spec` `Version:` via the `extra-files`
-  generic updater, and added a release-manager agent role card.
-* **Creation**: Added GitHub Actions CI (test suite running `make check`, code
-  quality running `make lint` and `make drift`), a release workflow driven by
-  Release Please with a GoReleaser build and asset upload, a Dependabot config
-  for Go modules and GitHub Actions, and a `.gitattributes` marking `go.sum`
-  as generated.
-* **Creation**: Added `coprctl auth login`, which opens the instance API page
-  (`<url>/api/`) in the browser and guides the user through pasting the
-  `[copr-cli]` block, then writes a profile and reports expiry status. Supports
-  `--no-open` for headless use and `-i` for per-field prompts.
-* **Creation**: Added secret-handler support (pass, gopass, secret-tool) so
-  tokens can be stored in a system secret handler instead of the config file;
-  `config set token` reads from a prompt or stdin, never argv. Added full
-  project/package edit coverage (`project edit`, `project regenerate-repos`,
-  `package edit/get/reset`), `build delete` and `build watch`, and an
-  interactive Bubble Tea dashboard (`coprctl ui`) that degrades to plain output
-  off a TTY. Tokens can be rotated via `auth token rotate`.
-* **Creation**: Added credential management: `auth status` (who you are, warns
-  a month before token expiry, exits 13 when expired) and `auth token rotate`
-  (POST /api_3/api-token, updates the profile in place). Added `config import`
-  which accepts a pasted `[copr-cli]` block from the Copr website, explicit
-  flags, or interactive prompts, and detects the instance (production or
-  staging) from the URL with production as the default. Legacy configs now
-  parse the `# expiration date:` comment.
-* **Creation**: Recorded ADR 0002 standardizing the project and binary name on
-  `coprctl` and retiring the *Coppersmith* working name. Updated the
-  self-hosting manifest and the blog post to reference `github.com/abn/coprctl`.
-* **Creation**: Expanded the agent skill into a namespaced bundle (`skill
-  print/install [name]` for `coprctl` and `coprctl-debug`) and added
-  build-debugging capabilities: `log failures` (extract failing region),
-  `log detective` (log-detective.com helper), `build reproduce` (print the
-  copr-rpmbuild recipe), and `build rebuild --preflight`. The `try` preflight
-  now invokes the real rpmbuilder image in a two-stage build.
-* **Creation**: Added `config show` and `config migrate` to surface the legacy
-  `~/.config/copr` auto-detection and let users import it into a named profile.
-  Validated all debugging commands against real failed builds in the
-  nowledge-mem project on production.
-* **Creation**: Added the GitHub webhook integration usage guide. Verified the
-  integration live against Copr staging and GitHub: idempotent hook create and
-  update, ping verification (200), and secret masking. Fixed the idempotency
-  check to match on the configured webhook destination rather than the GitHub
-  API resource URL, and made ping delivery polling retry until recorded.
-* **Creation**: Implemented Wave 08 (M5 polish): shell completions generated
-  from the registry, an environment doctor with structured exit codes, version
-  injection, GoReleaser/nfpm packaging, the self-hosting `copr.yaml` and spec,
-  and a minimal `ui` view that degrades to plain output off a TTY. The full
-  Bubble Tea dashboard is deferred.
-* **Creation**: Implemented Wave 07 (M4.7 init/sync): read-only `detect`,
-  `init`, and three-way `sync` with the inferred-fields provenance contract.
-* **Creation**: Implemented Wave 06 (M4.5 preflight): the container runtime
-  abstraction and `try` with chroot-to-image resolution, strict-match gating,
-  coverage reporting, and the fidelity report. The rpmbuild invocation is a
-  declared stub that reports `unsupported` rather than a false pass.
-* **Creation**: Implemented Wave 05 (M4 declarative and integrations): the
-  `copr.yaml` manifest with validate/diff/apply/export, local state for webhook
-  secrets, and the GitHub webhook integration with idempotent hook management
-  and ping verification. Verified the declarative lifecycle end to end against
-  Copr staging (apply, diff drift with exit 12, export round-trip) and the
-  secret rotation/URL path.
-* **Creation**: Implemented Wave 04 (M3 agent surface): the versioned JSONL
-  event schema, `schema --format mcp`, the stdio MCP server with read/write/
-  destructive tiers, and the generated agent skill plus `skill install`.
-  Added the `make gen`/`make drift` gate so generated artefacts cannot diverge
-  from the command registry.
-* **Creation**: Implemented Wave 03 (M2 logs and events): the event bus, the
-  polling source, the log tailer with incremental and full-refetch gzip
-  strategies, multi-chroot tail, monitor, and status. The tailer was validated
-  against a real production Copr log and against synthetic servers covering
-  both gzip framings, plain-log fallback, no-torn-lines, and no-duplicates.
-* **Creation**: Implemented Wave 02 (M1 CRUD parity): project/package/build
-  write commands, all source types under one `--source` flag, the migration
-  shim, and JSON-body API calls. Verified the full lifecycle end to end
-  against Copr staging (create project, add package, submit build, delete).
-* **Creation**: Implemented the M0 skeleton in code: the command registry
-  (`project`, `chroot`, `build`, `schema`, `version`), the reference parser,
-  config profiles with legacy import, the API client, output renderers, and
-  structured error objects with stable exit codes.
+  from the contribution index, maintainer guide, README, and AGENTS.md.
+* **Creation**: Added ADR 0002 standardizing the project and binary name on
+  `coprctl` and retiring the *Coppersmith* working name.
 * **Update**: Architecture page reflects the implemented package layout.
 * **Initialization**: Created the bundle root and section scaffolds
   (overview, design, architecture, adr, usage, reference, contribution).

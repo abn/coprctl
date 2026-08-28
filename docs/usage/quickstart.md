@@ -74,7 +74,7 @@ coprctl project create you/mypkg --chroot fedora-rawhide-x86_64 \
 
 # link a GitHub repo; homepage and issues contact are derived when unset
 coprctl project create you/mypkg --github-repo you/mypkg \
-  --instructions install.md
+  --instructions install.md --enable-net    # net lets Copr fetch sources
 
 # or edit it later
 coprctl project edit you/mypkg --description "..." --homepage ... \

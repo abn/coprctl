@@ -38,6 +38,8 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 	var description, homepage, contact, instructions, githubRepo string
 	var develMode bool
 	var develSet bool
+	var enableNet bool
+	var enableNetSet bool
 	cmd := &cobra.Command{
 		Use:   "edit REF [settings...]",
 		Short: "Edit project settings",
@@ -70,11 +72,16 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 			if develSet {
 				devel = &develMode
 			}
+			var enableNetPtr *bool
+			if enableNetSet {
+				enableNetPtr = &enableNet
+			}
 			if err := c.EditProject(cmd.Context(), copr.ProjectEdit{
 				Owner: r.Owner, Project: r.Project,
 				Description: description, Homepage: homepage, Contact: contact,
 				Instructions: inst,
 				DevelMode:    devel,
+				EnableNet:    enableNetPtr,
 			}); err != nil {
 				return err
 			}
@@ -88,6 +95,8 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&githubRepo, "github-repo", "", "linked GitHub repo OWNER/REPO; derives homepage and issues contact when unset")
 	cmd.Flags().BoolVar(&develMode, "devel-mode", false, "enable devel mode")
 	cmd.Flags().BoolVar(&develSet, "devel-mode-set", false, "set devel mode (use with --devel-mode)")
+	cmd.Flags().BoolVar(&enableNet, "enable-net", false, "enable network access during builds (needed to fetch sources)")
+	cmd.Flags().BoolVar(&enableNetSet, "enable-net-set", false, "set network access (use with --enable-net)")
 	return cmd
 }
 
@@ -210,7 +219,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 	var chroots []string
 	var description, instructions, homepage, contact, githubRepo string
-	var ifNotExists, develMode bool
+	var ifNotExists, develMode, enableNet bool
 	cmd := &cobra.Command{
 		Use:   "create REF",
 		Short: "Create a project",
@@ -258,6 +267,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 				Homepage:     homepage,
 				Contact:      contact,
 				DevelMode:    develMode,
+				EnableNet:    enableNet,
 			}, ifNotExists)
 			if err != nil {
 				return err
@@ -276,6 +286,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&githubRepo, "github-repo", "", "linked GitHub repo OWNER/REPO; derives homepage and issues contact when unset")
 	cmd.Flags().BoolVar(&ifNotExists, "if-not-exists", false, "do not fail if the project exists")
 	cmd.Flags().BoolVar(&develMode, "devel-mode", false, "enable devel mode")
+	cmd.Flags().BoolVar(&enableNet, "enable-net", false, "enable network access during builds (needed to fetch sources)")
 	return cmd
 }
 

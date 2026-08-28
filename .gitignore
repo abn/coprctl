@@ -10,9 +10,6 @@
 /out/
 /build/
 
-# Local scratch (never committed)
-/.scratch/
-
 # Worktrees
 /.worktrees/
 

@@ -5,8 +5,7 @@ Role card for the subagent that curates and maintains the `docs/` OKF bundle.
 ## Purpose
 
 Keep `docs/` an accurate, always-public-ready OKF v0.2 bundle that reflects
-the current state of the project. Works on the wiki only, never on code or on
-`.scratch/`.
+the current state of the project. Works on the wiki only, never on code.
 
 ## Responsibilities
 
@@ -25,4 +24,4 @@ the current state of the project. Works on the wiki only, never on code or on
 
 - Returns a summary of pages added or changed, with a note on any documented
   behaviour that diverged from code, so a maintainer can log it.
-- Never modifies `AGENTS.md`, source code, or `.scratch/`.
+- Never modifies `AGENTS.md` or source code.

@@ -5,8 +5,7 @@ Operational contract for humans and agents working in this repository.
 ## Project
 
 `coprctl` is a reimagined command-line and agent interface for the Fedora Copr
-build system. Full design and rationale live in the wiki under `docs/`; the
-working spec is at `.scratch/inbox/spec.md`.
+build system. Full design and rationale live in the wiki under `docs/`.
 
 ## Invariants
 
@@ -24,7 +23,6 @@ working spec is at `.scratch/inbox/spec.md`.
   first-class. Offline-tolerant: cache the chroot catalog.
 - **Always-public-ready docs.** `docs/` is an OKF v0.2 bundle. No internal
   names, codenames, hostnames, absolute paths, tokens, or task identifiers.
-  The project log lives in `.scratch/outbox/log.md`, never in `docs/`.
 - **No AI slop.** No em-dashes, no marketing fluff, no filler prose, no
   comments that restate the code. Code and docs read like a human wrote them.
 
@@ -34,9 +32,8 @@ working spec is at `.scratch/inbox/spec.md`.
   style, conventions, and quality gates. Do not hand-polish what a tool can
   enforce.
 - **Tool-specific assets stay out of the repo.** A tool's own working files
-  (shims, local state, per-tool prompts) belong in `/.agents/brain/`, which is
-  git-ignored. Never commit a tool-specific asset. `.scratch/` is the project's
-  working brain for now and is also git-ignored.
+  (shims, local state, per-tool prompts) and the project's internal working
+  notes are git-ignored. Never commit a tool-specific asset.
 - **Makefile** is the single automation entrypoint (`make help` by default).
   Targets: `build`, `check`, `fmt`, `lint`, `test`.
 - **Commits** follow Conventional Commits. No trailers (no Co-Authored-By, no
@@ -52,8 +49,7 @@ working spec is at `.scratch/inbox/spec.md`.
 
 - A change is not done until `make check` passes and the relevant tests are
   green, with real captured output.
-- `docs/log.md` is updated as the wiki evolves; `.scratch/log.md` tracks the
-  project's internal progress.
+- `docs/log.md` is updated as the wiki evolves.
 
 ## Contributor guide
 

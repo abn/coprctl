@@ -39,7 +39,7 @@ nfpms:
   - id: default
     package_name: coprctl
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
-    homepage: https://coprctl.abn.is
+    homepage: https://coprctl.lab.abn.is/
     description: A reimagined CLI and agent interface for the Fedora Copr build system
     maintainer: coprctl contributors
     license: MIT

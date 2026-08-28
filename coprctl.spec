@@ -4,7 +4,7 @@ Release:        1%{?dist}
 Summary:        Reimagined CLI and agent interface for Fedora Copr
 
 License:        MIT
-URL:            https://coprctl.abn.is
+URL:            https://coprctl.lab.abn.is/
 Source0:        %{url}/archive/v%{version}/coprctl-%{version}.tar.gz
 
 BuildRequires:  golang >= 1.26

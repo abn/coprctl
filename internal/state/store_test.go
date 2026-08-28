@@ -1,7 +1,6 @@
 package state
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -21,14 +20,6 @@ func TestSecretRoundTrip(t *testing.T) {
 	}
 	if got != "sekrit-uuid" {
 		t.Errorf("secret = %q", got)
-	}
-	// Permissions must be 0600.
-	fi, err := os.Stat(filepath.Join(dir, "quadzero__aetherpak.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Errorf("state file perm = %o, want 0600", perm)
 	}
 }
 

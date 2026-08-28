@@ -94,7 +94,10 @@ func Detect(path string, readGit bool) (*Result, error) {
 					seen[fp] = true
 					si, err := parseSpec(filepath.Join(path, fp))
 					if err == nil {
-						si.Path = fp
+						// Normalize to forward slashes: the manifest and the
+						// SCM subdirectory are always /-separated regardless
+						// of the host platform.
+						si.Path = filepath.ToSlash(fp)
 						res.Specs = append(res.Specs, si)
 					}
 				}

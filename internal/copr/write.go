@@ -56,6 +56,7 @@ func (c *Client) CreateProject(ctx context.Context, in ProjectCreate, existOK bo
 type ProjectEdit struct {
 	Owner, Project                 string
 	Description, Homepage, Contact string
+	Instructions                   string
 	DevelMode                      *bool
 	EnableNet                      *bool
 	Chroots                        *[]string
@@ -68,6 +69,9 @@ func (c *Client) EditProject(ctx context.Context, in ProjectEdit) error {
 	payload := map[string]any{}
 	if in.Description != "" {
 		payload["description"] = in.Description
+	}
+	if in.Instructions != "" {
+		payload["instructions"] = in.Instructions
 	}
 	if in.Homepage != "" {
 		payload["homepage"] = in.Homepage

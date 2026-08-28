@@ -42,3 +42,19 @@ func TestResolveListOwnerNoConfig(t *testing.T) {
 		t.Errorf("no config owner = %q, want empty", got)
 	}
 }
+
+func TestResolveInstructions(t *testing.T) {
+	// Inline text passes through.
+	if got, err := resolveInstructions("install with dnf"); err != nil || got != "install with dnf" {
+		t.Errorf("inline = %q, %v", got, err)
+	}
+	// A file path is read.
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "install.md")
+	if err := os.WriteFile(fp, []byte("# install\nrun this"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := resolveInstructions(fp); err != nil || got != "# install\nrun this" {
+		t.Errorf("file = %q, %v", got, err)
+	}
+}

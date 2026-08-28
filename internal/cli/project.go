@@ -2,9 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
@@ -32,7 +34,7 @@ func newProjectCmd(app *App) *cobra.Command {
 }
 
 func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
-	var description, homepage, contact string
+	var description, homepage, contact, instructions string
 	var develMode bool
 	var develSet bool
 	cmd := &cobra.Command{
@@ -48,6 +50,10 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			inst, err := resolveInstructions(instructions)
+			if err != nil {
+				return err
+			}
 			var devel *bool
 			if develSet {
 				devel = &develMode
@@ -55,7 +61,8 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 			if err := c.EditProject(cmd.Context(), copr.ProjectEdit{
 				Owner: r.Owner, Project: r.Project,
 				Description: description, Homepage: homepage, Contact: contact,
-				DevelMode: devel,
+				Instructions: inst,
+				DevelMode:    devel,
 			}); err != nil {
 				return err
 			}
@@ -63,11 +70,29 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&description, "description", "", "project description")
+	cmd.Flags().StringVar(&instructions, "instructions", "", "installation instructions (inline or a markdown file path)")
 	cmd.Flags().StringVar(&homepage, "homepage", "", "project homepage")
 	cmd.Flags().StringVar(&contact, "contact", "", "project contact")
 	cmd.Flags().BoolVar(&develMode, "devel-mode", false, "enable devel mode")
 	cmd.Flags().BoolVar(&develSet, "devel-mode-set", false, "set devel mode (use with --devel-mode)")
 	return cmd
+}
+
+// resolveInstructions returns the installation instructions. If value names an
+// existing file, its contents are read (so a markdown file can be passed);
+// otherwise the value is used as inline text.
+func resolveInstructions(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	if fi, err := os.Stat(value); err == nil && !fi.IsDir() {
+		data, err := os.ReadFile(value)
+		if err != nil {
+			return "", cerr.Config("cannot read instructions file").Wrap(err)
+		}
+		return string(data), nil
+	}
+	return value, nil
 }
 
 func newProjectRegenCmd(app *App, out *outFlags) *cobra.Command {
@@ -190,12 +215,16 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 					return renderResult(cmd, out, map[string]any{"created": r.String(), "existed": true})
 				}
 			}
+			inst, err := resolveInstructions(instructions)
+			if err != nil {
+				return err
+			}
 			err = c.CreateProject(cmd.Context(), copr.ProjectCreate{
 				Owner:        r.Owner,
 				Name:         r.Project,
 				Chroots:      chroots,
 				Description:  description,
-				Instructions: instructions,
+				Instructions: inst,
 				Homepage:     homepage,
 				Contact:      contact,
 				DevelMode:    develMode,
@@ -211,7 +240,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to enable (repeatable)")
 	bindChrootCompletion(app, cmd, "chroot")
 	cmd.Flags().StringVar(&description, "description", "", "project description")
-	cmd.Flags().StringVar(&instructions, "instructions", "", "project instructions")
+	cmd.Flags().StringVar(&instructions, "instructions", "", "installation instructions (inline or a markdown file path)")
 	cmd.Flags().StringVar(&homepage, "homepage", "", "project homepage")
 	cmd.Flags().StringVar(&contact, "contact", "", "project contact")
 	cmd.Flags().BoolVar(&ifNotExists, "if-not-exists", false, "do not fail if the project exists")

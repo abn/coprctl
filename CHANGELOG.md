@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.5](https://github.com/abn/coprctl/compare/v0.4.4...v0.4.5) (2026-08-28)
+
+
+### Bug Fixes
+
+* **packaging:** fetch the release tarball from the GitHub archive ([#12](https://github.com/abn/coprctl/issues/12)) ([c8476e1](https://github.com/abn/coprctl/commit/c8476e1dc452ee3c50f8e2568017eb1170ae0b2a))
+
+
+### Miscellaneous Chores
+
+* trigger 0.4.5 release ([6de8af8](https://github.com/abn/coprctl/commit/6de8af8772e1a16317c8e7c9249fa71968e29c6a))
+
 ## [0.4.4](https://github.com/abn/coprctl/compare/v0.4.3...v0.4.4) (2026-08-28)
 
 

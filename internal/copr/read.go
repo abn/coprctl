@@ -20,6 +20,7 @@ type Project struct {
 	Homepage     string            `json:"homepage"`
 	Contact      string            `json:"contact"`
 	DevelMode    bool              `json:"devel_mode"`
+	EnableNet    bool              `json:"enable_net"`
 	ChrootRepos  map[string]string `json:"chroot_repos"`
 }
 

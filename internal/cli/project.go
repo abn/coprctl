@@ -207,6 +207,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 				t.Add("Full name", p.FullName)
 				t.Add("Description", p.Description)
 				t.Add("Devel mode", fmt.Sprintf("%v", p.DevelMode))
+				t.Add("Enable net", fmt.Sprintf("%v", p.EnableNet))
 				return renderResult(cmd, out, t)
 			}
 			return renderResult(cmd, out, p)

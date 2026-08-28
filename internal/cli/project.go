@@ -104,10 +104,7 @@ func newProjectListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			owner := ""
-			if len(args) == 1 {
-				owner = args[0]
-			}
+			owner := resolveListOwner(app, args)
 			limit := 100
 			if all {
 				limit = 0
@@ -126,7 +123,7 @@ func newProjectListCmd(app *App, out *outFlags) *cobra.Command {
 			return renderResult(cmd, out, projects)
 		},
 	}
-	cmd.Flags().BoolVar(&mine, "mine", false, "only my projects")
+	cmd.Flags().BoolVar(&mine, "mine", false, "only my projects (default with no owner)")
 	cmd.Flags().BoolVar(&all, "all", false, "paginate through all projects")
 	return cmd
 }
@@ -291,4 +288,19 @@ func truncate(s string, n int) string {
 
 func isHuman(format string) bool {
 	return format == "" || format == "auto" || format == "table" || format == "plain"
+}
+
+// resolveListOwner picks the owner for project list. An explicit argument
+// wins; otherwise it defaults to the authenticated user's projects so the
+// command does not page through the whole instance.
+func resolveListOwner(app *App, args []string) string {
+	if len(args) == 1 {
+		return args[0]
+	}
+	if app.Cfg != nil {
+		if prof, err := app.Cfg.Profile(app.profile); err == nil && prof.Username != "" {
+			return prof.Username
+		}
+	}
+	return ""
 }

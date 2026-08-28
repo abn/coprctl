@@ -82,6 +82,16 @@ Event kinds include `build.state`, `chroot.state`, `log.line`,
   (`--allow-destructive`).
 - **`coprctl skill print` / `install`** ship agent skills. The `coprctl` skill
   is generated from the registry; `coprctl-debug` adds the debugging workflow.
+  `skill install` writes each skill to a `SKILL.md` under a skills root. With
+  no skill name it installs every bundled skill. The root is resolved as:
+  `--target <dir>` for an explicit location, `--global` for
+  `~/.agents/skills/` (mutually exclusive with `--target`), or the repo-local
+  `./.agents/skills/` by default. For a user-level install that every project
+  picks up:
+
+  ```bash
+  coprctl skill install --global
+  ```
 
 All of these are generated from one command registry, so the CLI, completions,
 JSON schema, MCP tools, docs, and skills cannot drift. A CI drift check fails

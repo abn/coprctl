@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/abn/coprctl/internal/cerr"
 )
 
 // skillSpec describes a bundled skill.
@@ -87,6 +89,7 @@ func walkSkill(c *cobra.Command, md *strings.Builder, depth int) {
 
 func newSkillCmd(app *App) *cobra.Command {
 	var target string
+	var global bool
 	cmd := &cobra.Command{
 		Use:   "skill",
 		Short: "Print or install bundled agent skills",
@@ -124,11 +127,23 @@ func newSkillCmd(app *App) *cobra.Command {
 			Short: "Install a skill into an agent skills directory",
 			Args:  cobra.MaximumNArgs(1),
 			RunE: func(c *cobra.Command, args []string) error {
-				// Install namespaced under the target's skills root.
+				if global && target != "" {
+					return cerr.Usage("--global and --target are mutually exclusive")
+				}
+				// Resolve the skills root: --target wins, then --global
+				// (~/.agents/skills), then the repo-local default.
 				base := target
 				if base == "" {
-					cwd, _ := os.Getwd()
-					base = filepath.Join(cwd, ".agents", "skills")
+					if global {
+						home, err := os.UserHomeDir()
+						if err != nil {
+							return err
+						}
+						base = filepath.Join(home, ".agents", "skills")
+					} else {
+						cwd, _ := os.Getwd()
+						base = filepath.Join(cwd, ".agents", "skills")
+					}
 				}
 				// With no name, install every bundled skill so the main skill's
 				// "Related skills" section never points at something missing.
@@ -155,5 +170,6 @@ func newSkillCmd(app *App) *cobra.Command {
 		},
 	)
 	cmd.PersistentFlags().StringVar(&target, "target", "", "agent skills root directory (default: ./.agents/skills)")
+	cmd.PersistentFlags().BoolVar(&global, "global", false, "install to ~/.agents/skills (mutually exclusive with --target)")
 	return cmd
 }

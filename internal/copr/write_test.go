@@ -283,11 +283,20 @@ func TestUploadBuildPayload(t *testing.T) {
 	if err := os.WriteFile(srpm, []byte("fake rpm"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	b, err := c.UploadBuild(context.Background(), "owner", "proj", srpm)
+	b, err := c.UploadBuild(context.Background(), "owner", "proj", srpm, "")
 	if err != nil {
 		t.Fatalf("upload: %v", err)
 	}
 	if b.ID != 99 {
 		t.Errorf("build id = %d", b.ID)
+	}
+}
+
+func TestDirnameFor(t *testing.T) {
+	if got := dirnameFor("proj", "testing"); got != "proj:testing" {
+		t.Errorf("dirnameFor = %q", got)
+	}
+	if got := dirnameFor("proj", "pr:123"); got != "proj:pr:123" {
+		t.Errorf("dirnameFor pr = %q", got)
 	}
 }

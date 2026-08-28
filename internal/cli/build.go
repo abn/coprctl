@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 
@@ -273,6 +274,12 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			// Warn when a targeted chroot is EOL and will not accept builds.
 			warnInactiveChroots(cmd, chroots, app)
 
+			// The :dir from the reference wins over the --dir flag.
+			effDir := dir
+			if r.Dir != "" {
+				effDir = r.Dir
+			}
+
 			// --from builds a source RPM locally from a spec directory, then
 			// uploads and submits it, chaining build srpm into submit.
 			if from != "" {
@@ -280,6 +287,17 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 					return fmt.Errorf("path %q not found; pass a local spec directory", from)
 				}
 				spec, err := findSpec(from)
+				if err != nil {
+					return err
+				}
+				buildDir, err := prepareSpecDir(spec)
+				if err != nil {
+					return err
+				}
+				if buildDir != filepath.Dir(spec) {
+					defer os.RemoveAll(buildDir)
+				}
+				buildSpec, err := findSpec(buildDir)
 				if err != nil {
 					return err
 				}
@@ -291,11 +309,11 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				srpm, err := br.BuildSRPM(cmd.Context(), spec, ch, cmd.OutOrStdout())
+				srpm, err := br.BuildSRPM(cmd.Context(), buildSpec, ch, cmd.OutOrStdout())
 				if err != nil {
 					return err
 				}
-				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, srpm)
+				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, srpm, effDir)
 				if err != nil {
 					return err
 				}
@@ -325,7 +343,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			b, err := c.SubmitBuild(cmd.Context(), copr.BuildSubmit{
 				Owner: r.Owner, Project: r.Project,
-				SourceType: st, Source: sm, Chroots: chroots, Dir: dir,
+				SourceType: st, Source: sm, Chroots: chroots, Dir: effDir,
 			})
 			if err != nil {
 				return err
@@ -532,6 +550,17 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			buildDir, err := prepareSpecDir(spec)
+			if err != nil {
+				return err
+			}
+			if buildDir != filepath.Dir(spec) {
+				defer os.RemoveAll(buildDir)
+			}
+			buildSpec, err := findSpec(buildDir)
+			if err != nil {
+				return err
+			}
 			if chroot == "" {
 				chroot = "fedora-rawhide-x86_64"
 			}
@@ -539,7 +568,7 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			srpm, err := b.BuildSRPM(cmd.Context(), spec, chroot, cmd.OutOrStdout())
+			srpm, err := b.BuildSRPM(cmd.Context(), buildSpec, chroot, cmd.OutOrStdout())
 			if err != nil {
 				return err
 			}

@@ -190,7 +190,7 @@ func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) (*Build, error
 		"chroot_names": in.Chroots,
 	}
 	if in.Dir != "" {
-		payload["project_dirname"] = in.Dir
+		payload["project_dirname"] = dirnameFor(in.Project, in.Dir)
 	}
 	for k, v := range in.Source {
 		payload[k] = v
@@ -201,6 +201,13 @@ func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) (*Build, error
 		return nil, err
 	}
 	return &b, nil
+}
+
+// dirnameFor builds the full Copr dirname for a project directory. Copr
+// validates that the value is "<project>:<dir>" (the project name prefix is
+// required), so a bare "testing" becomes "project:testing".
+func dirnameFor(project, dir string) string {
+	return project + ":" + dir
 }
 
 // CancelBuild cancels a build.
@@ -308,8 +315,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, payload any, o
 	return nil
 }
 
-// UploadBuild uploads a local SRPM and creates a build.
-func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath string) (*Build, error) {
+// UploadBuild uploads a local SRPM and creates a build, optionally into a
+// project directory (side repo) named by dir.
+func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir string) (*Build, error) {
 	f, err := os.Open(srpmPath)
 	if err != nil {
 		return nil, cerr.Config("cannot open SRPM").Wrap(err)
@@ -322,10 +330,14 @@ func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath strin
 	// The upstream client sends a "json" file part carrying the JSON payload,
 	// alongside the SRPM as a "pkgs" file part. Without the json part the
 	// endpoint rejects the request with HTTP 415.
-	formData, err := json.Marshal(map[string]string{
+	form := map[string]string{
 		"ownername":   owner,
 		"projectname": project,
-	})
+	}
+	if dir != "" {
+		form["project_dirname"] = dirnameFor(project, dir)
+	}
+	formData, err := json.Marshal(form)
 	if err != nil {
 		return nil, err
 	}

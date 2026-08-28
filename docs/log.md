@@ -4,6 +4,16 @@ This log tracks the evolution of the knowledge base: page additions,
 deprecations, and structural refactors. It does not track software releases;
 repository changes belong in the commit history.
 
+## 2026-08-28
+
+* **Update**: Made the tool portable across macOS and native Windows, not just
+  Linux. Replaced the Linux-only `/dev/stdin` read in config import with a
+  portable `os.Stdin` read, and made container mounts slash-normalize the host
+  path and apply the SELinux `:z` relabel only on Linux. Added a cross-compile
+  target (`make build-all`) and wired it plus native macOS/Windows test runs
+  into CI, so every release platform is built and tested on every push instead
+  of only at release time.
+
 ## 2026-08-27
 
 * **Update**: Removed the redundant H1 title from the ADR bodies (the frontmatter

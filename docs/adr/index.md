@@ -10,3 +10,4 @@ evolves.
 * [ADR 0004](0004-secret-handlers.md) - secret-handler support
 * [ADR 0005](0005-tag-only-webhook.md) - tag-only webhook default
 * [ADR 0006](0006-instance-detection.md) - instance detection
+* [ADR 0007](0007-cross-platform-releases.md) - cross-platform releases

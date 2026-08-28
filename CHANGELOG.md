@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.6](https://github.com/abn/coprctl/compare/v0.4.5...v0.4.6) (2026-08-28)
+
+
+### Bug Fixes
+
+* **packaging:** disable debuginfo generation for the go binary ([#14](https://github.com/abn/coprctl/issues/14)) ([130e7b6](https://github.com/abn/coprctl/commit/130e7b628e6e07890e7c97c5372ed227bc6a9d3b))
+
+
+### Miscellaneous Chores
+
+* trigger 0.4.6 release ([f2be76b](https://github.com/abn/coprctl/commit/f2be76ba4f594a3f32fd9db71526c7a5fa6285b5))
+
 ## [0.4.5](https://github.com/abn/coprctl/compare/v0.4.4...v0.4.5) (2026-08-28)
 
 

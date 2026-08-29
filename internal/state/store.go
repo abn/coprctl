@@ -57,27 +57,44 @@ func (s *Store) GetSecret(owner, project string) (string, error) {
 	return rec.WebhookSecret, nil
 }
 
-// SetSecret caches the webhook secret for a project.
+// SetSecret caches the webhook secret for a project, preserving any stored
+// hook id.
 func (s *Store) SetSecret(owner, project, secret string) error {
-	rec := integrationRecord{WebhookSecret: secret}
+	rec, err := s.read(owner, project)
+	if err != nil {
+		return err
+	}
+	rec.WebhookSecret = secret
 	return s.write(owner, project, rec)
 }
 
-// SetHookID records the forge hook id for a project.
+// SetHookID records the forge hook id for a project, preserving any stored
+// secret.
 func (s *Store) SetHookID(owner, project string, id int64) error {
-	rec := s.read(owner, project)
+	rec, err := s.read(owner, project)
+	if err != nil {
+		return err
+	}
 	rec.HookID = id
 	return s.write(owner, project, rec)
 }
 
-func (s *Store) read(owner, project string) integrationRecord {
+// read loads the integration record for a project. A missing file is treated
+// as "no record yet" (empty record, nil error); other read and decode errors
+// are surfaced so a corrupt state file is never silently rewritten as empty.
+func (s *Store) read(owner, project string) (integrationRecord, error) {
 	data, err := os.ReadFile(s.recordPath(owner, project))
 	if err != nil {
-		return integrationRecord{}
+		if os.IsNotExist(err) {
+			return integrationRecord{}, nil
+		}
+		return integrationRecord{}, err
 	}
 	var rec integrationRecord
-	_ = json.Unmarshal(data, &rec)
-	return rec
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return integrationRecord{}, err
+	}
+	return rec, nil
 }
 
 func (s *Store) write(owner, project string, rec integrationRecord) error {

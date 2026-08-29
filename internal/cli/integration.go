@@ -159,8 +159,12 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 				}
 			}
 			// Persist the hook id for reconcile-on-rotate.
-			if store, serr := state.NewStore(mustStateDir(app.profile)); serr == nil {
-				_ = store.SetHookID(r.Owner, r.Project, hook.ID)
+			store, err := state.NewStore(mustStateDir(app.profile))
+			if err != nil {
+				return fmt.Errorf("state store: %w", err)
+			}
+			if err := store.SetHookID(r.Owner, r.Project, hook.ID); err != nil {
+				return fmt.Errorf("record forge hook id: %w", err)
 			}
 			// Verify with a ping.
 			code, err := gh.PingHook(cmd.Context(), owner, repoName, hook.ID)

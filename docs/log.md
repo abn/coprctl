@@ -6,6 +6,11 @@ or implementation milestones; repository changes belong in the commit history.
 
 ## 2026-08-28
 
+* **Update**: Corrected the NVR release steps in the release process to match
+  the tag-only webhook: a branch push does not rebuild, so an NVR release
+  pushes an `N-V-R` tag (`coprctl-<version>-<release>`). Verified live against
+  Copr staging and against the upstream webhook source
+  (`get_for_webhook_rebuild`).
 * **Update**: Added a "Ground truth" section to the maintainer guide and a
   matching note in AGENTS.md, establishing the upstream Copr source
   (`github.com/fedora-copr/copr`) as the authoritative reference for the

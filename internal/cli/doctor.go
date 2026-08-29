@@ -30,7 +30,11 @@ func newDoctorCmd(app *App) *cobra.Command {
 			}
 			fmt.Fprintln(out, "ok   config: profile loaded")
 
-			login, tok := prof.Auth()
+			login, tok, aerr := prof.AuthErr()
+			if aerr != nil {
+				fmt.Fprintf(out, "FAIL auth: %v\n", aerr)
+				return aerr
+			}
 			if login == "" || tok == "" {
 				fmt.Fprintln(out, "WARN auth: no credentials configured")
 			} else {

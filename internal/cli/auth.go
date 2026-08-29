@@ -186,7 +186,10 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			login, token := prof.Auth()
+			login, token, aerr := prof.AuthErr()
+			if aerr != nil {
+				return aerr
+			}
 			if login == "" || token == "" {
 				return cerr.Auth("no credentials configured for this profile")
 			}

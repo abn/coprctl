@@ -74,9 +74,14 @@ func (m *Manager) Matches(configPath, legacyPath string) bool {
 	return m.path == configPath && m.legacy == legacyPath
 }
 
-// DefaultPaths returns the default config and legacy paths honouring XDG.
+// DefaultPaths returns the default config and legacy paths honouring XDG. When
+// the home directory cannot be determined, it returns empty paths so a missing
+// HOME surfaces as a config error instead of silently targeting /.config.
 func DefaultPaths() (configPath, legacyPath string) {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", ""
+	}
 	xdg := os.Getenv("XDG_CONFIG_HOME")
 	if xdg == "" {
 		xdg = filepath.Join(home, ".config")
@@ -93,10 +98,13 @@ func (m *Manager) Load() error {
 	if m.file.Profiles == nil {
 		m.file.Profiles = map[string]Profile{}
 	}
-	if data, err := os.ReadFile(m.path); err == nil {
-		if err := toml.Unmarshal(data, &m.file); err != nil {
-			return cerr.Config("failed to parse config").Wrap(err)
+	data, err := os.ReadFile(m.path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return cerr.Config("failed to read config").Wrap(err)
 		}
+	} else if err := toml.Unmarshal(data, &m.file); err != nil {
+		return cerr.Config("failed to parse config").Wrap(err)
 	}
 	if m.file.DefaultProfile == "" {
 		m.file.DefaultProfile = "default"
@@ -394,33 +402,59 @@ func mergeLegacy(primary, legacy Profile) Profile {
 
 // Auth returns the (login, token) credentials for the profile. Secret
 // resolution order: a configured secret handler, then a token_command, then an
-// inline token. The login always comes from the profile.
+// inline token. The login always comes from the profile. When a configured
+// secret source fails, empty credentials are returned so the failure surfaces
+// instead of silently reusing a stale inline token.
 func (p Profile) Auth() (string, string) {
-	if tok := p.secretToken(); tok != "" {
-		return p.Login, tok
-	}
-	if p.TokenCommand != "" {
-		if tok, err := runTokenCommand(p.TokenCommand); err == nil && tok != "" {
-			return p.Login, tok
-		}
-	}
-	return p.Login, p.Token
+	login, token, _ := p.auth()
+	return login, token
 }
 
-// secretToken returns the token from a configured secret handler, or "".
-func (p Profile) secretToken() string {
+// AuthErr is Auth with the resolution error reported, so callers can surface
+// the reason a configured secret handler or token_command failed.
+func (p Profile) AuthErr() (string, string, error) {
+	return p.auth()
+}
+
+func (p Profile) auth() (login, token string, err error) {
+	if p.SecretHandler != "" {
+		tok, err := p.secretToken()
+		if err != nil {
+			return "", "", err
+		}
+		if tok == "" {
+			return "", "", cerr.Config("secret handler returned no token for key " + p.SecretKey)
+		}
+		return p.Login, tok, nil
+	}
+	if p.TokenCommand != "" {
+		tok, err := runTokenCommand(p.TokenCommand)
+		if err != nil {
+			return "", "", err
+		}
+		if tok == "" {
+			return "", "", cerr.Config("token_command returned no token")
+		}
+		return p.Login, tok, nil
+	}
+	return p.Login, p.Token, nil
+}
+
+// secretToken returns the token from a configured secret handler, or an error
+// when the handler is unavailable or its lookup fails.
+func (p Profile) secretToken() (string, error) {
 	if p.SecretHandler == "" || p.SecretKey == "" {
-		return ""
+		return "", nil
 	}
 	be := secrets.Detect(p.SecretHandler)
 	if be == nil {
-		return ""
+		return "", cerr.Config("no available secret handler for " + p.SecretHandler)
 	}
 	tok, err := be.Get(p.SecretKey)
-	if err != nil || tok == "" {
-		return ""
+	if err != nil {
+		return "", cerr.Config("secret handler " + p.SecretHandler + " failed").Wrap(err)
 	}
-	return tok
+	return tok, nil
 }
 
 // SecretStore returns the configured secret handler for this profile, or nil

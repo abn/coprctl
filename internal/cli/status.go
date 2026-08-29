@@ -73,6 +73,10 @@ func newStatusCmd(app *App) *cobra.Command {
 				// A total cap of 1 fetches only the latest build, in one request.
 				builds, err := c.ListBuilds(cmd.Context(), r.Owner, r.Project, p.Name, 1)
 				if err != nil {
+					unhealthy++
+					summary = append(summary, map[string]any{
+						"package": p.Name, "state": "error", "error": err.Error(),
+					})
 					continue
 				}
 				if len(builds) == 0 {
@@ -90,7 +94,13 @@ func newStatusCmd(app *App) *cobra.Command {
 				if isHuman(out.format) {
 					t := render.NewTable("PACKAGE", "STATE", "BUILD")
 					for _, s := range summary {
-						t.Add(s["package"].(string), s["state"].(string), fmt.Sprintf("%v", s["build_id"]))
+						build := "-"
+						if bid, ok := s["build_id"]; ok {
+							build = fmt.Sprintf("%v", bid)
+						} else if msg, ok := s["error"]; ok {
+							build = fmt.Sprintf("%v", msg)
+						}
+						t.Add(s["package"].(string), s["state"].(string), build)
 					}
 					if err := renderResult(cmd, &out, t); err != nil {
 						return err

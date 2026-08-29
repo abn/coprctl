@@ -137,30 +137,28 @@ func newTryCmd(app *App) *cobra.Command {
 						continue
 					}
 					// Run the two-stage preflight.
-					var status string
-					if err := b.Preflight(cmd.Context(), spec, ch, cmd.OutOrStdout()); err != nil {
-						status = "failed"
-					} else {
-						status = "passed"
-					}
-					results = append(results, map[string]any{
+					status, reason := preflightStatus(b.Preflight(cmd.Context(), spec, ch, cmd.OutOrStdout()))
+					r := map[string]any{
 						"chroot": ch, "image": m.Image, "match": m.Match,
 						"status": status, "confidence": m.Confidence,
 						"backend": "container",
-					})
+					}
+					if reason != "" {
+						r["reason"] = reason
+					}
+					results = append(results, r)
 					continue
 				}
 				matched++
-				var status string
-				if err := b.Preflight(cmd.Context(), spec, ch, cmd.OutOrStdout()); err != nil {
-					status = "failed"
-				} else {
-					status = "passed"
-				}
-				results = append(results, map[string]any{
+				status, reason := preflightStatus(b.Preflight(cmd.Context(), spec, ch, cmd.OutOrStdout()))
+				r := map[string]any{
 					"chroot": ch, "match": "native", "status": status,
 					"confidence": "low", "backend": b.Name(),
-				})
+				}
+				if reason != "" {
+					r["reason"] = reason
+				}
+				results = append(results, r)
 			}
 
 			// Fidelity + coverage report (required by spec 22.9).
@@ -174,10 +172,14 @@ func newTryCmd(app *App) *cobra.Command {
 				report["uncovered"] = uncovered
 			}
 			if isHuman(out.format) {
-				t := render.NewTable("CHROOT", "STATUS", "MATCH", "CONFIDENCE")
+				t := render.NewTable("CHROOT", "STATUS", "MATCH", "CONFIDENCE", "REASON")
 				for _, r := range results {
+					reason := ""
+					if rv, ok := r["reason"]; ok {
+						reason = fmt.Sprintf("%v", rv)
+					}
 					t.Add(fmt.Sprintf("%v", r["chroot"]), fmt.Sprintf("%v", r["status"]),
-						fmt.Sprintf("%v", r["match"]), fmt.Sprintf("%v", r["confidence"]))
+						fmt.Sprintf("%v", r["match"]), fmt.Sprintf("%v", r["confidence"]), reason)
 				}
 				if err := renderResult(cmd, &out, t); err != nil {
 					return err
@@ -280,4 +282,21 @@ func normalizeArch(arch string) string {
 		return "386"
 	}
 	return arch
+}
+
+// maxReasonLen caps preflight error text so a failing command's log output
+// does not flood the table.
+const maxReasonLen = 300
+
+// preflightStatus converts a preflight error into a status plus a truncated
+// reason for the result map.
+func preflightStatus(err error) (status, reason string) {
+	if err == nil {
+		return "passed", ""
+	}
+	msg := err.Error()
+	if len(msg) > maxReasonLen {
+		msg = msg[:maxReasonLen] + "..."
+	}
+	return "failed", msg
 }

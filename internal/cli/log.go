@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -74,27 +75,29 @@ func newLogFailuresCmd(app *App, out *outFlags) *cobra.Command {
 }
 
 // consumeEvents drains the bus until done is closed, printing JSONL lines for
-// log events and state changes.
-func consumeEvents(ctx context.Context, ch chan events.Event, done <-chan struct{}, grep string) {
+// log events and state changes. A write failure returns immediately.
+func consumeEvents(ctx context.Context, ch chan events.Event, done <-chan struct{}, grep string, w io.Writer) error {
 	for {
 		select {
 		case <-done:
-			return
+			return nil
 		case ev, ok := <-ch:
 			if !ok {
-				return
+				return nil
 			}
 			if grep != "" && ev.Kind == events.KindLogLine && !strings.Contains(ev.Line, grep) {
 				continue
 			}
-			printEvent(ev)
+			if err := printEvent(w, ev); err != nil {
+				return err
+			}
 		case <-ctx.Done():
-			return
+			return nil
 		}
 	}
 }
 
-func printEvent(ev events.Event) {
+func printEvent(w io.Writer, ev events.Event) error {
 	out := map[string]any{
 		"schema": "coprctl.event/v1",
 		"ts":     ev.TS.Format("2006-01-02T15:04:05Z"),
@@ -125,7 +128,7 @@ func printEvent(ev events.Event) {
 	if ev.Err != nil {
 		out["message"] = ev.Err.Error()
 	}
-	_ = render.Render(os.Stdout, render.FormatJSONL, out)
+	return render.Render(w, render.FormatJSONL, out)
 }
 
 func newLogTailCmd(app *App, out *outFlags) *cobra.Command {
@@ -176,16 +179,22 @@ func newLogTailCmd(app *App, out *outFlags) *cobra.Command {
 			defer bus.Close()
 			sub := bus.Subscribe(1024)
 			done := make(chan struct{})
-			defer close(done)
+			errCh := make(chan error, 1)
 			ctx, cancel := interruptible(cmd.Context())
 			defer cancel()
 
-			go consumeEvents(ctx, sub, done, grep)
+			go func() { errCh <- consumeEvents(ctx, sub, done, grep, cmd.OutOrStdout()) }()
 
 			tailer = logstream.NewTailer(client, bus)
 			tailer.Follow = follow
 			tailer.Interval = pollInterval()
-			return tailer.Run(ctx, targets)
+			runErr := tailer.Run(ctx, targets)
+			close(done)
+			consumeErr := <-errCh
+			if runErr != nil {
+				return runErr
+			}
+			return consumeErr
 		},
 	}
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow the log")

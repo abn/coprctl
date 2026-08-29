@@ -285,34 +285,21 @@ func (c *Client) EditProjectChroot(ctx context.Context, in MockChrootEdit) error
 
 // doJSON sends a JSON-encoded request and optionally decodes the response.
 func (c *Client) doJSON(ctx context.Context, method, path string, payload any, out any) error {
-	u := c.BaseURL + "/api_3" + path
 	var body io.Reader
+	contentType := ""
 	if payload != nil {
 		data, err := json.Marshal(payload)
 		if err != nil {
 			return cerr.Transport("failed to encode request").Wrap(err)
 		}
 		body = bytes.NewReader(data)
+		contentType = "application/json"
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, body)
+	resp, err := c.request(ctx, method, path, nil, body, contentType)
 	if err != nil {
-		return cerr.Transport("failed to build request").Wrap(err)
-	}
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	req.Header.Set("User-Agent", c.ua)
-	if c.auth != nil {
-		c.auth(req)
-	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return cerr.Transport("request failed").Wrap(err)
+		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return mapHTTPError(resp)
-	}
 	if out != nil && resp.StatusCode != http.StatusNoContent && resp.ContentLength != 0 {
 		return decode(resp, out)
 	}
@@ -360,24 +347,11 @@ func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir 
 	}
 	_ = mw.Close()
 
-	u := fmt.Sprintf("%s/api_3/build/create/upload", c.BaseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &buf)
+	resp, err := c.request(ctx, http.MethodPost, "/build/create/upload", nil, &buf, mw.FormDataContentType())
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.Header.Set("User-Agent", c.ua)
-	if c.auth != nil {
-		c.auth(req)
-	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, cerr.Transport("upload failed").Wrap(err)
-	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return nil, mapHTTPError(resp)
-	}
 	var b Build
 	if err := decode(resp, &b); err != nil {
 		return nil, err

@@ -6,6 +6,14 @@ on:
       - main
   workflow_dispatch:
 
+# Serialize Release runs per branch. Rapid consecutive pushes to main otherwise
+# trigger overlapping runs that both update the shared release-please ref,
+# racing and failing one of them with "Error updating ref". Queuing (rather than
+# cancel-in-progress) never aborts an in-flight release build.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write

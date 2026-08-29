@@ -23,17 +23,32 @@ func (o *outFlags) bind(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&o.fields, "fields", "", "comma-separated fields to show")
 }
 
-// renderResult writes v using the requested format.
-func renderResult(cmd *cobra.Command, o *outFlags, v any) error {
-	format := o.format
+// resolveFormat returns the effective output format, resolving the default
+// ("auto" or empty) to table on a TTY and json off one so piped output stays
+// machine-readable.
+func resolveFormat(cmd *cobra.Command, format string) string {
 	if format == "" || format == "auto" {
 		if isTTY(cmd) {
-			format = "table"
-		} else {
-			format = "json"
+			return "table"
 		}
+		return "json"
 	}
-	f, err := render.ParseFormat(format)
+	return format
+}
+
+// isHuman reports whether the effective output format is human (table or
+// plain). The auto default is human only on a TTY.
+func isHuman(cmd *cobra.Command, format string) bool {
+	f, err := render.ParseFormat(resolveFormat(cmd, format))
+	if err != nil {
+		return false
+	}
+	return f == render.FormatTable || f == render.FormatPlain
+}
+
+// renderResult writes v using the requested format.
+func renderResult(cmd *cobra.Command, o *outFlags, v any) error {
+	f, err := render.ParseFormat(resolveFormat(cmd, o.format))
 	if err != nil {
 		return cerr.Usage(err.Error())
 	}
@@ -47,6 +62,27 @@ func renderResult(cmd *cobra.Command, o *outFlags, v any) error {
 		useColor = false
 	}
 	return render.RenderColored(cmd.OutOrStdout(), f, v, useColor)
+}
+
+// renderHumanOr renders a human table when the output format is human, else
+// renders v machine-readably. build returns the table; it is only called for
+// human output.
+func renderHumanOr(cmd *cobra.Command, o *outFlags, v any, build func() *render.Table) error {
+	if isHuman(cmd, o.format) {
+		return renderResult(cmd, o, build())
+	}
+	return renderResult(cmd, o, v)
+}
+
+// renderTableRows renders rows as a human table, or v machine-readably.
+func renderTableRows(cmd *cobra.Command, o *outFlags, headers []string, rows [][]string, v any) error {
+	return renderHumanOr(cmd, o, v, func() *render.Table {
+		t := render.NewTable(headers...)
+		for _, row := range rows {
+			t.Add(row...)
+		}
+		return t
+	})
 }
 
 // isTTY reports whether stdout is an interactive terminal. Output defaults to

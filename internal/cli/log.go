@@ -55,7 +55,7 @@ func newLogFailuresCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			if isHuman(cmd, out.format) {
 				for _, f := range failures {
 					fmt.Fprintf(cmd.OutOrStdout(), "== %s (%s)\n", f.Chroot, f.State)
 					if f.Head != "" {
@@ -247,7 +247,7 @@ func newLogDetectiveCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("log-detective: %w (fall back to 'coprctl log failures' for local analysis)", err)
 			}
-			if isHuman(out.format) {
+			if isHuman(cmd, out.format) {
 				fmt.Fprintf(cmd.OutOrStdout(), "Summary:\n%s\n", expl.Summary)
 				if expl.Suggestion != "" {
 					fmt.Fprintf(cmd.OutOrStdout(), "\nSuggestion:\n%s\n", expl.Suggestion)

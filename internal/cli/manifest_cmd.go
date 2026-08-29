@@ -118,15 +118,13 @@ func newDiffCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			if err := renderHumanOr(cmd, &out, diffs, func() *render.Table {
 				t := render.NewTable("PATH", "MANIFEST", "LIVE")
 				for _, d := range diffs {
 					t.Add(d.Path, d.Manifest, d.Live)
 				}
-				if err := renderResult(cmd, &out, t); err != nil {
-					return err
-				}
-			} else if err := renderResult(cmd, &out, diffs); err != nil {
+				return t
+			}); err != nil {
 				return err
 			}
 			if len(diffs) > 0 {

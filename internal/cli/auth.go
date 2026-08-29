@@ -229,7 +229,7 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 			if w.Status == "" {
 				w.Status = "unknown"
 			}
-			if isHuman(out.format) {
+			if err := renderHumanOr(cmd, out, w, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("Profile", w.Profile)
 				t.Add("Username", w.Username)
@@ -239,10 +239,8 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 				if w.Remaining != "" {
 					t.Add("Remaining", w.Remaining)
 				}
-				if err := renderResult(cmd, out, t); err != nil {
-					return err
-				}
-			} else if err := renderResult(cmd, out, w); err != nil {
+				return t
+			}); err != nil {
 				return err
 			}
 			// Exit non-zero with code 13 when expired, per the precondition rule.

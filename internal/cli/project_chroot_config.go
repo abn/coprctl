@@ -30,14 +30,13 @@ func newProjectChrootGetCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			return renderHumanOr(cmd, out, cfg, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
 				for _, k := range render.SortedKeys(cfg) {
 					t.Add(k, fmt.Sprintf("%v", cfg[k]))
 				}
-				return renderResult(cmd, out, t)
-			}
-			return renderResult(cmd, out, cfg)
+				return t
+			})
 		},
 	}
 	return cmd

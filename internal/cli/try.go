@@ -171,7 +171,7 @@ func newTryCmd(app *App) *cobra.Command {
 			if len(uncovered) > 0 {
 				report["uncovered"] = uncovered
 			}
-			if isHuman(out.format) {
+			if isHuman(cmd, out.format) {
 				t := render.NewTable("CHROOT", "STATUS", "MATCH", "CONFIDENCE", "REASON")
 				for _, r := range results {
 					reason := ""

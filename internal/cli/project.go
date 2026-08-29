@@ -168,14 +168,11 @@ func newProjectListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
-				t := render.NewTable("FULL NAME", "DESCRIPTION")
-				for _, p := range projects {
-					t.Add(p.FullName, truncate(p.Description, 40))
-				}
-				return renderResult(cmd, out, t)
+			rows := make([][]string, 0, len(projects))
+			for _, p := range projects {
+				rows = append(rows, []string{p.FullName, truncate(p.Description, 40)})
 			}
-			return renderResult(cmd, out, projects)
+			return renderTableRows(cmd, out, []string{"FULL NAME", "DESCRIPTION"}, rows, projects)
 		},
 	}
 	cmd.Flags().BoolVar(&mine, "mine", false, "only my projects (default with no owner)")
@@ -204,15 +201,14 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			return renderHumanOr(cmd, out, p, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("Full name", p.FullName)
 				t.Add("Description", p.Description)
 				t.Add("Devel mode", fmt.Sprintf("%v", p.DevelMode))
 				t.Add("Enable net", fmt.Sprintf("%v", p.EnableNet))
-				return renderResult(cmd, out, t)
-			}
-			return renderResult(cmd, out, p)
+				return t
+			})
 		},
 	}
 	bindRefCompletion(app, cmd)
@@ -358,10 +354,6 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-3] + "..."
-}
-
-func isHuman(format string) bool {
-	return format == "" || format == "auto" || format == "table" || format == "plain"
 }
 
 // resolveListOwner picks the owner for project list. An explicit argument

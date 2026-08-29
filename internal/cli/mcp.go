@@ -25,45 +25,28 @@ var destructiveVerbs = map[string]bool{
 
 func (m *mcpRegistry) Tools(tier string) []mcp.Tool {
 	var tools []mcp.Tool
-	var walk func(c *cobra.Command, path []string)
-	walk = func(c *cobra.Command, path []string) {
-		subs := c.Commands()
-		if len(subs) == 0 {
-			// Leaf verb.
-			name := "coprctl_" + strings.Join(path, "_")
-			tierName := "read"
-			for _, p := range path {
-				if destructiveVerbs[p] {
-					tierName = "destructive"
-					break
-				}
+	WalkLeaves(m.root, func(path []string, c *cobra.Command) {
+		name := "coprctl_" + strings.Join(path, "_")
+		tierName := "read"
+		for _, p := range path {
+			if destructiveVerbs[p] {
+				tierName = "destructive"
+				break
 			}
-			if tier != "destructive" && tierName == "destructive" {
-				return
-			}
-			if tier == "read" && tierName != "read" {
-				return
-			}
-			tools = append(tools, mcp.Tool{
-				Name:        name,
-				Description: c.Short,
-				InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-				Tier:        tierName,
-			})
+		}
+		if tier != "destructive" && tierName == "destructive" {
 			return
 		}
-		for _, sub := range subs {
-			if !sub.IsAvailableCommand() {
-				continue
-			}
-			walk(sub, append(path, sub.Name()))
+		if tier == "read" && tierName != "read" {
+			return
 		}
-	}
-	for _, sub := range m.root.Commands() {
-		if sub.IsAvailableCommand() {
-			walk(sub, []string{sub.Name()})
-		}
-	}
+		tools = append(tools, mcp.Tool{
+			Name:        name,
+			Description: c.Short,
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Tier:        tierName,
+		})
+	})
 	return tools
 }
 
@@ -85,7 +68,7 @@ func (m *mcpRegistry) Call(app *App, toolName string, args []string) (string, er
 	return out.String(), err
 }
 
-// findLeaf locates a leaf command by its MCP tool name suffix.
+// findLeaf locates a command by its MCP tool name suffix.
 func findLeaf(root *cobra.Command, toolName string) *cobra.Command {
 	// toolName is like coprctl_project_get. Split off the prefix and match by
 	// the joined path.
@@ -94,21 +77,19 @@ func findLeaf(root *cobra.Command, toolName string) *cobra.Command {
 		return nil
 	}
 	path := parts[1:]
-	var walk func(c *cobra.Command, remaining []string) *cobra.Command
-	walk = func(c *cobra.Command, remaining []string) *cobra.Command {
-		if len(remaining) == 0 {
-			return c
+	var found *cobra.Command
+	WalkCommands(root, func(p []string, c *cobra.Command) {
+		if found != nil || len(p) != len(path) {
+			return
 		}
-		for _, sub := range c.Commands() {
-			if sub.Name() == remaining[0] && sub.IsAvailableCommand() {
-				if found := walk(sub, remaining[1:]); found != nil {
-					return found
-				}
+		for i, name := range path {
+			if p[i] != name {
+				return
 			}
 		}
-		return nil
-	}
-	return walk(root, path)
+		found = c
+	})
+	return found
 }
 
 func newMCPServeCmd(app *App) *cobra.Command {

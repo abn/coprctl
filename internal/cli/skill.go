@@ -77,14 +77,10 @@ func buildMainSkill(root *cobra.Command, _ *App) string {
 }
 
 func walkSkill(c *cobra.Command, md *strings.Builder, depth int) {
-	indent := strings.Repeat("  ", depth)
-	md.WriteString(fmt.Sprintf("%s- `%s` - %s\n", indent, c.CommandPath(), c.Short))
-	for _, sub := range c.Commands() {
-		if !sub.IsAvailableCommand() {
-			continue
-		}
-		walkSkill(sub, md, depth+1)
-	}
+	WalkCommands(c, func(path []string, sub *cobra.Command) {
+		indent := strings.Repeat("  ", depth+len(path))
+		md.WriteString(fmt.Sprintf("%s- `%s` - %s\n", indent, sub.CommandPath(), sub.Short))
+	})
 }
 
 func newSkillCmd(app *App) *cobra.Command {

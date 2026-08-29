@@ -80,6 +80,8 @@ description: The full coprctl command tree, generated from the registry.
         - `coprctl project permission set` - Set a user's permissions on a project
       - `coprctl project regenerate-repos` - Regenerate repository metadata for a project
       - `coprctl project search` - Search projects by name or description
+    - `coprctl rpm` - Inspect local RPM packages
+      - `coprctl rpm list-files` - List the files an RPM package installs
     - `coprctl schema` - Emit the command tree as JSON or markdown
     - `coprctl skill` - Print or install bundled agent skills
       - `coprctl skill install` - Install a skill into an agent skills directory

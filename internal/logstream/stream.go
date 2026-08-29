@@ -160,13 +160,14 @@ func (s *Stream) fetchIncremental(ctx context.Context, bus *events.Bus) (bool, e
 		// body read is handled by tracked below
 		// Track the compressed offset by counting actual bytes read from the
 		// body, since ContentLength is unreliable for chunked responses.
-		tracked := &offsetReader{src: resp.Body, base: s.offset}
+		tracked := &offsetReader{src: resp.Body}
 		dec, err := gzip.NewReader(io.MultiReader(bytes.NewReader(head), tracked))
 		if err != nil {
 			return false, err
 		}
 		gotNew, err := s.emitReader(dec, 0, bus)
-		s.offset = tracked.total + 2
+		// The +2 covers the gzip magic bytes probed into head before tracked.
+		s.offset += tracked.total + 2
 		return gotNew, err
 	default:
 		// 200 means the server ignored Range; switch to full refetch.
@@ -277,11 +278,10 @@ func (s *Stream) emitReader(gz io.Reader, skip int64, bus *events.Bus) (bool, er
 	return gotNew, nil
 }
 
-// offsetReader counts bytes read from a source, offset by a base.
+// offsetReader counts bytes read from a source.
 type offsetReader struct {
 	src   io.Reader
 	total int64
-	base  int64
 }
 
 func (o *offsetReader) Read(p []byte) (int, error) {

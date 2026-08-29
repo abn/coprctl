@@ -48,21 +48,31 @@ func collect(bus *events.Bus, ch chan events.Event, n int) []events.Event {
 }
 
 // TestIncrementalResume tests a multi-member gzip log served with Range
-// support: the first fetch gets member 1, the second fetch resumes at the
-// offset and gets member 2, with no torn or duplicated lines.
+// support: the first fetch gets member 1, the second resumes at the offset
+// and gets member 2, the third resumes at the accumulated offset and gets
+// member 3, with no torn or duplicated lines across any fetch.
 func TestIncrementalResume(t *testing.T) {
 	m1 := gzipBytes([]byte("line one\nline two\n"))
 	m2 := gzipBytes([]byte("line three\n"))
-	full := append(append([]byte{}, m1...), m2...)
+	m3 := gzipBytes([]byte("line four\nline five\n"))
+	full := append(append(append([]byte{}, m1...), m2...), m3...)
 
-	// The server grows the log: first GET serves only m1, subsequent GETs
-	// serve the full two-member file with Range support.
+	// The server grows the log one member per GET: fetch 1 serves only m1,
+	// fetch 2 serves m1+m2, fetch 3 serves all three. Range support returns
+	// the raw bytes from the requested offset, so a correct tailer always
+	// resumes on a gzip member boundary.
 	call := 0
-	served := m1
+	var served []byte
+	var ranges []int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			call++
-			if call == 2 {
+			switch call {
+			case 1:
+				served = m1
+			case 2:
+				served = append(append([]byte{}, m1...), m2...)
+			default:
 				served = full
 			}
 		}
@@ -74,6 +84,7 @@ func TestIncrementalResume(t *testing.T) {
 		}
 		var start int
 		_, _ = fmt.Sscanf(rang, "bytes=%d-", &start)
+		ranges = append(ranges, start)
 		if start >= len(served) {
 			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 			return
@@ -97,8 +108,8 @@ func TestIncrementalResume(t *testing.T) {
 		t.Fatal("expected new content on first fetch")
 	}
 	lines := collect(bus, ch, 2)
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 lines from first fetch, got %d: %+v", len(lines), lines)
+	if len(lines) != 2 || lines[0].Line != "line one" || lines[1].Line != "line two" {
+		t.Fatalf("first fetch lines = %+v", lines)
 	}
 	// Second fetch resumes at the compressed offset and reads member 2.
 	gotNew, err := s.Fetch(context.Background(), bus)
@@ -111,6 +122,23 @@ func TestIncrementalResume(t *testing.T) {
 	lines = collect(bus, ch, 1)
 	if len(lines) != 1 || lines[0].Line != "line three" {
 		t.Fatalf("expected exactly 'line three' on resume, got %+v", lines)
+	}
+	// Third fetch resumes at the accumulated offset (m1+m2) and reads member 3.
+	gotNew, err = s.Fetch(context.Background(), bus)
+	if err != nil {
+		t.Fatalf("third fetch: %v", err)
+	}
+	if !gotNew {
+		t.Fatal("expected new content on third fetch")
+	}
+	lines = collect(bus, ch, 2)
+	if len(lines) != 2 || lines[0].Line != "line four" || lines[1].Line != "line five" {
+		t.Fatalf("expected 'line four' and 'line five' on third fetch, got %+v", lines)
+	}
+	// The range on the third fetch must start at the accumulated offset, not
+	// at the size of the last chunk alone.
+	if len(ranges) != 3 || ranges[2] != len(m1)+len(m2) {
+		t.Fatalf("expected third range to start at %d, got %v", len(m1)+len(m2), ranges)
 	}
 }
 

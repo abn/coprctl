@@ -39,7 +39,7 @@ func newInitCmd(app *App) *cobra.Command {
 	var out outFlags
 	var path, owner, name string
 	var chroots []string
-	var yes, writeCI bool
+	var yes bool
 	cmd := &cobra.Command{
 		Use:   "init [PATH]",
 		Short: "Scaffold a manifest and create a working Copr project",
@@ -87,17 +87,10 @@ func newInitCmd(app *App) *cobra.Command {
 			if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
 				return err
 			}
-			// Apply to Copr.
-			c, err := app.Client()
-			if err != nil {
-				return err
-			}
-			_ = c
 			// Reuse the apply logic: create the project and packages.
 			if err := applyManifest(cmd.Context(), app, m, false); err != nil {
 				return err
 			}
-			_ = writeCI
 			return renderResult(cmd, &out, map[string]any{
 				"init":               true,
 				"manifest":           manifestPath,
@@ -116,14 +109,13 @@ func newInitCmd(app *App) *cobra.Command {
 	cmd.Flags().StringSliceVar(&chroots, "chroot", nil, "chroots to enable")
 	bindChrootCompletion(app, cmd, "chroot")
 	cmd.Flags().BoolVar(&yes, "yes", false, "assume yes")
-	cmd.Flags().BoolVar(&writeCI, "write-ci", false, "write a CI workflow")
 	return cmd
 }
 
 func newSyncCmd(app *App) *cobra.Command {
 	var out outFlags
 	var file string
-	var check, fromCopr bool
+	var check bool
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Reconcile the manifest against the source repo and Copr",
@@ -138,14 +130,6 @@ func newSyncCmd(app *App) *cobra.Command {
 			c, err := app.ReadClient()
 			if err != nil {
 				return err
-			}
-			if fromCopr {
-				// Re-export from live state and diff.
-				live, err := manifest.ExportFromLive(cmd.Context(), c, m.Metadata.Owner, m.Metadata.Name)
-				if err != nil {
-					return err
-				}
-				_ = live
 			}
 			diffs, err := m.DiffAgainst(cmd.Context(), c)
 			if err != nil {
@@ -163,6 +147,5 @@ func newSyncCmd(app *App) *cobra.Command {
 	out.bind(cmd)
 	cmd.Flags().StringVarP(&file, "file", "f", "", "manifest file")
 	cmd.Flags().BoolVar(&check, "check", false, "CI gate: exit 12 on drift, mutate nothing")
-	cmd.Flags().BoolVar(&fromCopr, "from-copr", false, "reconcile from Copr state")
 	return cmd
 }

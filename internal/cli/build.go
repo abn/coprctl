@@ -78,10 +78,10 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 				}
 				chroots = failed
 			}
-			// Preflight runs a local Tier-1 build first; on failure it does
-			// not submit (or warns, see try's behavior).
+			// Preflight checks the local container runtime is available; a
+			// full Tier-1 build needs a local spec and is covered by try.
 			if preflight {
-				if err := runRebuildPreflight(cmd, app, c, r); err != nil {
+				if err := runRebuildPreflight(cmd); err != nil {
 					return err
 				}
 			}
@@ -102,7 +102,7 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
-	cmd.Flags().BoolVar(&preflight, "preflight", false, "run a local Tier-1 preflight before submitting")
+	cmd.Flags().BoolVar(&preflight, "preflight", false, "check a container runtime is available before submitting")
 	cmd.Flags().StringVar(&onlyFailed, "only-failed", "", "rebuild only chroots that failed in this build id (overrides --chroot)")
 	bindChrootCompletion(app, cmd, "chroot")
 	return cmd
@@ -121,18 +121,13 @@ func failedChroots(b *copr.Build) []string {
 	return names
 }
 
-// runRebuildPreflight runs a local container preflight for the package's
-// project chroots and blocks submission on failure.
-func runRebuildPreflight(cmd *cobra.Command, app *App, c *copr.Client, r ref.Ref) error {
+// runRebuildPreflight verifies the local container runtime is available for a
+// later Tier-1 build and reports the result; it does not build anything.
+func runRebuildPreflight(cmd *cobra.Command) error {
 	rt, err := ctrruntime.Detect("")
 	if err != nil {
 		return cerr.New("no_runtime", cerr.ExitPrecondition,
 			"preflight requested but no container runtime is available")
-	}
-	// Build in the default rawhide chroot when none is specified.
-	targets := []string{"fedora-rawhide-x86_64"}
-	for _, ch := range []string{} {
-		targets = append(targets, ch)
 	}
 	// We do not have a local spec path for an arbitrary Copr package; report
 	// that a local checkout is needed for preflight.
@@ -499,7 +494,7 @@ func newBuildDeleteCmd(app *App, out *outFlags) *cobra.Command {
 // terminal state. It is the plain-text rendering of the same event stream that
 // drives the TUI and JSONL output.
 func newBuildWatchCmd(app *App, out *outFlags) *cobra.Command {
-	var until, format string
+	var until string
 	cmd := &cobra.Command{
 		Use:   "watch BUILD_ID...",
 		Short: "Watch a build until it reaches a terminal state",
@@ -527,11 +522,10 @@ func newBuildWatchCmd(app *App, out *outFlags) *cobra.Command {
 			defer cancel()
 			src := &events.PollSource{Client: c, BuildIDs: ids, Interval: pollInterval()}
 			go src.Run(ctx, bus)
-			return watchConsume(ctx, bus, sub, until, format, cmd)
+			return watchConsume(ctx, bus, sub, until, out.format, cmd)
 		},
 	}
 	cmd.Flags().StringVar(&until, "until", "terminal", "stop at state (succeeded, failed, canceled, terminal)")
-	cmd.Flags().StringVarP(&format, "output", "o", "plain", "output format: plain, jsonl")
 	return cmd
 }
 

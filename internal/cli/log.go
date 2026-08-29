@@ -130,7 +130,7 @@ func printEvent(ev events.Event) {
 
 func newLogTailCmd(app *App, out *outFlags) *cobra.Command {
 	var follow bool
-	var stream, grep string
+	var grep string
 	cmd := &cobra.Command{
 		Use:   "tail TARGET...",
 		Short: "Tail build logs (a build id, build/chroot, or ref)",
@@ -189,7 +189,6 @@ func newLogTailCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow the log")
-	cmd.Flags().StringVar(&stream, "stream", "", "stream name to filter")
 	cmd.Flags().StringVar(&grep, "grep", "", "grep pattern filter")
 	return cmd
 }

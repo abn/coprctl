@@ -540,7 +540,9 @@ func watchConsume(ctx context.Context, bus *events.Bus, ch chan events.Event, un
 			}
 			if ev.Kind == events.KindBuildState || ev.Kind == events.KindChrootState {
 				if format == "jsonl" {
-					printEvent(ev)
+					if err := printEvent(cmd.OutOrStdout(), ev); err != nil {
+						return err
+					}
 				} else {
 					if ev.Chroot != "" {
 						fmt.Fprintf(cmd.OutOrStdout(), "build %d %s: %s -> %s\n", ev.BuildID, ev.Chroot, ev.Prev, ev.State)

@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -56,5 +59,33 @@ func TestFindSRPM(t *testing.T) {
 	}
 	if got != b {
 		t.Errorf("findSRPM = %q, want %q", got, b)
+	}
+}
+
+func TestPreflightStatusIncludesReason(t *testing.T) {
+	status, reason := preflightStatus(nil)
+	if status != "passed" || reason != "" {
+		t.Errorf("preflightStatus(nil) = (%q,%q), want (passed,\"\")", status, reason)
+	}
+	status, reason = preflightStatus(fmt.Errorf("mock failure: buildroot exploded"))
+	if status != "failed" || reason != "mock failure: buildroot exploded" {
+		t.Errorf("preflightStatus(err) = (%q,%q), want (failed, error text)", status, reason)
+	}
+}
+
+func TestPreflightStatusTruncatesReason(t *testing.T) {
+	long := strings.Repeat("x", 500)
+	status, reason := preflightStatus(errors.New(long))
+	if status != "failed" {
+		t.Errorf("status = %q, want failed", status)
+	}
+	if len(reason) != maxReasonLen+len("...") {
+		t.Errorf("reason length = %d, want %d", len(reason), maxReasonLen+len("..."))
+	}
+	if !strings.HasPrefix(reason, long[:maxReasonLen]) {
+		t.Error("reason does not start with the truncated error text")
+	}
+	if !strings.HasSuffix(reason, "...") {
+		t.Error("reason missing truncation suffix")
 	}
 }

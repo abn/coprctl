@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -12,6 +13,10 @@ type fakeReg struct{}
 func (f fakeReg) Tools(tier string) []Tool {
 	return []Tool{{Name: "coprctl_project", Description: "manage projects", Tier: "read"}}
 }
+
+type errWriter struct{}
+
+func (errWriter) Write(p []byte) (int, error) { return 0, errors.New("broken pipe") }
 
 func TestInitializeAndToolsList(t *testing.T) {
 	var in bytes.Buffer
@@ -78,5 +83,18 @@ func TestCallError(t *testing.T) {
 	_ = srv.Serve()
 	if !strings.Contains(out.String(), "failed to run") {
 		t.Errorf("expected call error, got: %s", out.String())
+	}
+}
+
+func TestServePropagatesWriteError(t *testing.T) {
+	var in bytes.Buffer
+	in.WriteString(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n")
+	srv := &Server{In: &in, Out: errWriter{}, Reg: fakeReg{}, Tier: "read"}
+	err := srv.Serve()
+	if err == nil {
+		t.Fatal("expected Serve to propagate the write error")
+	}
+	if !strings.Contains(err.Error(), "broken pipe") {
+		t.Errorf("error = %v, want broken pipe", err)
 	}
 }

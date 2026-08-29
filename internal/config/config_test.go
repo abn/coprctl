@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -189,5 +190,87 @@ copr_url = "https://copr.stg.fedoraproject.org"
 	}
 	if strings.Contains(s, "oldtoken") {
 		t.Error("old token still present")
+	}
+}
+
+func TestLoadMissingConfigIsFine(t *testing.T) {
+	m := New(filepath.Join(t.TempDir(), "nope.toml"), filepath.Join(t.TempDir(), "nope"))
+	if err := m.Load(); err != nil {
+		t.Fatalf("missing config should not error: %v", err)
+	}
+}
+
+func TestLoadUnreadableConfigErrors(t *testing.T) {
+	// A directory in place of the config file is a real read error, not a
+	// missing file; it must surface instead of silently returning defaults.
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.MkdirAll(cfg, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m := New(cfg, filepath.Join(t.TempDir(), "nope"))
+	err := m.Load()
+	if err == nil {
+		t.Fatal("expected error reading an unreadable config path")
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitConfig {
+		t.Errorf("exit code = %d, want %d", cerr.ExitCodeFor(err), cerr.ExitConfig)
+	}
+}
+
+func TestDefaultPathsWithoutHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if runtime.GOOS == "windows" {
+		// os.UserHomeDir never errors on Windows: a missing HOME falls back
+		// to %USERPROFILE%, so the empty result cannot be observed. Assert
+		// the paths derived from the real home instead.
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantCfg := filepath.Join(home, ".config", "coprctl", "config.toml")
+		wantLegacy := filepath.Join(home, ".config", "copr")
+		cfg, legacy := DefaultPaths()
+		if cfg != wantCfg || legacy != wantLegacy {
+			t.Errorf("DefaultPaths() = (%q,%q), want (%q,%q)", cfg, legacy, wantCfg, wantLegacy)
+		}
+		return
+	}
+	cfg, legacy := DefaultPaths()
+	if cfg != "" || legacy != "" {
+		t.Errorf("DefaultPaths() = (%q,%q), want empty when HOME is unset", cfg, legacy)
+	}
+}
+
+func TestAuthTokenCommandFailureSurfaces(t *testing.T) {
+	p := Profile{Login: "me", Token: "stale", TokenCommand: "false"}
+	login, token := p.Auth()
+	if login != "" || token != "" {
+		t.Errorf("Auth() = (%q,%q), want empty (no silent fallback to inline token)", login, token)
+	}
+	if _, _, err := p.AuthErr(); err == nil {
+		t.Error("expected error from a failing token_command")
+	}
+}
+
+func TestAuthTokenCommandSuccess(t *testing.T) {
+	p := Profile{Login: "me", Token: "stale", TokenCommand: "printf fresh"}
+	login, token := p.Auth()
+	if login != "me" || token != "fresh" {
+		t.Errorf("Auth() = (%q,%q), want (me,fresh)", login, token)
+	}
+	if _, _, err := p.AuthErr(); err != nil {
+		t.Errorf("AuthErr() unexpected error: %v", err)
+	}
+}
+
+func TestAuthInlineFallbackWithoutTokenCommand(t *testing.T) {
+	p := Profile{Login: "me", Token: "inline"}
+	login, token := p.Auth()
+	if login != "me" || token != "inline" {
+		t.Errorf("Auth() = (%q,%q), want inline fallback", login, token)
+	}
+	if _, _, err := p.AuthErr(); err != nil {
+		t.Errorf("AuthErr() unexpected error: %v", err)
 	}
 }

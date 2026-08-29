@@ -46,7 +46,9 @@ func (s *Server) Serve() error {
 		if err := json.Unmarshal(line, &req); err != nil {
 			continue
 		}
-		s.handle(req)
+		if err := s.handle(req); err != nil {
+			return err
+		}
 	}
 	return sc.Err()
 }
@@ -70,63 +72,62 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-func (s *Server) respond(id json.RawMessage, result any) {
-	_ = json.NewEncoder(s.Out).Encode(response{JSONRPC: "2.0", ID: id, Result: result})
+func (s *Server) respond(id json.RawMessage, result any) error {
+	return json.NewEncoder(s.Out).Encode(response{JSONRPC: "2.0", ID: id, Result: result})
 }
 
-func (s *Server) respondError(id json.RawMessage, code int, msg string) {
-	_ = json.NewEncoder(s.Out).Encode(response{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
+func (s *Server) respondError(id json.RawMessage, code int, msg string) error {
+	return json.NewEncoder(s.Out).Encode(response{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: msg}})
 }
 
-func (s *Server) handle(req request) {
+func (s *Server) handle(req request) error {
 	isNotification := len(req.ID) == 0 || string(req.ID) == "null"
 	switch req.Method {
 	case "initialize":
-		s.respond(req.ID, map[string]any{
+		return s.respond(req.ID, map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "coprctl", "version": "0.1.0"},
 		})
 	case "notifications/initialized":
 		// No response expected; nothing to do.
+		return nil
 	case "tools/list":
 		if s.Reg == nil {
-			s.respond(req.ID, map[string]any{"tools": []Tool{}})
-			return
+			return s.respond(req.ID, map[string]any{"tools": []Tool{}})
 		}
-		s.respond(req.ID, map[string]any{"tools": s.Reg.Tools(s.Tier)})
+		return s.respond(req.ID, map[string]any{"tools": s.Reg.Tools(s.Tier)})
 	case "tools/call":
-		s.handleCall(req)
+		return s.handleCall(req)
 	default:
 		if isNotification {
-			return // never respond to a notification
+			return nil // never respond to a notification
 		}
-		s.respondError(req.ID, -32601, fmt.Sprintf("method not found: %s", req.Method))
+		return s.respondError(req.ID, -32601, fmt.Sprintf("method not found: %s", req.Method))
 	}
 }
 
-func (s *Server) handleCall(req request) {
+func (s *Server) handleCall(req request) error {
 	var params struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
 	}
-	_ = json.Unmarshal(req.Params, &params)
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return s.respondError(req.ID, -32602, "invalid arguments")
+	}
 	if params.Name == "" {
-		s.respondError(req.ID, -32602, "missing tool name")
-		return
+		return s.respondError(req.ID, -32602, "missing tool name")
 	}
 	if s.Call == nil {
-		s.respondError(req.ID, -32602, fmt.Sprintf("tool %q not executable in this mode", params.Name))
-		return
+		return s.respondError(req.ID, -32602, fmt.Sprintf("tool %q not executable in this mode", params.Name))
 	}
 	// Convert arguments (a map) to positional string args in stable order.
 	args := mapArgsToStrings(params.Arguments)
 	out, err := s.Call(params.Name, args)
 	if err != nil {
-		s.respondError(req.ID, -32000, fmt.Sprintf("%s: %v", params.Name, err))
-		return
+		return s.respondError(req.ID, -32000, fmt.Sprintf("%s: %v", params.Name, err))
 	}
-	s.respond(req.ID, map[string]any{
+	return s.respond(req.ID, map[string]any{
 		"content": []map[string]string{{"type": "text", "text": out}},
 	})
 }

@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"sort"
 	"time"
+
+	"github.com/abn/coprctl/internal/cerr"
 )
 
 // Project is a Copr project.
@@ -150,8 +152,22 @@ func (t *Timestamp) UnmarshalJSON(b []byte) error {
 		tt, err := time.Parse(time.RFC3339, str)
 		if err == nil {
 			t.Unix = tt.Unix()
+			return nil
 		}
-		return nil
+		// Copr emits a handful of timestamp shapes depending on the endpoint;
+		// try the common variants before giving up on the value.
+		for _, layout := range []string{
+			time.RFC3339Nano,
+			"2006-01-02T15:04:05-0700",
+			"2006-01-02T15:04:05.999999999-0700",
+			"2006-01-02 15:04:05",
+		} {
+			if tt, err := time.Parse(layout, str); err == nil {
+				t.Unix = tt.Unix()
+				return nil
+			}
+		}
+		return fmt.Errorf("invalid timestamp %q", str)
 	}
 	return json.Unmarshal(b, &t.Unix)
 }
@@ -272,7 +288,7 @@ func (c *Client) GetPackage(ctx context.Context, owner, project, name string) (*
 			return &pkgs[i], nil
 		}
 	}
-	return nil, fmt.Errorf("package %q not found in %s/%s", name, owner, project)
+	return nil, cerr.NotFound(fmt.Sprintf("%s/%s/%s", owner, project, name))
 }
 
 // Terminal build states.
@@ -370,7 +386,6 @@ type MonitorRow struct {
 type MonitorChrootInfo struct {
 	BuildID    int    `json:"build_id"`
 	State      string `json:"state"`
-	Status     int    `json:"status"`
 	PkgVersion string `json:"pkg_version"`
 }
 

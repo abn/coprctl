@@ -124,7 +124,10 @@ func decode(resp *http.Response, v any) error {
 }
 
 func mapHTTPError(resp *http.Response) error {
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return cerr.Transport("failed to read error response").Wrap(err)
+	}
 	apiMsg := apiErrorMessage(body)
 	status := resp.StatusCode
 	switch status {
@@ -132,9 +135,11 @@ func mapHTTPError(resp *http.Response) error {
 		return cerr.New("bad_request", cerr.ExitGeneric, "bad request (400)").
 			WithHint(apiMsg).Wrap(apiErr(apiMsg))
 	case 401:
-		return cerr.Auth("authentication failed (401)").Wrap(fmt.Errorf("%s", body))
+		return cerr.Auth("authentication failed (401)").
+			WithHint(apiMsg).Wrap(apiErr(apiMsg))
 	case 403:
-		return cerr.New("permission_denied", cerr.ExitPermission, "permission denied (403)")
+		return cerr.New("permission_denied", cerr.ExitPermission, "permission denied (403)").
+			WithHint(apiMsg).Wrap(apiErr(apiMsg))
 	case 404:
 		return cerr.NotFound(resp.Request.URL.Path)
 	case 409:

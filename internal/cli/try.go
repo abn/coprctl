@@ -127,7 +127,7 @@ func newTryCmd(app *App) *cobra.Command {
 						continue
 					}
 					matched++
-					if !emulate && !sameArch(ch, m.Chroot) {
+					if !emulate && !sameArch(ch) {
 						uncovered = append(uncovered, ch)
 						m.Confidence = "low"
 						results = append(results, map[string]any{
@@ -262,7 +262,7 @@ func findSRPM(dir string) (string, error) {
 
 // sameArch reports whether the chroot's architecture matches the host. Copr
 // arch names differ from Go GOARCH values (x86_64 vs amd64, aarch64 vs arm64).
-func sameArch(chroot, _ string) bool {
+func sameArch(chroot string) bool {
 	parts := strings.SplitN(chroot, "-", 3)
 	if len(parts) < 3 {
 		return true // unknown arch: assume compatible

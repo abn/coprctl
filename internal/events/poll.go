@@ -2,7 +2,6 @@ package events
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
 	"github.com/abn/coprctl/internal/copr"
@@ -68,11 +67,3 @@ func (p *PollSource) pollOnce(ctx context.Context, bus *Bus, prev map[int]map[st
 		}
 	}
 }
-
-// jitter returns an interval with +/-20% jitter.
-func jitter(base time.Duration) time.Duration {
-	f := 0.8 + rand.Float64()*0.4 //nolint:gosec // not security-sensitive
-	return time.Duration(float64(base) * f)
-}
-
-var _ = jitter

@@ -60,20 +60,9 @@ func (b *Bus) Subscribe(buffer int) chan Event {
 	return ch
 }
 
-// Unsubscribe removes a subscription channel.
-func (b *Bus) Unsubscribe(ch chan Event) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for id, c := range b.subs {
-		if c == ch {
-			delete(b.subs, id)
-			return
-		}
-	}
-}
-
 // Publish fans an event out to all subscribers, dropping it for slow
-// consumers rather than blocking.
+// consumers rather than blocking. A drop is flagged on the event so
+// downstream log output can report the loss.
 func (b *Bus) Publish(ev Event) {
 	if ev.TS.IsZero() {
 		ev.TS = time.Now().UTC()
@@ -85,6 +74,7 @@ func (b *Bus) Publish(ev Event) {
 		case ch <- ev:
 		default:
 			// Slow consumer: drop rather than block the publisher.
+			ev.Dropped = 1
 		}
 	}
 }

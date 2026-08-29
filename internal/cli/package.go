@@ -126,7 +126,6 @@ func (s *sourceFlags) sourceMap() (copr.SourceType, map[string]any, error) {
 		if s.uploadPath == "" {
 			return "", nil, fmt.Errorf("--upload is required for upload source")
 		}
-		m["upload"] = s.uploadPath
 	default:
 		return "", nil, fmt.Errorf("unknown or missing source type %q", s.sourceType)
 	}

@@ -21,6 +21,7 @@ func newProjectChrootCmd(app *App, out *outFlags) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newProjectChrootListCmd(app, out),
+		newProjectChrootGetCmd(app, out),
 		newProjectChrootEnableCmd(app, out),
 		newProjectChrootDisableCmd(app, out),
 	)

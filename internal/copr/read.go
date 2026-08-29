@@ -34,11 +34,8 @@ type ProjectList struct {
 
 // GetProject fetches a single project.
 func (c *Client) GetProject(ctx context.Context, owner, project string) (*Project, error) {
-	q := url.Values{}
-	q.Set("ownername", owner)
-	q.Set("projectname", project)
 	var p Project
-	if err := c.Get(ctx, "/project/", q, &p); err != nil {
+	if err := c.Get(ctx, "/project/", projectQuery(owner, project), &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -47,35 +44,61 @@ func (c *Client) GetProject(ctx context.Context, owner, project string) (*Projec
 // pageSize is the per-request page size for paginated list methods.
 const pageSize = 100
 
-// ListProjects lists projects for an owner, paginating internally. limit is
-// the maximum number of projects to return; limit <= 0 returns everything.
-func (c *Client) ListProjects(ctx context.Context, owner string, limit int) ([]Project, error) {
-	var all []Project
+// projectQuery builds the common ownername/projectname query params.
+func projectQuery(owner, project string) url.Values {
+	q := url.Values{}
+	if owner != "" {
+		q.Set("ownername", owner)
+	}
+	if project != "" {
+		q.Set("projectname", project)
+	}
+	return q
+}
+
+// pageQuery applies the page size and offset to q.
+func pageQuery(q url.Values, offset int) {
+	q.Set("limit", fmt.Sprintf("%d", pageSize))
+	q.Set("offset", fmt.Sprintf("%d", offset))
+}
+
+// paginate fetches all pages of T for a query, stopping on an empty page or
+// once the total cap is reached. limit <= 0 returns everything; getPage
+// performs the request for one page and returns its items.
+func paginate[T any](q url.Values, limit int, getPage func(url.Values) ([]T, error)) ([]T, error) {
+	var all []T
 	offset := 0
 	for {
-		q := url.Values{}
-		if owner != "" {
-			q.Set("ownername", owner)
-		}
-		q.Set("limit", fmt.Sprintf("%d", pageSize))
-		q.Set("offset", fmt.Sprintf("%d", offset))
-		var pl ProjectList
-		if err := c.Get(ctx, "/project/list", q, &pl); err != nil {
+		pageQuery(q, offset)
+		items, err := getPage(q)
+		if err != nil {
 			return nil, err
 		}
-		all = append(all, pl.Items...)
-		if len(pl.Items) == 0 {
+		all = append(all, items...)
+		if len(items) == 0 {
 			break
 		}
 		if limit > 0 && len(all) >= limit {
 			break
 		}
-		offset += len(pl.Items)
+		offset += len(items)
 	}
 	if limit > 0 && len(all) > limit {
 		all = all[:limit]
 	}
 	return all, nil
+}
+
+// ListProjects lists projects for an owner, paginating internally. limit is
+// the maximum number of projects to return; limit <= 0 returns everything.
+func (c *Client) ListProjects(ctx context.Context, owner string, limit int) ([]Project, error) {
+	return paginate(projectQuery(owner, ""), limit, func(q url.Values) ([]Project, error) {
+		var pl ProjectList
+		if err := c.Get(ctx, "/project/list", q, &pl); err != nil {
+			return nil, err
+		}
+		return pl.Items, nil
+	})
 }
 
 // SearchProjects searches for projects by query.
@@ -216,38 +239,17 @@ type BuildList struct {
 // ListBuilds lists builds, paginating internally. limit is the maximum
 // number of builds to return; limit <= 0 returns everything.
 func (c *Client) ListBuilds(ctx context.Context, owner, project, pkg string, limit int) ([]Build, error) {
-	var all []Build
-	offset := 0
-	for {
-		q := url.Values{}
-		if owner != "" {
-			q.Set("ownername", owner)
-		}
-		if project != "" {
-			q.Set("projectname", project)
-		}
-		if pkg != "" {
-			q.Set("packagename", pkg)
-		}
-		q.Set("limit", fmt.Sprintf("%d", pageSize))
-		q.Set("offset", fmt.Sprintf("%d", offset))
+	q := projectQuery(owner, project)
+	if pkg != "" {
+		q.Set("packagename", pkg)
+	}
+	return paginate(q, limit, func(q url.Values) ([]Build, error) {
 		var bl BuildList
 		if err := c.Get(ctx, "/build/list", q, &bl); err != nil {
 			return nil, err
 		}
-		all = append(all, bl.Items...)
-		if len(bl.Items) == 0 {
-			break
-		}
-		if limit > 0 && len(all) >= limit {
-			break
-		}
-		offset += len(bl.Items)
-	}
-	if limit > 0 && len(all) > limit {
-		all = all[:limit]
-	}
-	return all, nil
+		return bl.Items, nil
+	})
 }
 
 // Package is a Copr package (a source definition, not an RPM).
@@ -267,11 +269,8 @@ type PackageList struct {
 
 // ListPackages lists the packages in a project.
 func (c *Client) ListPackages(ctx context.Context, owner, project string) ([]Package, error) {
-	q := url.Values{}
-	q.Set("ownername", owner)
-	q.Set("projectname", project)
 	var pl PackageList
-	if err := c.Get(ctx, "/package/list", q, &pl); err != nil {
+	if err := c.Get(ctx, "/package/list", projectQuery(owner, project), &pl); err != nil {
 		return nil, err
 	}
 	return pl.Items, nil
@@ -398,11 +397,8 @@ type MonitorEnvelope struct {
 
 // Monitor returns the package x chroot state matrix for a project.
 func (c *Client) Monitor(ctx context.Context, owner, project string) ([]MonitorRow, error) {
-	q := url.Values{}
-	q.Set("ownername", owner)
-	q.Set("projectname", project)
 	var env MonitorEnvelope
-	if err := c.Get(ctx, "/monitor", q, &env); err != nil {
+	if err := c.Get(ctx, "/monitor", projectQuery(owner, project), &env); err != nil {
 		return nil, err
 	}
 	return env.Packages, nil

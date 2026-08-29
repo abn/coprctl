@@ -214,7 +214,7 @@ func defaultHookEvents(tagOnly bool, events string) []string {
 }
 
 func newIntegrationRotateCmd(app *App, out *outFlags) *cobra.Command {
-	var yes bool
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "rotate-secret REF",
 		Short: "Generate a new webhook secret and cache it",
@@ -224,7 +224,7 @@ func newIntegrationRotateCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes {
+			if !*yes {
 				return confirmRequired("--yes")
 			}
 			c, err := app.Client()
@@ -245,7 +245,7 @@ func newIntegrationRotateCmd(app *App, out *outFlags) *cobra.Command {
 			return renderResult(cmd, out, map[string]any{"rotated": true, "stored": true})
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	yes = addYesFlag(cmd, yesHelp, true)
 	return cmd
 }
 

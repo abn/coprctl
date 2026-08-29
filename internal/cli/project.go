@@ -213,7 +213,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 }
 
 func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
-	var chroots []string
+	var chroots *[]string
 	var description, instructions, homepage, contact, githubRepo string
 	var ifNotExists, develMode, enableNet bool
 	cmd := &cobra.Command{
@@ -254,7 +254,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 			err = c.CreateProject(cmd.Context(), copr.ProjectCreate{
 				Owner:        r.Owner,
 				Name:         r.Project,
-				Chroots:      chroots,
+				Chroots:      *chroots,
 				Description:  description,
 				Instructions: inst,
 				Homepage:     homepage,
@@ -270,8 +270,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to enable (repeatable)")
-	bindChrootCompletion(app, cmd, "chroot")
+	chroots = addChrootFlag(app, cmd, "chroots to enable (repeatable)", true)
 	cmd.Flags().StringVar(&description, "description", "", "project description")
 	cmd.Flags().StringVar(&instructions, "instructions", "", "installation instructions (inline or a markdown file path)")
 	cmd.Flags().StringVar(&homepage, "homepage", "", "project homepage")
@@ -284,7 +283,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 }
 
 func newProjectDeleteCmd(app *App, out *outFlags) *cobra.Command {
-	var yes bool
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "delete REF",
 		Short: "Delete a project",
@@ -294,7 +293,7 @@ func newProjectDeleteCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes {
+			if !*yes {
 				return confirmRequired("--yes")
 			}
 			c, err := app.Client()
@@ -307,12 +306,12 @@ func newProjectDeleteCmd(app *App, out *outFlags) *cobra.Command {
 			return renderResult(cmd, out, map[string]any{"deleted": r.String()})
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	yes = addYesFlag(cmd, yesHelp, true)
 	return cmd
 }
 
 func newProjectForkCmd(app *App, out *outFlags) *cobra.Command {
-	var yes bool
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "fork SRC DST",
 		Short: "Fork a project",
@@ -326,7 +325,7 @@ func newProjectForkCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes {
+			if !*yes {
 				return confirmRequired("--yes")
 			}
 			c, err := app.Client()
@@ -339,7 +338,7 @@ func newProjectForkCmd(app *App, out *outFlags) *cobra.Command {
 			return renderResult(cmd, out, map[string]any{"forked": src.String() + " -> " + dst.String()})
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	yes = addYesFlag(cmd, yesHelp, true)
 	return cmd
 }
 

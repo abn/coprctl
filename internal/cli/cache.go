@@ -18,13 +18,13 @@ func newCacheCmd(app *App) *cobra.Command {
 }
 
 func newCacheClearCmd(app *App, out *outFlags) *cobra.Command {
-	var yes bool
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "clear",
 		Short: "Clear the local chroot catalog cache",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !yes {
+			if !*yes {
 				return confirmRequired("--yes")
 			}
 			cacheDir, err := state.CacheDir(app.profile)
@@ -37,6 +37,6 @@ func newCacheClearCmd(app *App, out *outFlags) *cobra.Command {
 			return renderResult(cmd, out, map[string]any{"cleared": true, "dir": cacheDir})
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	yes = addYesFlag(cmd, yesHelp, true)
 	return cmd
 }

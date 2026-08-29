@@ -259,12 +259,12 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 }
 
 func newAuthTokenCmd(app *App, out *outFlags) *cobra.Command {
-	var yes bool
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "rotate",
 		Short: "Rotate the API token and update the profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !yes {
+			if !*yes {
 				return confirmRequired("--yes")
 			}
 			if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
@@ -303,7 +303,7 @@ func newAuthTokenCmd(app *App, out *outFlags) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	yes = addYesFlag(cmd, yesHelp, true)
 	return cmd
 }
 

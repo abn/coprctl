@@ -38,8 +38,8 @@ func newDetectCmd(app *App) *cobra.Command {
 func newInitCmd(app *App) *cobra.Command {
 	var out outFlags
 	var path, owner, name string
-	var chroots []string
-	var yes bool
+	var chroots *[]string
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "init [PATH]",
 		Short: "Scaffold a manifest and create a working Copr project",
@@ -59,7 +59,7 @@ func newInitCmd(app *App) *cobra.Command {
 			if len(res.Specs) == 0 {
 				return fmt.Errorf("no spec files found in %s", p)
 			}
-			if len(chroots) == 0 {
+			if len(*chroots) == 0 {
 				return fmt.Errorf("--chroot is required (chroots cannot be guessed)")
 			}
 			if res.CloneURL == "" {
@@ -73,7 +73,7 @@ func newInitCmd(app *App) *cobra.Command {
 			if name != "" {
 				m.Metadata.Name = name
 			}
-			m.Spec.Chroots.Enabled = chroots
+			m.Spec.Chroots.Enabled = *chroots
 
 			// Write the manifest.
 			manifestPath := "copr.yaml"
@@ -81,7 +81,7 @@ func newInitCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes {
+			if !*yes {
 				return fmt.Errorf("--yes is required to write files and create the project non-interactively")
 			}
 			if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
@@ -96,7 +96,7 @@ func newInitCmd(app *App) *cobra.Command {
 				"manifest":           manifestPath,
 				"project":            owner + "/" + m.Metadata.Name,
 				"packages":           len(m.Spec.Packages),
-				"chroots":            len(chroots),
+				"chroots":            len(*chroots),
 				"inferred":           len(res.Specs),
 				"decisions_required": res.Decisions,
 			})
@@ -106,9 +106,8 @@ func newInitCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVar(&path, "path", "", "path to the source repository")
 	cmd.Flags().StringVar(&owner, "owner", "", "owner of the Copr project")
 	cmd.Flags().StringVar(&name, "name", "", "Copr project name (default: repo name)")
-	cmd.Flags().StringSliceVar(&chroots, "chroot", nil, "chroots to enable")
-	bindChrootCompletion(app, cmd, "chroot")
-	cmd.Flags().BoolVar(&yes, "yes", false, "assume yes")
+	chroots = addChrootFlag(app, cmd, "chroots to enable", false)
+	yes = addYesFlag(cmd, "assume yes", false)
 	return cmd
 }
 

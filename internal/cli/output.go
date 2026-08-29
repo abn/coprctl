@@ -117,6 +117,57 @@ func parseRef(s string) (ref.Ref, error) {
 	return r, nil
 }
 
+// parseBuildRef parses a reference and requires it to be a build.
+func parseBuildRef(args []string) (ref.Ref, error) {
+	r, err := ref.Parse(args[0], nil)
+	if err != nil {
+		return r, err
+	}
+	if r.Kind != ref.KindBuild {
+		return r, cerr.Usage(fmt.Sprintf("expected a build id, got %q", args[0]))
+	}
+	return r, nil
+}
+
+// parseBuildChrootRef parses a reference and requires it to be a build chroot.
+func parseBuildChrootRef(args []string) (ref.Ref, error) {
+	r, err := ref.Parse(args[0], nil)
+	if err != nil {
+		return r, err
+	}
+	if r.Kind != ref.KindBuildChroot {
+		return r, cerr.Usage(fmt.Sprintf("expected a build/chroot reference, got %q", args[0]))
+	}
+	return r, nil
+}
+
+// parseBuildID parses a build reference and returns its integer id.
+func parseBuildID(args []string) (int, error) {
+	r, err := parseBuildRef(args)
+	if err != nil {
+		return 0, err
+	}
+	return r.BuildID, nil
+}
+
+// parseBuildIDs parses build references and returns their integer ids.
+func parseBuildIDs(args []string) ([]int, error) {
+	ids := make([]int, 0, len(args))
+	for _, a := range args {
+		id, err := parseBuildID([]string{a})
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// parsePackageRef parses a reference requiring ForcePackage.
+func parsePackageRef(args []string) (ref.Ref, error) {
+	return ref.Parse(args[0], &ref.Options{ForcePackage: true})
+}
+
 // confirmRequired returns a usage error naming the confirmation flag that a
 // non-interactive destructive command needs.
 func confirmRequired(flag string) error {

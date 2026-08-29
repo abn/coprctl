@@ -50,7 +50,7 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Rebuild a package from its stored source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			r, err := parsePackageRef(args)
 			if err != nil {
 				return err
 			}
@@ -141,12 +141,9 @@ func newBuildReproduceCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Print the local mock reproduction recipe from a build log",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseBuildChrootRef(args)
 			if err != nil {
 				return err
-			}
-			if r.Kind != ref.KindBuildChroot {
-				return fmt.Errorf("expected a build/chroot reference, got %q", args[0])
 			}
 			client, err := app.ReadClient()
 			if err != nil {
@@ -188,22 +185,19 @@ func newBuildGetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Show a build",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			id, err := parseBuildID(args)
 			if err != nil {
 				return err
-			}
-			if r.Kind != ref.KindBuild {
-				return fmt.Errorf("expected a build id, got %q", args[0])
 			}
 			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
-			b, err := c.GetBuild(cmd.Context(), r.BuildID)
+			b, err := c.GetBuild(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
-			chroots, err := c.ListBuildChroots(cmd.Context(), r.BuildID)
+			chroots, err := c.ListBuildChroots(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -276,12 +270,9 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Submit a build",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(args[0])
 			if err != nil {
 				return err
-			}
-			if r.Owner == "" {
-				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
 			}
 			c, err := app.Client()
 			if err != nil {
@@ -423,21 +414,18 @@ func newBuildCancelCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Cancel a build",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			id, err := parseBuildID(args)
 			if err != nil {
 				return err
-			}
-			if r.Kind != ref.KindBuild {
-				return fmt.Errorf("expected a build id, got %q", args[0])
 			}
 			c, err := app.Client()
 			if err != nil {
 				return err
 			}
-			if err := c.CancelBuild(cmd.Context(), r.BuildID); err != nil {
+			if err := c.CancelBuild(cmd.Context(), id); err != nil {
 				return err
 			}
-			return renderResult(cmd, out, map[string]any{"canceled": r.BuildID})
+			return renderResult(cmd, out, map[string]any{"canceled": id})
 		},
 	}
 	return cmd
@@ -457,15 +445,12 @@ func newBuildDeleteCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			for _, a := range args {
-				r, err := ref.Parse(a, nil)
-				if err != nil {
-					return err
-				}
-				if r.Kind != ref.KindBuild {
-					return fmt.Errorf("expected a build id, got %q", a)
-				}
-				if err := c.DeleteBuild(cmd.Context(), r.BuildID); err != nil {
+			ids, err := parseBuildIDs(args)
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				if err := c.DeleteBuild(cmd.Context(), id); err != nil {
 					return err
 				}
 			}
@@ -490,16 +475,9 @@ func newBuildWatchCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var ids []int
-			for _, a := range args {
-				r, err := ref.Parse(a, nil)
-				if err != nil {
-					return err
-				}
-				if r.Kind != ref.KindBuild {
-					return fmt.Errorf("expected a build id, got %q", a)
-				}
-				ids = append(ids, r.BuildID)
+			ids, err := parseBuildIDs(args)
+			if err != nil {
+				return err
 			}
 			bus := events.New()
 			defer bus.Close()

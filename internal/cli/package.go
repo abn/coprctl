@@ -145,7 +145,7 @@ func newPackageCreateCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Create a package",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			r, err := parsePackageRef(args)
 			if err != nil {
 				return err
 			}
@@ -177,7 +177,7 @@ func newPackageEditCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Edit a package's source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			r, err := parsePackageRef(args)
 			if err != nil {
 				return err
 			}
@@ -209,7 +209,7 @@ func newPackageGetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Show a package's source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			r, err := parsePackageRef(args)
 			if err != nil {
 				return err
 			}
@@ -240,7 +240,7 @@ func newPackageResetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Clear a package's stored source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			r, err := parsePackageRef(args)
 			if err != nil {
 				return err
 			}
@@ -296,7 +296,7 @@ func newPackageDeleteCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Delete a package",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+			r, err := parsePackageRef(args)
 			if err != nil {
 				return err
 			}

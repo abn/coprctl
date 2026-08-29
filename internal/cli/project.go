@@ -186,12 +186,9 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Show a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(args[0])
 			if err != nil {
 				return err
-			}
-			if r.Owner == "" {
-				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
 			}
 			c, err := app.ReadClient()
 			if err != nil {
@@ -224,12 +221,9 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Create a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(args[0])
 			if err != nil {
 				return err
-			}
-			if r.Owner == "" {
-				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
 			}
 			c, err := app.Client()
 			if err != nil {

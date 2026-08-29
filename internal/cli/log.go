@@ -40,18 +40,15 @@ func newLogFailuresCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Extract the failing region from each failed chroot of a build",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			id, err := parseBuildID(args)
 			if err != nil {
 				return err
-			}
-			if r.Kind != ref.KindBuild {
-				return fmt.Errorf("expected a build id, got %q", args[0])
 			}
 			client, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
-			failures, err := logstream.NewTailer(client, nil).ExtractFailures(cmd.Context(), r.BuildID)
+			failures, err := logstream.NewTailer(client, nil).ExtractFailures(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -233,12 +230,9 @@ func newLogDetectiveCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Ask log-detective.com to explain a failing build log",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseBuildChrootRef(args)
 			if err != nil {
 				return err
-			}
-			if r.Kind != ref.KindBuildChroot {
-				return fmt.Errorf("expected a build/chroot reference, got %q", args[0])
 			}
 			ld := logdetective.New()
 			expl, err := ld.Explain(cmd.Context(), logdetective.ExplainRequest{

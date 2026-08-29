@@ -23,6 +23,7 @@ func newProjectCmd(app *App) *cobra.Command {
 
 	cmd.AddCommand(
 		newProjectListCmd(app, &out),
+		newProjectSearchCmd(app, &out),
 		newProjectGetCmd(app, &out),
 		newProjectCreateCmd(app, &out),
 		newProjectEditCmd(app, &out),

@@ -180,6 +180,13 @@ func newBuildReproduceCmd(app *App, out *outFlags) *cobra.Command {
 	return cmd
 }
 
+// buildGetResult enriches a build with its per-chroot detail for machine
+// output; "chroots" is the structured chroot list rather than the bare names.
+type buildGetResult struct {
+	*copr.Build
+	Chroots []copr.BuildChroot `json:"chroots"`
+}
+
 func newBuildGetCmd(app *App, out *outFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get BUILD_ID",
@@ -201,15 +208,31 @@ func newBuildGetCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			chroots, err := c.ListBuildChroots(cmd.Context(), r.BuildID)
+			if err != nil {
+				return err
+			}
 			if out.format == "auto" || out.format == "table" || out.format == "plain" {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("Project", b.OwnerName+"/"+b.ProjectName)
 				t.Add("Package", b.PackageName)
 				t.Add("State", b.State)
-				return renderResult(cmd, out, t)
+				if err := renderResult(cmd, out, t); err != nil {
+					return err
+				}
+				if len(chroots) == 0 {
+					return nil
+				}
+				sort.Slice(chroots, func(i, j int) bool { return chroots[i].Chroot < chroots[j].Chroot })
+				fmt.Fprintln(cmd.OutOrStdout())
+				ct := render.NewTable("CHROOT", "STATE")
+				for _, ch := range chroots {
+					ct.Add(ch.Chroot, ch.State)
+				}
+				return renderResult(cmd, out, ct)
 			}
-			return renderResult(cmd, out, b)
+			return renderResult(cmd, out, buildGetResult{Build: b, Chroots: chroots})
 		},
 	}
 	return cmd
@@ -323,6 +346,41 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 					t.Add("State", b.State)
 					t.Add("Backend", br.Name())
 					t.Add("SRPM", srpm)
+					if err := renderResult(cmd, out, t); err != nil {
+						return err
+					}
+				} else {
+					if err := renderResult(cmd, out, b); err != nil {
+						return err
+					}
+				}
+				if watch {
+					return watchBuild(cmd, app, b.ID)
+				}
+				return nil
+			}
+
+			// Upload builds take the SRPM as a multipart payload; the chroot
+			// set comes from the SRPM itself, so there is no per-chroot JSON.
+			if copr.SourceType(src.sourceType) == copr.SourceUpload {
+				if src.uploadPath == "" {
+					return cerr.Usage("--upload is required for upload source")
+				}
+				if _, statErr := os.Stat(src.uploadPath); statErr != nil {
+					return fmt.Errorf("path %q not found; pass a local SRPM", src.uploadPath)
+				}
+				if len(chroots) > 0 {
+					fmt.Fprintf(cmd.ErrOrStderr(), "note: upload builds build in the chroots declared by the SRPM; --chroot is ignored\n")
+				}
+				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, src.uploadPath, effDir)
+				if err != nil {
+					return err
+				}
+				if isHuman(out.format) {
+					t := render.NewTable("FIELD", "VALUE")
+					t.Add("ID", fmt.Sprintf("%d", b.ID))
+					t.Add("State", b.State)
+					t.Add("SRPM", src.uploadPath)
 					if err := renderResult(cmd, out, t); err != nil {
 						return err
 					}

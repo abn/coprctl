@@ -7,7 +7,6 @@ import (
 
 	"github.com/abn/coprctl/internal/chroot"
 	"github.com/abn/coprctl/internal/copr"
-	"github.com/abn/coprctl/internal/render"
 	"github.com/abn/coprctl/internal/state"
 )
 
@@ -52,18 +51,15 @@ func newChrootListCmd(app *App, out *outFlags) *cobra.Command {
 			if stateFilter != "" {
 				states = filterByState(states, stateFilter)
 			}
-			if isHuman(out.format) {
-				t := render.NewTable("CHROOT", "STATE", "COMMENT")
-				for _, s := range states {
-					t.Add(s.Name, string(s.State), chroots[s.Name])
-				}
-				return renderResult(cmd, out, t)
+			rows := make([][]string, 0, len(states))
+			for _, s := range states {
+				rows = append(rows, []string{s.Name, string(s.State), chroots[s.Name]})
 			}
 			filtered := copr.MockChroots{}
 			for _, s := range states {
 				filtered[s.Name] = chroots[s.Name]
 			}
-			return renderResult(cmd, out, filtered)
+			return renderTableRows(cmd, out, []string{"CHROOT", "STATE", "COMMENT"}, rows, filtered)
 		},
 	}
 	cmd.Flags().StringVar(&filter, "filter", "", "glob filter on chroot name")

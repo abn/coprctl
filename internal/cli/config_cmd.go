@@ -169,7 +169,18 @@ func newConfigShowCmd(app *App, out *outFlags) *cobra.Command {
 			if _, statErr := os.Stat(app.cfgPath); statErr == nil {
 				src = config.FromFile
 			}
-			if isHuman(out.format) {
+			return renderHumanOr(cmd, out, map[string]any{
+				"profile":       profileName(app),
+				"url":           prof.BaseURL(),
+				"instance":      config.DetectInstance(prof.BaseURL()),
+				"username":      prof.Username,
+				"login":         prof.Login,
+				"token_present": prof.Token != "" || prof.TokenCommand != "",
+				"token_expiry":  prof.TokenExpiry,
+				"config_file":   app.cfgPath,
+				"legacy_config": app.legacy,
+				"source":        src,
+			}, func() *render.Table {
 				t := render.NewTable("KEY", "VALUE", "SOURCE")
 				addRow := func(k, v string) {
 					if !reveal && (k == "token" || k == "login") {
@@ -192,19 +203,7 @@ func newConfigShowCmd(app *App, out *outFlags) *cobra.Command {
 				}
 				addRow("config file", app.cfgPath)
 				addRow("legacy config", app.legacy)
-				return renderResult(cmd, out, t)
-			}
-			return renderResult(cmd, out, map[string]any{
-				"profile":       profileName(app),
-				"url":           prof.BaseURL(),
-				"instance":      config.DetectInstance(prof.BaseURL()),
-				"username":      prof.Username,
-				"login":         prof.Login,
-				"token_present": prof.Token != "" || prof.TokenCommand != "",
-				"token_expiry":  prof.TokenExpiry,
-				"config_file":   app.cfgPath,
-				"legacy_config": app.legacy,
-				"source":        src,
+				return t
 			})
 		},
 	}

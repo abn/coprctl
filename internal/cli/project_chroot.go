@@ -54,14 +54,13 @@ func newProjectChrootListCmd(app *App, out *outFlags) *cobra.Command {
 				names = append(names, name)
 			}
 			sort.Strings(names)
-			if isHuman(out.format) {
+			return renderHumanOr(cmd, out, p.ChrootRepos, func() *render.Table {
 				t := render.NewTable("CHROOT", "STATE", "REPO")
 				for _, name := range names {
 					t.Add(name, string(chroot.Classify(name, true)), p.ChrootRepos[name])
 				}
-				return renderResult(cmd, out, t)
-			}
-			return renderResult(cmd, out, p.ChrootRepos)
+				return t
+			})
 		},
 	}
 	return cmd

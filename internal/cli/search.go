@@ -2,8 +2,6 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-
-	"github.com/abn/coprctl/internal/render"
 )
 
 func newProjectSearchCmd(app *App, out *outFlags) *cobra.Command {
@@ -20,14 +18,11 @@ func newProjectSearchCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
-				t := render.NewTable("FULL NAME", "DESCRIPTION")
-				for _, p := range projects {
-					t.Add(p.FullName, truncate(p.Description, 40))
-				}
-				return renderResult(cmd, out, t)
+			rows := make([][]string, 0, len(projects))
+			for _, p := range projects {
+				rows = append(rows, []string{p.FullName, truncate(p.Description, 40)})
 			}
-			return renderResult(cmd, out, projects)
+			return renderTableRows(cmd, out, []string{"FULL NAME", "DESCRIPTION"}, rows, projects)
 		},
 	}
 	return cmd

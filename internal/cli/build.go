@@ -70,7 +70,7 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 				}
 				failed := failedChroots(prev)
 				if len(failed) == 0 {
-					if isHuman(out.format) {
+					if isHuman(cmd, out.format) {
 						fmt.Fprintf(cmd.OutOrStdout(), "no failed chroots to rebuild for build %d\n", buildID)
 						return nil
 					}
@@ -89,16 +89,15 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			return renderHumanOr(cmd, out, b, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("State", b.State)
 				if onlyFailed != "" {
 					t.Add("Rebuilt chroots", fmt.Sprintf("%d", len(chroots)))
 				}
-				return renderResult(cmd, out, t)
-			}
-			return renderResult(cmd, out, b)
+				return t
+			})
 		},
 	}
 	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
@@ -157,7 +156,7 @@ func newBuildReproduceCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			if isHuman(cmd, out.format) {
 				fmt.Fprintln(cmd.OutOrStdout(), "# Reproduce this build locally at mock-level fidelity")
 				fmt.Fprintln(cmd.OutOrStdout(), "sudo dnf install copr-rpmbuild mock")
 				if rep.Recipe != "" {
@@ -208,7 +207,7 @@ func newBuildGetCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if out.format == "auto" || out.format == "table" || out.format == "plain" {
+			if isHuman(cmd, out.format) {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("Project", b.OwnerName+"/"+b.ProjectName)
@@ -253,14 +252,13 @@ func newBuildListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			return renderHumanOr(cmd, out, builds, func() *render.Table {
 				t := render.NewTable("ID", "PACKAGE", "STATE")
 				for _, b := range builds {
 					t.Add(fmt.Sprintf("%d", b.ID), b.PackageName, b.State)
 				}
-				return renderResult(cmd, out, t)
-			}
-			return renderResult(cmd, out, builds)
+				return t
+			})
 		},
 	}
 	cmd.Flags().IntVarP(&limit, "limit", "n", 20, "number of builds to list")
@@ -336,19 +334,15 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if isHuman(out.format) {
+				if err := renderHumanOr(cmd, out, b, func() *render.Table {
 					t := render.NewTable("FIELD", "VALUE")
 					t.Add("ID", fmt.Sprintf("%d", b.ID))
 					t.Add("State", b.State)
 					t.Add("Backend", br.Name())
 					t.Add("SRPM", srpm)
-					if err := renderResult(cmd, out, t); err != nil {
-						return err
-					}
-				} else {
-					if err := renderResult(cmd, out, b); err != nil {
-						return err
-					}
+					return t
+				}); err != nil {
+					return err
 				}
 				if watch {
 					return watchBuild(cmd, app, b.ID)
@@ -372,18 +366,14 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if isHuman(out.format) {
+				if err := renderHumanOr(cmd, out, b, func() *render.Table {
 					t := render.NewTable("FIELD", "VALUE")
 					t.Add("ID", fmt.Sprintf("%d", b.ID))
 					t.Add("State", b.State)
 					t.Add("SRPM", src.uploadPath)
-					if err := renderResult(cmd, out, t); err != nil {
-						return err
-					}
-				} else {
-					if err := renderResult(cmd, out, b); err != nil {
-						return err
-					}
+					return t
+				}); err != nil {
+					return err
 				}
 				if watch {
 					return watchBuild(cmd, app, b.ID)
@@ -402,17 +392,13 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			if err := renderHumanOr(cmd, out, b, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("State", b.State)
-				if err := renderResult(cmd, out, t); err != nil {
-					return err
-				}
-			} else {
-				if err := renderResult(cmd, out, b); err != nil {
-					return err
-				}
+				return t
+			}); err != nil {
+				return err
 			}
 			if watch {
 				return watchBuild(cmd, app, b.ID)

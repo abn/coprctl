@@ -95,7 +95,12 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 					perChroot[name] = files
 				}
 			}
-			if isHuman(out.format) {
+			return renderHumanOr(cmd, out, map[string]any{
+				"build_id":   r.BuildID,
+				"chroots":    names,
+				"downloaded": downloaded,
+				"dest":       dest,
+			}, func() *render.Table {
 				t := render.NewTable("CHROOT", "FILES")
 				for _, name := range names {
 					if len(perChroot[name]) == 0 {
@@ -103,13 +108,7 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 					}
 					t.Add(name, strings.Join(perChroot[name], ", "))
 				}
-				return renderResult(cmd, out, t)
-			}
-			return renderResult(cmd, out, map[string]any{
-				"build_id":   r.BuildID,
-				"chroots":    names,
-				"downloaded": downloaded,
-				"dest":       dest,
+				return t
 			})
 		},
 	}

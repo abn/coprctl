@@ -30,16 +30,13 @@ func newMonitorCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
-				t := render.NewTable("PACKAGE", "CHROOT", "STATE", "VERSION")
-				for _, row := range rows {
-					for ch, info := range row.Chroots {
-						t.Add(row.Name, ch, info.State, info.PkgVersion)
-					}
+			trows := make([][]string, 0)
+			for _, row := range rows {
+				for ch, info := range row.Chroots {
+					trows = append(trows, []string{row.Name, ch, info.State, info.PkgVersion})
 				}
-				return renderResult(cmd, &out, t)
 			}
-			return renderResult(cmd, &out, rows)
+			return renderTableRows(cmd, &out, []string{"PACKAGE", "CHROOT", "STATE", "VERSION"}, trows, rows)
 		},
 	}
 	out.bind(cmd)
@@ -91,7 +88,7 @@ func newStatusCmd(app *App) *cobra.Command {
 				})
 			}
 			if !quiet {
-				if isHuman(out.format) {
+				if err := renderHumanOr(cmd, &out, summary, func() *render.Table {
 					t := render.NewTable("PACKAGE", "STATE", "BUILD")
 					for _, s := range summary {
 						build := "-"
@@ -102,13 +99,9 @@ func newStatusCmd(app *App) *cobra.Command {
 						}
 						t.Add(s["package"].(string), s["state"].(string), build)
 					}
-					if err := renderResult(cmd, &out, t); err != nil {
-						return err
-					}
-				} else {
-					if err := renderResult(cmd, &out, summary); err != nil {
-						return err
-					}
+					return t
+				}); err != nil {
+					return err
 				}
 			}
 			if unhealthy > 0 {

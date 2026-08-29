@@ -42,14 +42,11 @@ func newProjectPermissionListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
-				t := render.NewTable("USER", "ADMIN", "BUILDER")
-				for _, user := range render.SortedKeys(perms) {
-					t.Add(user, string(perms[user].Admin), string(perms[user].Builder))
-				}
-				return renderResult(cmd, out, t)
+			rows := make([][]string, 0, len(perms))
+			for _, user := range render.SortedKeys(perms) {
+				rows = append(rows, []string{user, string(perms[user].Admin), string(perms[user].Builder)})
 			}
-			return renderResult(cmd, out, perms)
+			return renderTableRows(cmd, out, []string{"USER", "ADMIN", "BUILDER"}, rows, perms)
 		},
 	}
 	bindRefCompletion(app, cmd)

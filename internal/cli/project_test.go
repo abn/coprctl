@@ -1,9 +1,17 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/abn/coprctl/internal/copr"
 )
 
 func TestResolveListOwner(t *testing.T) {
@@ -71,5 +79,37 @@ func TestGithubRepoLinks(t *testing.T) {
 	home2, contact2 := githubRepoLinks("https://github.com/abn/coprctl")
 	if home2 != "https://github.com/abn/coprctl" || contact2 != "https://github.com/abn/coprctl/issues" {
 		t.Errorf("url input = %q, %q", home2, contact2)
+	}
+}
+
+// TestProjectListPipedEmitsMachineJSON pins the auto resolution: piped (non-
+// TTY) output must render the machine struct, not a table, so the output stays
+// parseable by tools like jq.
+func TestProjectListPipedEmitsMachineJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api_3/project/list" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"items": []map[string]any{
+				{"name": "widgets", "ownername": "acme", "full_name": "acme/widgets", "description": "Widget builder"},
+			},
+			"meta": map[string]any{"limit": 100, "offset": 0, "order": "id", "order_type": "ASC"},
+		})
+	}))
+	defer srv.Close()
+
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newProjectCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"list", "acme"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"full_name": "acme/widgets"`) {
+		t.Errorf("piped auto output should be machine JSON, got:\n%s", buf.String())
 	}
 }

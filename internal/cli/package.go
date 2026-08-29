@@ -221,14 +221,13 @@ func newPackageGetCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
+			return renderHumanOr(cmd, out, p, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("Name", p.Name)
 				t.Add("Source type", string(p.SourceType))
 				t.Add("Auto rebuild", fmt.Sprintf("%v", p.AutoRebuild))
-				return renderResult(cmd, out, t)
-			}
-			return renderResult(cmd, out, p)
+				return t
+			})
 		},
 	}
 	return cmd
@@ -280,14 +279,11 @@ func newPackageListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if isHuman(out.format) {
-				t := render.NewTable("NAME", "TYPE", "AUTO-REBUILD")
-				for _, p := range pkgs {
-					t.Add(p.Name, string(p.SourceType), fmt.Sprintf("%v", p.AutoRebuild))
-				}
-				return renderResult(cmd, out, t)
+			rows := make([][]string, 0, len(pkgs))
+			for _, p := range pkgs {
+				rows = append(rows, []string{p.Name, string(p.SourceType), fmt.Sprintf("%v", p.AutoRebuild)})
 			}
-			return renderResult(cmd, out, pkgs)
+			return renderTableRows(cmd, out, []string{"NAME", "TYPE", "AUTO-REBUILD"}, rows, pkgs)
 		},
 	}
 	return cmd

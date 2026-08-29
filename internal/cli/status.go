@@ -70,6 +70,7 @@ func newStatusCmd(app *App) *cobra.Command {
 			unhealthy := 0
 			summary := []map[string]any{}
 			for _, p := range pkgs {
+				// A total cap of 1 fetches only the latest build, in one request.
 				builds, err := c.ListBuilds(cmd.Context(), r.Owner, r.Project, p.Name, 1)
 				if err != nil {
 					continue

@@ -87,11 +87,20 @@ The RPM **Release** field starts at `1` and is bumped manually:
 2. Commit and open a pull request. Use a conventional-commit message such as
    `fix(packaging): ...` so it is captured correctly.
 3. Squash-merge the PR.
-4. Copr auto-rebuilds from `main` and produces `coprctl-<version>-2.fcNN`.
+4. Push a tag in `N-V-R` form: `coprctl-<version>-<release>` (for example
+   `coprctl-0.4.7-2`). The webhook is tag-only, so a plain branch push does
+   not rebuild; the tag is the trigger.
 
-The semantic version and the `v<semver>` tag are unchanged. NVR releases are
-common and inexpensive; there is no need to bump the version for a packaging
-fix.
+The tag fires the same package-scoped webhook as a release tag and Copr
+rebuilds the package, producing `coprctl-<version>-2.fcNN`. The semantic
+version and the `v<semver>` tag are unchanged. NVR releases are common and
+inexpensive; there is no need to bump the version for a packaging fix.
+
+Why the tag: Copr matches a tag to a package either through the package-scoped
+webhook URL (which names the package) or through the `N-V`/`N-V-R` shape of
+the tag itself. A bare `v<semver>` tag cannot be reused for an NVR release, so
+the `N-V-R` form carries both the version and the release that the webhook
+should build.
 
 ## Packaging-only changes
 
@@ -101,7 +110,7 @@ flow. Decide which release path applies:
 
 - If the change only affects how the package is built (a build flag, a
   dependency, a `Source0` change), it is an **NVR release**: bump `Release:`,
-  merge, and let Copr rebuild.
+  merge, and push the `N-V-R` tag so Copr rebuilds.
 - If the change is a user-facing feature or fix (new command, changed behavior),
   it is a **normal release**: merge with `feat:`/`fix:` and let Release Please
   open the version-bumping release PR.

@@ -7,6 +7,26 @@ import (
 	"github.com/abn/coprctl/internal/copr"
 )
 
+func TestSpecFilename(t *testing.T) {
+	tests := []struct {
+		name  string
+		build copr.Build
+		want  string
+	}{
+		{name: "package-scoped build", build: copr.Build{PackageName: "coprctl"}, want: "coprctl.spec"},
+		{name: "project-scoped build falls back to project", build: copr.Build{ProjectName: "coprctl"}, want: "coprctl.spec"},
+		{name: "both set prefers package", build: copr.Build{PackageName: "pkg", ProjectName: "proj"}, want: "pkg.spec"},
+		{name: "neither set yields bare spec", build: copr.Build{}, want: ".spec"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := specFilename(tt.build); got != tt.want {
+				t.Errorf("specFilename(%+v) = %q, want %q", tt.build, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFilterBuildChroots(t *testing.T) {
 	bp := copr.BuiltPackages{
 		"fedora-rawhide-x86_64": {},

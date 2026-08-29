@@ -136,6 +136,35 @@ func (m *Manifest) Validate() []ValidationIssue {
 		issues = append(issues, ValidationIssue{Path: "kind", Level: "error",
 			Detail: fmt.Sprintf("unsupported kind %q", m.Kind)})
 	}
+	// The Copr client does not model these settings, so a manifest that sets
+	// them would silently drift. Flag them as warnings rather than errors: the
+	// manifest is well-formed, but the declared state is not fully applied.
+	s := &m.Spec.Settings
+	for _, u := range []struct {
+		path    string
+		present bool
+	}{
+		{"spec.settings.appstream", s.Appstream},
+		{"spec.settings.autoPrune", s.AutoPrune},
+		{"spec.settings.followFedoraBranching", s.FollowFedoraBranching},
+		{"spec.settings.moduleHotfixes", s.ModuleHotfixes},
+		{"spec.settings.multilib", s.Multilib},
+		{"spec.settings.fedoraReview", s.FedoraReview},
+		{"spec.settings.isolation", s.Isolation != ""},
+		{"spec.settings.bootstrap", s.Bootstrap != ""},
+		{"spec.settings.repoPriority", s.RepoPriority != 0},
+		{"spec.settings.deleteAfterDays", s.DeleteAfterDays != nil},
+		{"spec.settings.additionalRepos", len(s.AdditionalRepos) > 0},
+	} {
+		if u.present {
+			issues = append(issues, ValidationIssue{Path: u.path, Level: "warning",
+				Detail: "not supported by the Copr client; ignored on apply"})
+		}
+	}
+	if s.UnlistedOnHomepage {
+		issues = append(issues, ValidationIssue{Path: "spec.settings.unlistedOnHomepage", Level: "warning",
+			Detail: "only applied on project creation; the edit API has no field"})
+	}
 	for i, p := range m.Spec.Packages {
 		path := fmt.Sprintf("spec.packages[%d]", i)
 		if p.Name == "" {

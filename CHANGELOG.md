@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.5.0](https://github.com/abn/coprctl/compare/v0.4.7...v0.5.0) (2026-08-29)
+
+
+### Features
+
+* add cache clear command ([#20](https://github.com/abn/coprctl/issues/20)) ([b68392b](https://github.com/abn/coprctl/commit/b68392b148de4b6169743079aee242cafddcbd28))
+* close daily-driver gaps (permissions, build download, chroot config, search) ([#21](https://github.com/abn/coprctl/issues/21)) ([6ceed89](https://github.com/abn/coprctl/commit/6ceed890edb4f0a05595bbde3a446b635ba3b849))
+
+
+### Bug Fixes
+
+* **apply:** apply and warn on previously ignored manifest fields ([#26](https://github.com/abn/coprctl/issues/26)) ([d3432a2](https://github.com/abn/coprctl/commit/d3432a25e326a81ed3663f2b07348aaa96b45873))
+* **apply:** send webhook auto-rebuild when declared ([#25](https://github.com/abn/coprctl/issues/25)) ([9b507d2](https://github.com/abn/coprctl/commit/9b507d2147ea8db1210b14c8695feaca74313c7a))
+* **cli:** remove no-op flags and dead stubs ([#28](https://github.com/abn/coprctl/issues/28)) ([3998a50](https://github.com/abn/coprctl/commit/3998a50a6ace54e15ce8bb6b035ab4779196b9b9))
+* **copr:** cap list results at the requested limit ([#23](https://github.com/abn/coprctl/issues/23)) ([efd7073](https://github.com/abn/coprctl/commit/efd70739e73f77f176184f3959027bc6d16a2a4b))
+* **copr:** consistent error mapping and dead code ([#30](https://github.com/abn/coprctl/issues/30)) ([04993be](https://github.com/abn/coprctl/commit/04993becc6141d4885c0334e2cbdee9ddcc3dc0f))
+* **copr:** thread context through the read path ([#24](https://github.com/abn/coprctl/issues/24)) ([393db3a](https://github.com/abn/coprctl/commit/393db3adc514115c62eb0c5cf928d47191f3c56b))
+* **log:** accumulate the incremental tail offset ([#22](https://github.com/abn/coprctl/issues/22)) ([c0762a7](https://github.com/abn/coprctl/commit/c0762a77eaf8ed5ecff4f6235516e761fa849d7f))
+* **state:** preserve webhook secret and hook id across writes ([#27](https://github.com/abn/coprctl/issues/27)) ([7658d7f](https://github.com/abn/coprctl/commit/7658d7f7c9b5fc6d4af0d4ce15ee31cd8596596b))
+* surface swallowed errors ([#29](https://github.com/abn/coprctl/issues/29)) ([f80e434](https://github.com/abn/coprctl/commit/f80e434b91140b0ac3bde63b2ef2813939269788))
+
+
+### Refactoring
+
+* **cli:** shared flag-binding helpers ([#35](https://github.com/abn/coprctl/issues/35)) ([8c6854e](https://github.com/abn/coprctl/commit/8c6854e02ece1842a0d4106343f70ad944986b58))
+* **cli:** shared reference-parsing helpers ([#33](https://github.com/abn/coprctl/issues/33)) ([685f34a](https://github.com/abn/coprctl/commit/685f34ac9a013dcc719e7b9c7048bf6235ff2862))
+* **cli:** unify command-tree walkers ([#36](https://github.com/abn/coprctl/issues/36)) ([91ae543](https://github.com/abn/coprctl/commit/91ae543066c04496898fd42ffc0b84b1e7ce5ed3))
+* **cli:** unify human-or-machine rendering ([#32](https://github.com/abn/coprctl/issues/32)) ([3cda49b](https://github.com/abn/coprctl/commit/3cda49be7e4b6b22d9c51775e0f9d3f9f9e7ed81))
+* **copr:** shared pagination and query helpers ([#34](https://github.com/abn/coprctl/issues/34)) ([12c3bcf](https://github.com/abn/coprctl/commit/12c3bcf7e2ca6cb8bd0077264c5fdf9ac7a7d760))
+* **copr:** unify the request pipeline ([#31](https://github.com/abn/coprctl/issues/31)) ([f6fe046](https://github.com/abn/coprctl/commit/f6fe046e8bc88bd2fda9e35f162074b055ad1305))
+
+
+### Documentation
+
+* document the tag trigger for NVR releases ([#18](https://github.com/abn/coprctl/issues/18)) ([0682410](https://github.com/abn/coprctl/commit/06824100d397868d60b0684c3e2548f94c816a2c))
+
+
+### Continuous Integration
+
+* serialize release runs to avoid release-please ref race ([#37](https://github.com/abn/coprctl/issues/37)) ([b2cea20](https://github.com/abn/coprctl/commit/b2cea202daae1e416ca61bd369a97cd62384e46c))
+
 ## [0.4.7](https://github.com/abn/coprctl/compare/v0.4.6...v0.4.7) (2026-08-28)
 
 

@@ -51,31 +51,26 @@ type commandSchema struct {
 }
 
 func buildSchema(root *cobra.Command) *commandSchema {
-	return walk(root, "")
-}
-
-func walk(c *cobra.Command, prefix string) *commandSchema {
-	path := prefix + " " + c.Use
-	sc := &commandSchema{Path: prefix, Use: c.Use, Short: c.Short}
-	for _, sub := range c.Commands() {
-		if !sub.IsAvailableCommand() {
-			continue
+	rootSC := &commandSchema{Path: "", Use: root.Use, Short: root.Short}
+	nodes := map[*cobra.Command]*commandSchema{root: rootSC}
+	WalkCommands(root, func(path []string, c *cobra.Command) {
+		if c == root {
+			return
 		}
-		sc.Sub = append(sc.Sub, walk(sub, path))
-	}
-	return sc
+		parent := nodes[c.Parent()]
+		sc := &commandSchema{Path: parent.Path + " " + parent.Use, Use: c.Use, Short: c.Short}
+		nodes[c] = sc
+		parent.Sub = append(parent.Sub, sc)
+	})
+	return rootSC
 }
 
 func walkSchema(c *cobra.Command, root *cobra.Command, depth int) {
-	indent := ""
-	for i := 0; i < depth; i++ {
-		indent += "  "
-	}
-	fmt.Fprintf(root.OutOrStdout(), "%s- `%s` - %s\n", indent, c.CommandPath(), c.Short)
-	for _, sub := range c.Commands() {
-		if !sub.IsAvailableCommand() {
-			continue
+	WalkCommands(c, func(path []string, sub *cobra.Command) {
+		indent := ""
+		for i := 0; i < depth+len(path); i++ {
+			indent += "  "
 		}
-		walkSchema(sub, root, depth+1)
-	}
+		fmt.Fprintf(root.OutOrStdout(), "%s- `%s` - %s\n", indent, sub.CommandPath(), sub.Short)
+	})
 }

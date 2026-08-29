@@ -36,6 +36,7 @@ func newBuildCmd(app *App) *cobra.Command {
 		newBuildDeleteCmd(app, &out),
 		newBuildReproduceCmd(app, &out),
 		newBuildSrpmCmd(app, &out),
+		newBuildDownloadCmd(app, &out),
 	)
 	return cmd
 }

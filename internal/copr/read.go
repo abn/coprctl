@@ -42,11 +42,12 @@ func (c *Client) GetProject(ctx context.Context, owner, project string) (*Projec
 	return &p, nil
 }
 
-// ListProjects lists projects for an owner, paginating internally.
+// pageSize is the per-request page size for paginated list methods.
+const pageSize = 100
+
+// ListProjects lists projects for an owner, paginating internally. limit is
+// the maximum number of projects to return; limit <= 0 returns everything.
 func (c *Client) ListProjects(ctx context.Context, owner string, limit int) ([]Project, error) {
-	if limit <= 0 {
-		limit = 100
-	}
 	var all []Project
 	offset := 0
 	for {
@@ -54,17 +55,23 @@ func (c *Client) ListProjects(ctx context.Context, owner string, limit int) ([]P
 		if owner != "" {
 			q.Set("ownername", owner)
 		}
-		q.Set("limit", fmt.Sprintf("%d", limit))
+		q.Set("limit", fmt.Sprintf("%d", pageSize))
 		q.Set("offset", fmt.Sprintf("%d", offset))
 		var pl ProjectList
 		if err := c.Get("/project/list", q, &pl); err != nil {
 			return nil, err
 		}
 		all = append(all, pl.Items...)
-		if len(pl.Items) < limit {
+		if len(pl.Items) == 0 {
+			break
+		}
+		if limit > 0 && len(all) >= limit {
 			break
 		}
 		offset += len(pl.Items)
+	}
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
 	}
 	return all, nil
 }
@@ -149,6 +156,14 @@ func (t *Timestamp) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(b, &t.Unix)
 }
 
+// MarshalJSON emits the unix epoch, matching the API list format.
+func (t Timestamp) MarshalJSON() ([]byte, error) {
+	if !t.IsSet {
+		return []byte("null"), nil
+	}
+	return json.Marshal(t.Unix)
+}
+
 // Time returns the timestamp as a time.Time.
 func (t Timestamp) Time() time.Time {
 	if !t.IsSet {
@@ -182,11 +197,9 @@ type BuildList struct {
 	Meta  Meta    `json:"meta"`
 }
 
-// ListBuilds lists builds, paginating internally.
+// ListBuilds lists builds, paginating internally. limit is the maximum
+// number of builds to return; limit <= 0 returns everything.
 func (c *Client) ListBuilds(ctx context.Context, owner, project, pkg string, limit int) ([]Build, error) {
-	if limit <= 0 {
-		limit = 100
-	}
 	var all []Build
 	offset := 0
 	for {
@@ -200,17 +213,23 @@ func (c *Client) ListBuilds(ctx context.Context, owner, project, pkg string, lim
 		if pkg != "" {
 			q.Set("packagename", pkg)
 		}
-		q.Set("limit", fmt.Sprintf("%d", limit))
+		q.Set("limit", fmt.Sprintf("%d", pageSize))
 		q.Set("offset", fmt.Sprintf("%d", offset))
 		var bl BuildList
 		if err := c.Get("/build/list", q, &bl); err != nil {
 			return nil, err
 		}
 		all = append(all, bl.Items...)
-		if len(bl.Items) < limit {
+		if len(bl.Items) == 0 {
+			break
+		}
+		if limit > 0 && len(all) >= limit {
 			break
 		}
 		offset += len(bl.Items)
+	}
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
 	}
 	return all, nil
 }

@@ -3,6 +3,7 @@ package copr
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -42,42 +43,113 @@ func TestListMockChroots(t *testing.T) {
 	}
 }
 
-func TestPaginationInternal(t *testing.T) {
-	// Server returns pages of 2 until exhausted (5 items total). The client
-	// must paginate internally until an empty page.
-	items := []Project{
-		{ID: 1, Name: "a", Ownername: "owner"},
-		{ID: 2, Name: "b", Ownername: "owner"},
-		{ID: 3, Name: "c", Ownername: "owner"},
-		{ID: 4, Name: "d", Ownername: "owner"},
-		{ID: 5, Name: "e", Ownername: "owner"},
-	}
-	pageSize := 2
-	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+// paginationServer serves `total` items in pages of `pageSize`, honoring the
+// offset query param, regardless of the limit the client requests.
+func paginationServer[T any](t *testing.T, total, pageSize int, mk func(int) T) *httptest.Server {
+	t.Helper()
+	return testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		off := 0
 		if v := r.URL.Query().Get("offset"); v != "" {
 			off, _ = strconv.Atoi(v)
 		}
 		end := off + pageSize
-		if end > len(items) {
-			end = len(items)
+		if end > total {
+			end = total
 		}
-		page := items[off:end]
-		if page == nil {
-			page = []Project{}
+		page := []T{}
+		for i := off; i < end; i++ {
+			page = append(page, mk(i+1))
 		}
-		json.NewEncoder(w).Encode(ProjectList{
-			Items: page,
-			Meta:  Meta{Limit: pageSize, Offset: off, Order: "id", OrderType: "ASC"},
+		json.NewEncoder(w).Encode(map[string]any{
+			"items": page,
+			"meta":  Meta{Limit: pageSize, Offset: off, Order: "id", OrderType: "ASC"},
 		})
 	})
+}
+
+func mkProject(i int) Project {
+	return Project{ID: i, Name: fmt.Sprintf("p%d", i), Ownername: "owner"}
+}
+
+func mkBuild(i int) Build {
+	return Build{ID: i, PackageName: fmt.Sprintf("p%d", i), State: "succeeded"}
+}
+
+func TestPaginationInternal(t *testing.T) {
+	// The server has 10 projects in pages of 2, so it can always serve more
+	// than the requested total. The client must stop at the total cap.
+	srv := paginationServer(t, 10, 2, mkProject)
 	c := New(srv.URL, nil)
-	got, err := c.ListProjects(context.Background(), "owner", pageSize)
+
+	got, err := c.ListProjects(context.Background(), "owner", 5)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 5 {
-		t.Fatalf("got %d projects, want 5", len(got))
+		t.Fatalf("got %d projects, want 5 (total cap)", len(got))
+	}
+	if got[0].ID != 1 || got[4].ID != 5 {
+		t.Fatalf("got ids %d..%d, want 1..5", got[0].ID, got[4].ID)
+	}
+
+	// limit <= 0 means "all".
+	got, err = c.ListProjects(context.Background(), "owner", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 10 {
+		t.Fatalf("got %d projects, want 10 (all)", len(got))
+	}
+}
+
+func TestListProjectsStopsOnEmptyPage(t *testing.T) {
+	srv := paginationServer(t, 0, 2, mkProject)
+	c := New(srv.URL, nil)
+	got, err := c.ListProjects(context.Background(), "owner", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %d projects, want 0", len(got))
+	}
+}
+
+func TestListBuildsTotalCap(t *testing.T) {
+	srv := paginationServer(t, 10, 2, mkBuild)
+	c := New(srv.URL, nil)
+	got, err := c.ListBuilds(context.Background(), "owner", "proj", "", 3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d builds, want 3 (total cap)", len(got))
+	}
+	if got[0].ID != 1 || got[2].ID != 3 {
+		t.Fatalf("got ids %d..%d, want 1..3", got[0].ID, got[2].ID)
+	}
+}
+
+func TestListBuildsAll(t *testing.T) {
+	srv := paginationServer(t, 10, 2, mkBuild)
+	c := New(srv.URL, nil)
+	got, err := c.ListBuilds(context.Background(), "owner", "proj", "", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 10 {
+		t.Fatalf("got %d builds, want 10 (all)", len(got))
+	}
+}
+
+func TestListBuildsStopsOnEmptyPage(t *testing.T) {
+	srv := paginationServer(t, 0, 2, mkBuild)
+	c := New(srv.URL, nil)
+	got, err := c.ListBuilds(context.Background(), "owner", "proj", "", -1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %d builds, want 0", len(got))
 	}
 }
 

@@ -34,6 +34,8 @@ Generated from the command registry; every command below exists.
     - `coprctl build srpm` - Build a source RPM from a local spec (container, native, or mock)
     - `coprctl build submit` - Submit a build
     - `coprctl build watch` - Watch a build until it reaches a terminal state
+  - `coprctl cache` - Manage local caches
+    - `coprctl cache clear` - Clear the local chroot catalog cache
   - `coprctl chroot` - The instance chroot catalog (mock chroots)
     - `coprctl chroot list` - List the chroot catalog
   - `coprctl compat` - Translate a copr-cli invocation to coprctl

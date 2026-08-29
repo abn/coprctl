@@ -69,10 +69,25 @@ func (c *ChrootCache) Store(ch copr.MockChroots) error {
 	if c == nil || c.dir == "" {
 		return nil
 	}
+	if err := os.MkdirAll(c.dir, 0o700); err != nil {
+		return err
+	}
 	cf := chrootFile{Updated: time.Now(), Chroots: ch}
 	data, err := json.Marshal(&cf)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(c.dir, "chroots.json"), data, 0o600)
+}
+
+// Clear removes the cached catalog so the next read refetches it.
+func (c *ChrootCache) Clear() error {
+	if c == nil || c.dir == "" {
+		return nil
+	}
+	err := os.Remove(filepath.Join(c.dir, "chroots.json"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

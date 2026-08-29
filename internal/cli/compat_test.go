@@ -11,7 +11,10 @@ func TestMigrateArgs(t *testing.T) {
 		{[]string{"create", "quadzero/aetherpak", "--chroot", "fedora-42-x86_64"}, "project create quadzero/aetherpak --chroot fedora-42-x86_64"},
 		{[]string{"buildscm", "quadzero/aetherpak", "--clone-url", "https://example.com"}, "build submit --source scm quadzero/aetherpak --clone-url https://example.com"},
 		{[]string{"list-packages", "quadzero/aetherpak"}, "package list quadzero/aetherpak"},
-		{[]string{"whoami"}, "auth whoami"},
+		{[]string{"whoami"}, "auth status"},
+		{[]string{"list-permissions", "quadzero/aetherpak"}, "project permission list quadzero/aetherpak"},
+		{[]string{"download-build", "123"}, "build download 123"},
+		{[]string{"mock-config", "quadzero/aetherpak", "fedora-42-x86_64"}, "project chroot get quadzero/aetherpak fedora-42-x86_64"},
 		{[]string{"new-webhook-secret", "quadzero/aetherpak"}, "integration rotate-secret quadzero/aetherpak"},
 		{[]string{"nonsense-verb"}, ""},
 	}

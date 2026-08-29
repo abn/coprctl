@@ -27,6 +27,7 @@ Generated from the command registry; every command below exists.
   - `coprctl build` - Manage Copr builds
     - `coprctl build cancel` - Cancel a build
     - `coprctl build delete` - Delete one or more builds
+    - `coprctl build download` - Download a build's artifacts
     - `coprctl build get` - Show a build
     - `coprctl build list` - List builds for a project
     - `coprctl build rebuild` - Rebuild a package from its stored source definition
@@ -77,6 +78,7 @@ Generated from the command registry; every command below exists.
     - `coprctl project chroot` - Manage project chroots
       - `coprctl project chroot disable` - Disable chroots on a project
       - `coprctl project chroot enable` - Enable chroots on a project (additive)
+      - `coprctl project chroot get` - Show the generated build config for a project chroot
       - `coprctl project chroot list` - List the chroots enabled on a project
     - `coprctl project create` - Create a project
     - `coprctl project delete` - Delete a project
@@ -84,7 +86,13 @@ Generated from the command registry; every command below exists.
     - `coprctl project fork` - Fork a project
     - `coprctl project get` - Show a project
     - `coprctl project list` - List projects
+    - `coprctl project permission` - Manage project permissions
+      - `coprctl project permission can-build-in` - Check whether a user can build in a project
+      - `coprctl project permission list` - List the permissions of a project
+      - `coprctl project permission request` - Request permissions on a project
+      - `coprctl project permission set` - Set a user's permissions on a project
     - `coprctl project regenerate-repos` - Regenerate repository metadata for a project
+    - `coprctl project search` - Search projects by name or description
   - `coprctl schema` - Emit the command tree as JSON or markdown
   - `coprctl skill` - Print or install bundled agent skills
     - `coprctl skill install` - Install a skill into an agent skills directory

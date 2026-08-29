@@ -164,6 +164,7 @@ func Root(app *App) *cobra.Command {
 		newCompletionCmd(),
 		newDoctorCmd(app),
 		newSchemaCmd(app),
+		newCacheCmd(app),
 		newVersionCmd(),
 	)
 	return root

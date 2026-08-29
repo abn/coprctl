@@ -252,6 +252,7 @@ func applyManifest(ctx context.Context, app *App, m *manifest.Manifest, prune bo
 		if err := c.UpsertPackage(ctx, copr.PackageCreate{
 			Owner: owner, Project: project, Name: p.Name,
 			SourceType: st, Source: src, AutoRebuild: p.AutoRebuild,
+			SetAutoRebuild: true,
 		}); err != nil {
 			return err
 		}

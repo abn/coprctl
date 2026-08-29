@@ -74,6 +74,46 @@ func TestCreatePackageFieldName(t *testing.T) {
 	}
 }
 
+func TestCreatePackageAutoRebuildPayload(t *testing.T) {
+	var seenWebhookRebuild *bool
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if v, ok := body["webhook_rebuild"]; ok {
+			b := v.(bool)
+			seenWebhookRebuild = &b
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "pkgo"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+
+	// SetAutoRebuild true must emit webhook_rebuild with the declared value.
+	if err := c.CreatePackage(context.Background(), PackageCreate{
+		Owner: "owner", Project: "proj", Name: "pkgo",
+		SourceType: SourceSCM, Source: map[string]any{"clone_url": "https://example.com/r.git"},
+		AutoRebuild: true, SetAutoRebuild: true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if seenWebhookRebuild == nil || !*seenWebhookRebuild {
+		t.Errorf("webhook_rebuild not sent when SetAutoRebuild is true")
+	}
+
+	// SetAutoRebuild false (an edit not touching the flag) must not clobber it.
+	seenWebhookRebuild = nil
+	if err := c.CreatePackage(context.Background(), PackageCreate{
+		Owner: "owner", Project: "proj", Name: "pkgo",
+		SourceType: SourceSCM, Source: map[string]any{"clone_url": "https://example.com/r.git"},
+		AutoRebuild: true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if seenWebhookRebuild != nil {
+		t.Errorf("webhook_rebuild sent when SetAutoRebuild is false: %v", *seenWebhookRebuild)
+	}
+}
+
 func TestSubmitBuildPayload(t *testing.T) {
 	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api_3/build/create/scm" {

@@ -52,7 +52,7 @@ func (c *Client) SetUserAgent(ua string) { c.ua = ua }
 
 // Get performs an authenticated GET and decodes the JSON body into v.
 func (c *Client) Get(ctx context.Context, path string, query url.Values, v any) error {
-	resp, err := c.do(ctx, "GET", path, query, nil)
+	resp, err := c.request(ctx, http.MethodGet, path, query, nil, "")
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ type AuthIdentity struct {
 // returns the authenticated user's identity. A valid token returns nil with
 // the identity; an invalid token returns an auth error.
 func (c *Client) AuthCheck(ctx context.Context) (*AuthIdentity, error) {
-	resp, err := c.do(ctx, "GET", "/auth-check", nil, nil)
+	resp, err := c.request(ctx, http.MethodGet, "/auth-check", nil, nil, "")
 	if err != nil {
 		return nil, err
 	}
@@ -82,8 +82,10 @@ func (c *Client) AuthCheck(ctx context.Context) (*AuthIdentity, error) {
 	return &id, nil
 }
 
-// Do performs a request and returns the raw response. Caller closes the body.
-func (c *Client) do(ctx context.Context, method, path string, query url.Values, body io.Reader) (*http.Response, error) {
+// request performs an authenticated request to the API. path is relative to
+// the /api_3 base; query is appended as URL parameters. Returns the raw
+// response; the caller closes the body.
+func (c *Client) request(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string) (*http.Response, error) {
 	u := c.BaseURL + "/api_3" + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
@@ -92,14 +94,45 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if err != nil {
 		return nil, cerr.Transport("failed to build request").Wrap(err)
 	}
-	req.Header.Set("User-Agent", c.ua)
 	req.Header.Set("Accept", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	return c.send(req)
+}
+
+// requestURL performs an authenticated request to an absolute URL, used by
+// DownloadFile for non-API downloads. No status mapping is applied; the caller
+// decides what an error status means.
+func (c *Client) requestURL(ctx context.Context, method, fullURL string, body io.Reader, contentType string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, fullURL, body)
+	if err != nil {
+		return nil, cerr.Transport("failed to build request").Wrap(err)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	return c.exec(req)
+}
+
+// exec runs a prepared request, applying UA and auth.
+func (c *Client) exec(req *http.Request) (*http.Response, error) {
+	req.Header.Set("User-Agent", c.ua)
 	if c.auth != nil {
 		c.auth(req)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, cerr.Transport("request failed").Wrap(err)
+	}
+	return resp, nil
+}
+
+// send runs a prepared request, mapping error statuses to structured errors.
+func (c *Client) send(req *http.Request) (*http.Response, error) {
+	resp, err := c.exec(req)
+	if err != nil {
+		return nil, err
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()

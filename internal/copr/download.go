@@ -48,17 +48,9 @@ func BuiltPackageFilename(p BuiltPackage) string {
 // with auth applied, mirroring UploadBuild. A 404 is returned as
 // ErrFileNotFound so the caller can warn and continue.
 func (c *Client) DownloadFile(ctx context.Context, url, destPath string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, err := c.requestURL(ctx, http.MethodGet, url, nil, "")
 	if err != nil {
-		return cerr.Transport("failed to build request").Wrap(err)
-	}
-	req.Header.Set("User-Agent", c.ua)
-	if c.auth != nil {
-		c.auth(req)
-	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return cerr.Transport("download failed").Wrap(err)
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {

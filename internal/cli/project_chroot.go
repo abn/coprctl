@@ -83,7 +83,7 @@ func setChroots(c *copr.Client, ctx context.Context, owner, project string, chro
 }
 
 func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
-	var chroots []string
+	var chroots *[]string
 	cmd := &cobra.Command{
 		Use:   "enable REF --chroot CHROOT...",
 		Short: "Enable chroots on a project (additive)",
@@ -93,7 +93,7 @@ func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(chroots) == 0 {
+			if len(*chroots) == 0 {
 				return cerr.Usage("--chroot is required")
 			}
 			c, err := app.Client()
@@ -109,7 +109,7 @@ func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
 				seen[name] = true
 			}
 			next := existing
-			for _, ch := range chroots {
+			for _, ch := range *chroots {
 				if !seen[ch] {
 					next = append(next, ch)
 				}
@@ -118,18 +118,17 @@ func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
 			if err := setChroots(c, cmd.Context(), r.Owner, r.Project, next); err != nil {
 				return err
 			}
-			return renderResult(cmd, out, map[string]any{"enabled": chroots, "chroots": next})
+			return renderResult(cmd, out, map[string]any{"enabled": *chroots, "chroots": next})
 		},
 	}
-	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to enable")
-	bindChrootCompletion(app, cmd, "chroot")
+	chroots = addChrootFlag(app, cmd, "chroots to enable", true)
 	bindRefCompletion(app, cmd)
 	return cmd
 }
 
 func newProjectChrootDisableCmd(app *App, out *outFlags) *cobra.Command {
-	var chroots []string
-	var yes bool
+	var chroots *[]string
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "disable REF --chroot CHROOT...",
 		Short: "Disable chroots on a project",
@@ -139,10 +138,10 @@ func newProjectChrootDisableCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(chroots) == 0 {
+			if len(*chroots) == 0 {
 				return cerr.Usage("--chroot is required")
 			}
-			if !yes {
+			if !*yes {
 				return confirmRequired("--yes")
 			}
 			c, err := app.Client()
@@ -154,7 +153,7 @@ func newProjectChrootDisableCmd(app *App, out *outFlags) *cobra.Command {
 				return err
 			}
 			drop := map[string]bool{}
-			for _, ch := range chroots {
+			for _, ch := range *chroots {
 				drop[ch] = true
 			}
 			remaining := make([]string, 0, len(existing))
@@ -169,11 +168,10 @@ func newProjectChrootDisableCmd(app *App, out *outFlags) *cobra.Command {
 			if err := setChroots(c, cmd.Context(), r.Owner, r.Project, remaining); err != nil {
 				return err
 			}
-			return renderResult(cmd, out, map[string]any{"disabled": chroots, "chroots": remaining})
+			return renderResult(cmd, out, map[string]any{"disabled": *chroots, "chroots": remaining})
 		},
 	}
-	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to disable")
-	bindChrootCompletion(app, cmd, "chroot")
-	cmd.Flags().BoolVar(&yes, "yes", false, "confirm the disable")
+	chroots = addChrootFlag(app, cmd, "chroots to disable", true)
+	yes = addYesFlag(cmd, "confirm the disable", false)
 	return cmd
 }

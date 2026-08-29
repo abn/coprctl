@@ -69,15 +69,15 @@ var fidelityGap = []string{
 func newTryCmd(app *App) *cobra.Command {
 	var out outFlags
 	var path string
-	var chroots []string
-	var runtimeName string
+	var chroots *[]string
+	var runtimeName *string
 	var emulate, matchSubstitute, requireFullCoverage bool
 	cmd := &cobra.Command{
 		Use:   "try [REF|PATH]",
 		Short: "Local preflight build (container, mock, or native)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := resolveBuilder(runtimeName, "preflight")
+			b, err := resolveBuilder(*runtimeName, "preflight")
 			if err != nil {
 				return err
 			}
@@ -96,7 +96,7 @@ func newTryCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			targetChroots := chroots
+			targetChroots := *chroots
 			if len(targetChroots) == 0 {
 				targetChroots = []string{"fedora-rawhide-x86_64"}
 			}
@@ -208,9 +208,8 @@ func newTryCmd(app *App) *cobra.Command {
 	}
 	out.bind(cmd)
 	cmd.Flags().StringVar(&path, "path", "", "path to the spec directory")
-	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build (default fedora-rawhide-x86_64)")
-	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend: auto, container, native, mock")
-	bindChrootCompletion(app, cmd, "chroot")
+	chroots = addChrootFlag(app, cmd, "chroots to build (default fedora-rawhide-x86_64)", true)
+	runtimeName = addRuntimeFlag(cmd)
 	cmd.Flags().BoolVar(&emulate, "emulate", false, "allow emulated (non-host) architectures")
 	cmd.Flags().BoolVar(&matchSubstitute, "match", false, "allow substitute images (strict by default)")
 	cmd.Flags().BoolVar(&requireFullCoverage, "require-full-coverage", false, "exit 12 if any chroot is uncovered")

@@ -16,7 +16,7 @@ import (
 )
 
 func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
-	var chroots []string
+	var chroots *[]string
 	var dest string
 	var rpms, logs, spec bool
 	cmd := &cobra.Command{
@@ -49,7 +49,7 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 			for _, bc := range bchroots {
 				resultURLs[bc.Chroot] = bc.ResultURL
 			}
-			names := filterBuildChroots(bp, chroots)
+			names := filterBuildChroots(bp, *chroots)
 			perChroot := map[string][]string{}
 			downloaded := 0
 			for _, name := range names {
@@ -109,12 +109,11 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	out.bind(cmd)
-	cmd.Flags().StringSliceVar(&chroots, "chroot", nil, "chroots to download (globs allowed, repeatable)")
+	chroots = addChrootFlag(app, cmd, "chroots to download (globs allowed, repeatable)", false)
 	cmd.Flags().StringVar(&dest, "dest", ".", "destination directory")
 	cmd.Flags().BoolVar(&rpms, "rpms", true, "download built RPMs")
 	cmd.Flags().BoolVar(&logs, "logs", false, "download builder-live.log.gz")
 	cmd.Flags().BoolVar(&spec, "spec", false, "download the package spec")
-	bindChrootCompletion(app, cmd, "chroot")
 	return cmd
 }
 

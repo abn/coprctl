@@ -18,7 +18,8 @@ import (
 func newApplyCmd(app *App) *cobra.Command {
 	var out outFlags
 	var file string
-	var dryRun, prune, yes bool
+	var dryRun, prune bool
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "apply -f copr.yaml",
 		Short: "Reconcile a project to match the manifest",
@@ -48,7 +49,7 @@ func newApplyCmd(app *App) *cobra.Command {
 				}
 				return renderResult(cmd, &out, map[string]any{"dry_run": true, "diffs": diffs})
 			}
-			if prune && !yes {
+			if prune && !*yes {
 				return confirmRequired("--yes")
 			}
 			if err := applyManifest(cmd.Context(), app, m, prune); err != nil {
@@ -60,7 +61,7 @@ func newApplyCmd(app *App) *cobra.Command {
 	cmd.Flags().StringVarP(&file, "file", "f", "", "manifest file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would change")
 	cmd.Flags().BoolVar(&prune, "prune", false, "disable chroots absent from the manifest")
-	cmd.Flags().BoolVar(&yes, "yes", false, "confirm --prune")
+	yes = addYesFlag(cmd, "confirm --prune", false)
 	out.bind(cmd)
 	return cmd
 }

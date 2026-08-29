@@ -42,7 +42,7 @@ func newBuildCmd(app *App) *cobra.Command {
 }
 
 func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
-	var chroots []string
+	var chroots *[]string
 	var preflight bool
 	var onlyFailed string
 	cmd := &cobra.Command{
@@ -76,7 +76,7 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 					}
 					return renderResult(cmd, out, map[string]any{"build_id": buildID, "rebuilt": 0})
 				}
-				chroots = failed
+				*chroots = failed
 			}
 			// Preflight checks the local container runtime is available; a
 			// full Tier-1 build needs a local spec and is covered by try.
@@ -85,7 +85,7 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 					return err
 				}
 			}
-			b, err := c.RebuildPackage(cmd.Context(), r.Owner, r.Project, r.Segment, chroots)
+			b, err := c.RebuildPackage(cmd.Context(), r.Owner, r.Project, r.Segment, *chroots)
 			if err != nil {
 				return err
 			}
@@ -94,16 +94,15 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("State", b.State)
 				if onlyFailed != "" {
-					t.Add("Rebuilt chroots", fmt.Sprintf("%d", len(chroots)))
+					t.Add("Rebuilt chroots", fmt.Sprintf("%d", len(*chroots)))
 				}
 				return t
 			})
 		},
 	}
-	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
+	chroots = addChrootFlag(app, cmd, "chroots to build in (globs allowed)", true)
 	cmd.Flags().BoolVar(&preflight, "preflight", false, "check a container runtime is available before submitting")
 	cmd.Flags().StringVar(&onlyFailed, "only-failed", "", "rebuild only chroots that failed in this build id (overrides --chroot)")
-	bindChrootCompletion(app, cmd, "chroot")
 	return cmd
 }
 
@@ -261,7 +260,7 @@ func newBuildListCmd(app *App, out *outFlags) *cobra.Command {
 
 func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	var src sourceFlags
-	var chroots []string
+	var chroots *[]string
 	var dir string
 	var from, runtimeName string
 	var watch bool
@@ -280,7 +279,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			}
 
 			// Warn when a targeted chroot is EOL and will not accept builds.
-			warnInactiveChroots(cmd, chroots, app)
+			warnInactiveChroots(cmd, *chroots, app)
 
 			// The :dir from the reference wins over the --dir flag.
 			effDir := dir
@@ -310,8 +309,8 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 					return err
 				}
 				ch := "fedora-rawhide-x86_64"
-				if len(chroots) > 0 {
-					ch = chroots[0]
+				if len(*chroots) > 0 {
+					ch = (*chroots)[0]
 				}
 				br, err := resolveBuilder(runtimeName, "srpm")
 				if err != nil {
@@ -350,7 +349,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if _, statErr := os.Stat(src.uploadPath); statErr != nil {
 					return fmt.Errorf("path %q not found; pass a local SRPM", src.uploadPath)
 				}
-				if len(chroots) > 0 {
+				if len(*chroots) > 0 {
 					fmt.Fprintf(cmd.ErrOrStderr(), "note: upload builds build in the chroots declared by the SRPM; --chroot is ignored\n")
 				}
 				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, src.uploadPath, effDir)
@@ -378,7 +377,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			b, err := c.SubmitBuild(cmd.Context(), copr.BuildSubmit{
 				Owner: r.Owner, Project: r.Project,
-				SourceType: st, Source: sm, Chroots: chroots, Dir: effDir,
+				SourceType: st, Source: sm, Chroots: *chroots, Dir: effDir,
 			})
 			if err != nil {
 				return err
@@ -398,12 +397,11 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	src.bind(cmd)
-	cmd.Flags().StringSliceVarP(&chroots, "chroot", "r", nil, "chroots to build in (globs allowed)")
+	chroots = addChrootFlag(app, cmd, "chroots to build in (globs allowed)", true)
 	cmd.Flags().StringVar(&dir, "dir", "", "side repo / project directory")
 	cmd.Flags().StringVar(&from, "from", "", "build a local SRPM from this spec directory, then upload and submit")
 	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend for --from: auto, container, native, mock")
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "wait for the submitted build to reach a terminal state")
-	bindChrootCompletion(app, cmd, "chroot")
 	bindRefCompletion(app, cmd)
 	return cmd
 }
@@ -432,13 +430,13 @@ func newBuildCancelCmd(app *App, out *outFlags) *cobra.Command {
 }
 
 func newBuildDeleteCmd(app *App, out *outFlags) *cobra.Command {
-	var yes bool
+	var yes *bool
 	cmd := &cobra.Command{
 		Use:   "delete BUILD_ID...",
 		Short: "Delete one or more builds",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !yes {
+			if !*yes {
 				return confirmRequired("--yes")
 			}
 			c, err := app.Client()
@@ -457,7 +455,7 @@ func newBuildDeleteCmd(app *App, out *outFlags) *cobra.Command {
 			return renderResult(cmd, out, map[string]any{"deleted": len(args)})
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "assume yes for confirmation")
+	yes = addYesFlag(cmd, yesHelp, true)
 	return cmd
 }
 
@@ -549,7 +547,8 @@ func watchBuild(cmd *cobra.Command, app *App, buildID int) error {
 // newBuildSrpmCmd builds a source RPM from a local spec directory using the
 // rpmbuilder container, mirroring the SRPM_ONLY stage of the try preflight.
 func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
-	var path, chroot, runtimeName string
+	var path, chroot string
+	var runtimeName *string
 	cmd := &cobra.Command{
 		Use:   "srpm [PATH]",
 		Short: "Build a source RPM from a local spec (container, native, or mock)",
@@ -583,7 +582,7 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 			if chroot == "" {
 				chroot = "fedora-rawhide-x86_64"
 			}
-			b, err := resolveBuilder(runtimeName, "srpm")
+			b, err := resolveBuilder(*runtimeName, "srpm")
 			if err != nil {
 				return err
 			}
@@ -603,7 +602,7 @@ func newBuildSrpmCmd(app *App, out *outFlags) *cobra.Command {
 	out.bind(cmd)
 	cmd.Flags().StringVar(&path, "path", "", "path to the spec directory")
 	cmd.Flags().StringVar(&chroot, "chroot", "fedora-rawhide-x86_64", "chroot to build against")
-	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend: auto, container, native, mock")
+	runtimeName = addRuntimeFlag(cmd)
 	bindChrootCompletion(app, cmd, "chroot")
 	return cmd
 }

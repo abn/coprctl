@@ -4,7 +4,6 @@
 package cli
 
 import (
-	"context"
 	"io"
 	"os"
 
@@ -122,9 +121,6 @@ func (a *App) installChrootCatalog() {
 		})
 	}
 }
-
-// Ctx returns a background context for command execution.
-func Ctx() context.Context { return context.Background() }
 
 // Root builds the root command tree.
 func Root(app *App) *cobra.Command {

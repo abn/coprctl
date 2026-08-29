@@ -14,7 +14,7 @@ func (c *Client) GetProjectChrootBuildConfig(ctx context.Context, owner, project
 	q.Set("projectname", project)
 	q.Set("chrootname", chroot)
 	var cfg map[string]any
-	if err := c.Get("/project-chroot/build-config", q, &cfg); err != nil {
+	if err := c.Get(ctx, "/project-chroot/build-config", q, &cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil

@@ -34,9 +34,9 @@ type model struct {
 }
 
 // Run starts the dashboard, blocking until it exits. It is only called when
-// stdout is a TTY.
-func Run(client *copr.Client, owner, project string) error {
-	ctx := context.Background()
+// stdout is a TTY. The context cancels in-flight monitor polls and the
+// program's refresh loop.
+func Run(ctx context.Context, client *copr.Client, owner, project string) error {
 	m := &model{
 		client:  client,
 		ctx:     ctx,

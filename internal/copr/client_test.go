@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/abn/coprctl/internal/cerr"
 )
@@ -17,6 +18,34 @@ func testServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// TestGetContextCancellation asserts that an in-flight read request is
+// cancelled when its context is cancelled, rather than running out the client
+// timeout. The server holds the request open until the client aborts it, so a
+// request that is not context-aware would hang until the 60s timeout.
+func TestGetContextCancellation(t *testing.T) {
+	started := make(chan struct{})
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	})
+	c := New(srv.URL, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := c.ListMockChroots(ctx); done <- err }()
+	<-started
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected an error after cancel, got nil")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("request did not return promptly after context cancel")
+	}
 }
 
 func TestListMockChroots(t *testing.T) {

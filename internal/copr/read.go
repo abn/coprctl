@@ -36,7 +36,7 @@ func (c *Client) GetProject(ctx context.Context, owner, project string) (*Projec
 	q.Set("ownername", owner)
 	q.Set("projectname", project)
 	var p Project
-	if err := c.Get("/project/", q, &p); err != nil {
+	if err := c.Get(ctx, "/project/", q, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -58,7 +58,7 @@ func (c *Client) ListProjects(ctx context.Context, owner string, limit int) ([]P
 		q.Set("limit", fmt.Sprintf("%d", pageSize))
 		q.Set("offset", fmt.Sprintf("%d", offset))
 		var pl ProjectList
-		if err := c.Get("/project/list", q, &pl); err != nil {
+		if err := c.Get(ctx, "/project/list", q, &pl); err != nil {
 			return nil, err
 		}
 		all = append(all, pl.Items...)
@@ -81,7 +81,7 @@ func (c *Client) SearchProjects(ctx context.Context, query string) ([]Project, e
 	q := url.Values{}
 	q.Set("query", query)
 	var pl ProjectList
-	if err := c.Get("/project/search", q, &pl); err != nil {
+	if err := c.Get(ctx, "/project/search", q, &pl); err != nil {
 		return nil, err
 	}
 	return pl.Items, nil
@@ -93,7 +93,7 @@ type MockChroots map[string]string
 // ListMockChroots returns the instance chroot catalog.
 func (c *Client) ListMockChroots(ctx context.Context) (MockChroots, error) {
 	var m MockChroots
-	if err := c.Get("/mock-chroots/list", nil, &m); err != nil {
+	if err := c.Get(ctx, "/mock-chroots/list", nil, &m); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -185,7 +185,7 @@ type BuildChroot struct {
 // GetBuild fetches a single build by id.
 func (c *Client) GetBuild(ctx context.Context, id int) (*Build, error) {
 	var b Build
-	if err := c.Get(fmt.Sprintf("/build/%d", id), nil, &b); err != nil {
+	if err := c.Get(ctx, fmt.Sprintf("/build/%d", id), nil, &b); err != nil {
 		return nil, err
 	}
 	return &b, nil
@@ -216,7 +216,7 @@ func (c *Client) ListBuilds(ctx context.Context, owner, project, pkg string, lim
 		q.Set("limit", fmt.Sprintf("%d", pageSize))
 		q.Set("offset", fmt.Sprintf("%d", offset))
 		var bl BuildList
-		if err := c.Get("/build/list", q, &bl); err != nil {
+		if err := c.Get(ctx, "/build/list", q, &bl); err != nil {
 			return nil, err
 		}
 		all = append(all, bl.Items...)
@@ -255,7 +255,7 @@ func (c *Client) ListPackages(ctx context.Context, owner, project string) ([]Pac
 	q.Set("ownername", owner)
 	q.Set("projectname", project)
 	var pl PackageList
-	if err := c.Get("/package/list", q, &pl); err != nil {
+	if err := c.Get(ctx, "/package/list", q, &pl); err != nil {
 		return nil, err
 	}
 	return pl.Items, nil
@@ -387,7 +387,7 @@ func (c *Client) Monitor(ctx context.Context, owner, project string) ([]MonitorR
 	q.Set("ownername", owner)
 	q.Set("projectname", project)
 	var env MonitorEnvelope
-	if err := c.Get("/monitor", q, &env); err != nil {
+	if err := c.Get(ctx, "/monitor", q, &env); err != nil {
 		return nil, err
 	}
 	return env.Packages, nil
@@ -401,7 +401,7 @@ func (c *Client) ListBuildChroots(ctx context.Context, buildID int) ([]BuildChro
 		Items []BuildChroot `json:"items"`
 		Meta  Meta          `json:"meta"`
 	}
-	if err := c.Get("/build-chroot/list", q, &l); err != nil {
+	if err := c.Get(ctx, "/build-chroot/list", q, &l); err != nil {
 		return nil, err
 	}
 	return l.Items, nil

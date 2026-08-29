@@ -39,7 +39,7 @@ func newUICmd(app *App) *cobra.Command {
 			// Interactive TTY path: the Bubble Tea dashboard, unless the user
 			// asked for machine output or the environment forbids a UI.
 			if term.IsTerminal(int(os.Stdout.Fd())) && !isNoUI() && !cmd.Flags().Changed("output") {
-				return tui.Run(c, r.Owner, r.Project)
+				return tui.Run(cmd.Context(), c, r.Owner, r.Project)
 			}
 			// Degraded path: plain table.
 			rows, err := c.Monitor(cmd.Context(), r.Owner, r.Project)

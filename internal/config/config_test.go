@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -218,6 +219,23 @@ func TestLoadUnreadableConfigErrors(t *testing.T) {
 
 func TestDefaultPathsWithoutHome(t *testing.T) {
 	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if runtime.GOOS == "windows" {
+		// os.UserHomeDir never errors on Windows: a missing HOME falls back
+		// to %USERPROFILE%, so the empty result cannot be observed. Assert
+		// the paths derived from the real home instead.
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantCfg := filepath.Join(home, ".config", "coprctl", "config.toml")
+		wantLegacy := filepath.Join(home, ".config", "copr")
+		cfg, legacy := DefaultPaths()
+		if cfg != wantCfg || legacy != wantLegacy {
+			t.Errorf("DefaultPaths() = (%q,%q), want (%q,%q)", cfg, legacy, wantCfg, wantLegacy)
+		}
+		return
+	}
 	cfg, legacy := DefaultPaths()
 	if cfg != "" || legacy != "" {
 		t.Errorf("DefaultPaths() = (%q,%q), want empty when HOME is unset", cfg, legacy)

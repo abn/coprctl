@@ -41,7 +41,7 @@ func (c *Client) ListPermissions(ctx context.Context, owner, project string) (Pe
 		Permissions Permissions `json:"permissions"`
 	}
 	path := fmt.Sprintf("/project/permissions/get/%s/%s", owner, project)
-	if err := c.Get(path, nil, &env); err != nil {
+	if err := c.Get(ctx, path, nil, &env); err != nil {
 		return nil, err
 	}
 	return env.Permissions, nil
@@ -101,7 +101,7 @@ func (c *Client) CanBuildIn(ctx context.Context, who, owner, project string) (bo
 		CanBuildIn bool `json:"can_build_in"`
 	}
 	path := fmt.Sprintf("/project/permissions/can_build_in/%s/%s/%s", who, owner, project)
-	if err := c.Get(path, nil, &resp); err != nil {
+	if err := c.Get(ctx, path, nil, &resp); err != nil {
 		return false, err
 	}
 	return resp.CanBuildIn, nil

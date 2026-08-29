@@ -51,8 +51,8 @@ func (c *Client) WithHTTP(hc *http.Client) *Client { c.HTTP = hc; return c }
 func (c *Client) SetUserAgent(ua string) { c.ua = ua }
 
 // Get performs an authenticated GET and decodes the JSON body into v.
-func (c *Client) Get(path string, query url.Values, v any) error {
-	resp, err := c.do("GET", path, query, nil)
+func (c *Client) Get(ctx context.Context, path string, query url.Values, v any) error {
+	resp, err := c.do(ctx, "GET", path, query, nil)
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ type AuthIdentity struct {
 // returns the authenticated user's identity. A valid token returns nil with
 // the identity; an invalid token returns an auth error.
 func (c *Client) AuthCheck(ctx context.Context) (*AuthIdentity, error) {
-	resp, err := c.do("GET", "/auth-check", nil, nil)
+	resp, err := c.do(ctx, "GET", "/auth-check", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +83,12 @@ func (c *Client) AuthCheck(ctx context.Context) (*AuthIdentity, error) {
 }
 
 // Do performs a request and returns the raw response. Caller closes the body.
-func (c *Client) do(method, path string, query url.Values, body io.Reader) (*http.Response, error) {
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, body io.Reader) (*http.Response, error) {
 	u := c.BaseURL + "/api_3" + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
-	req, err := http.NewRequest(method, u, body)
+	req, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
 		return nil, cerr.Transport("failed to build request").Wrap(err)
 	}

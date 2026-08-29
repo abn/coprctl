@@ -33,7 +33,7 @@ type BuiltPackages map[string]struct {
 // GetBuiltPackages lists the packages a build produced, per chroot.
 func (c *Client) GetBuiltPackages(ctx context.Context, buildID int) (BuiltPackages, error) {
 	var bp BuiltPackages
-	if err := c.Get(fmt.Sprintf("/build/built-packages/%d", buildID), nil, &bp); err != nil {
+	if err := c.Get(ctx, fmt.Sprintf("/build/built-packages/%d", buildID), nil, &bp); err != nil {
 		return nil, err
 	}
 	return bp, nil

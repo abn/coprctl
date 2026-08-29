@@ -28,7 +28,14 @@ func newApplyCmd(app *App) *cobra.Command {
 				return err
 			}
 			if issues := m.Validate(); len(issues) > 0 {
-				return cerr.Config("manifest failed validation").WithHint(formatIssues(issues))
+				for _, i := range issues {
+					if i.Level == "warning" {
+						fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s: %s\n", i.Path, i.Detail)
+					}
+				}
+				if errs := issuesAt(issues, "error"); len(errs) > 0 {
+					return cerr.Config("manifest failed validation").WithHint(formatIssues(errs))
+				}
 			}
 			c, err := app.Client()
 			if err != nil {
@@ -144,11 +151,15 @@ func newValidateCmd(app *App) *cobra.Command {
 				return err
 			}
 			issues := m.Validate()
+			var hasErrors bool
 			for _, i := range issues {
+				if i.Level == "error" {
+					hasErrors = true
+				}
 				fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n", i.Level, i.Path, i.Detail)
 			}
-			if len(issues) > 0 {
-				return cerr.Config("manifest has validation issues")
+			if hasErrors {
+				return cerr.Config("manifest has validation errors")
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "manifest valid")
 			return nil
@@ -175,23 +186,31 @@ func applyManifest(ctx context.Context, app *App, m *manifest.Manifest, prune bo
 		var devel *bool
 		dv := m.Spec.Settings.DevelMode
 		devel = &dv
+		var enableNet *bool
+		env := m.Spec.Settings.EnableNet
+		enableNet = &env
 		if err := c.EditProject(ctx, copr.ProjectEdit{
 			Owner: owner, Project: project,
-			Description: m.Spec.Description,
-			Homepage:    m.Spec.Homepage,
-			Contact:     m.Spec.Contact,
-			DevelMode:   devel,
+			Description:  m.Spec.Description,
+			Instructions: m.Spec.Instructions,
+			Homepage:     m.Spec.Homepage,
+			Contact:      m.Spec.Contact,
+			DevelMode:    devel,
+			EnableNet:    enableNet,
 		}); err != nil {
 			return err
 		}
 	} else {
 		if err := c.CreateProject(ctx, copr.ProjectCreate{
 			Owner: owner, Name: project,
-			Chroots:     m.Spec.Chroots.Enabled,
-			Description: m.Spec.Description,
-			Homepage:    m.Spec.Homepage,
-			Contact:     m.Spec.Contact,
-			DevelMode:   m.Spec.Settings.DevelMode,
+			Chroots:            m.Spec.Chroots.Enabled,
+			Description:        m.Spec.Description,
+			Instructions:       m.Spec.Instructions,
+			Homepage:           m.Spec.Homepage,
+			Contact:            m.Spec.Contact,
+			DevelMode:          m.Spec.Settings.DevelMode,
+			EnableNet:          m.Spec.Settings.EnableNet,
+			UnlistedOnHomepage: m.Spec.Settings.UnlistedOnHomepage,
 		}, true); err != nil {
 			return err
 		}
@@ -244,6 +263,13 @@ func applyManifest(ctx context.Context, app *App, m *manifest.Manifest, prune bo
 			return err
 		}
 	}
+	// Grant the permissions the manifest lists. Only the named users are
+	// touched; anyone not listed keeps their live permissions.
+	if perms := manifest.PermissionSetFromManifest(m.Spec.Permissions); len(perms) > 0 {
+		if _, err := c.SetPermissions(ctx, owner, project, perms); err != nil {
+			return err
+		}
+	}
 	for _, p := range m.Spec.Packages {
 		src, st, err := packageToSource(p)
 		if err != nil {
@@ -277,6 +303,17 @@ func formatIssues(issues []manifest.ValidationIssue) string {
 		fmt.Fprintf(&b, "%s: %s; ", i.Path, i.Detail)
 	}
 	return b.String()
+}
+
+// issuesAt filters validation issues to a single level.
+func issuesAt(issues []manifest.ValidationIssue, level string) []manifest.ValidationIssue {
+	var out []manifest.ValidationIssue
+	for _, i := range issues {
+		if i.Level == level {
+			out = append(out, i)
+		}
+	}
+	return out
 }
 
 // packageToSource converts a manifest package source to the copr source form.

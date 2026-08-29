@@ -80,7 +80,10 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 					downloaded++
 				}
 				if spec {
-					fn := build.PackageName + ".spec"
+					// Package-scoped builds name the spec after the package;
+					// project-scoped (webhook) builds leave packagename empty, in
+					// which case the spec is named after the project.
+					fn := specFilename(*build)
 					if err := downloadArtifact(cmd, c, ctx, resultURLs[name], fn, dir); err != nil {
 						return err
 					}
@@ -115,6 +118,17 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().BoolVar(&logs, "logs", false, "download builder-live.log.gz")
 	cmd.Flags().BoolVar(&spec, "spec", false, "download the package spec")
 	return cmd
+}
+
+// specFilename derives the package spec filename for a build. Package-scoped
+// builds name it after the package; project-scoped (webhook) builds leave
+// packagename empty, in which case the project name is used.
+func specFilename(b copr.Build) string {
+	pkg := b.PackageName
+	if pkg == "" {
+		pkg = b.ProjectName
+	}
+	return pkg + ".spec"
 }
 
 // filterBuildChroots returns the sorted chroot names in bp matching any of the

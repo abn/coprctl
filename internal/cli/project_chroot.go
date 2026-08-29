@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -10,7 +9,6 @@ import (
 	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/chroot"
 	"github.com/abn/coprctl/internal/copr"
-	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 )
 
@@ -34,12 +32,9 @@ func newProjectChrootListCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "List the chroots enabled on a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(args[0])
 			if err != nil {
 				return err
-			}
-			if r.Owner == "" {
-				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
 			}
 			c, err := app.ReadClient()
 			if err != nil {
@@ -94,12 +89,9 @@ func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Enable chroots on a project (additive)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(args[0])
 			if err != nil {
 				return err
-			}
-			if r.Owner == "" {
-				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
 			}
 			if len(chroots) == 0 {
 				return cerr.Usage("--chroot is required")
@@ -143,12 +135,9 @@ func newProjectChrootDisableCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Disable chroots on a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(args[0])
 			if err != nil {
 				return err
-			}
-			if r.Owner == "" {
-				return fmt.Errorf("reference %q has no owner; use owner/project", args[0])
 			}
 			if len(chroots) == 0 {
 				return cerr.Usage("--chroot is required")

@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/abn/coprctl/internal/copr"
-	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 )
 
@@ -25,27 +24,24 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Download a build's artifacts",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			id, err := parseBuildID(args)
 			if err != nil {
 				return err
-			}
-			if r.Kind != ref.KindBuild {
-				return fmt.Errorf("expected a build id, got %q", args[0])
 			}
 			c, err := app.ReadClient()
 			if err != nil {
 				return err
 			}
 			ctx := cmd.Context()
-			build, err := c.GetBuild(ctx, r.BuildID)
+			build, err := c.GetBuild(ctx, id)
 			if err != nil {
 				return err
 			}
-			bp, err := c.GetBuiltPackages(ctx, r.BuildID)
+			bp, err := c.GetBuiltPackages(ctx, id)
 			if err != nil {
 				return err
 			}
-			bchroots, err := c.ListBuildChroots(ctx, r.BuildID)
+			bchroots, err := c.ListBuildChroots(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -58,7 +54,7 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 			downloaded := 0
 			for _, name := range names {
 				if resultURLs[name] == "" {
-					fmt.Fprintf(cmd.ErrOrStderr(), "no result url for build %d chroot %s; skipping\n", r.BuildID, name)
+					fmt.Fprintf(cmd.ErrOrStderr(), "no result url for build %d chroot %s; skipping\n", id, name)
 					continue
 				}
 				dir := filepath.Join(dest, name)
@@ -96,7 +92,7 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 				}
 			}
 			return renderHumanOr(cmd, out, map[string]any{
-				"build_id":   r.BuildID,
+				"build_id":   id,
 				"chroots":    names,
 				"downloaded": downloaded,
 				"dest":       dest,

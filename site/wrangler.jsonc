@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "coprctl",
+  "compatibility_date": "2026-08-28",
+
+  // The site is pure static assets: a hand-written index.html plus the
+  // generated wiki/ tree (produced by `make site` from ../docs). No Worker
+  // script is needed — Workers serves everything under ./ as static assets.
+  //
+  // Workers Builds runs `make site` (see the Build settings) before deploy, so
+  // wiki/ always exists by the time this directory is uploaded.
+  "assets": {
+    "directory": "./",
+    "not_found_handling": "404-page"
+  }
+}

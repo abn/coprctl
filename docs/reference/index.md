@@ -1,4 +1,4 @@
-# Reference section
+# Reference
 
 Machine-generated command reference and schemas.
 

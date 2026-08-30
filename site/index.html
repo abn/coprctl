@@ -38,16 +38,16 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;
 
 /* nav */
 header{position:sticky;top:0;z-index:10;background:rgba(19,16,9,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-nav.wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
-.brand{font-family:var(--mono);font-weight:700;letter-spacing:.5px;color:var(--ink)}
+nav.wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:60px}
+.brand{font-family:var(--mono);font-weight:700;letter-spacing:.5px;color:var(--ink);white-space:nowrap}
 .brand .dollar{color:var(--copper)}
 .brand b{color:var(--copper-hi)}
-nav ul{display:flex;gap:26px;list-style:none}
+nav ul{display:flex;gap:26px;list-style:none;flex-wrap:wrap;justify-content:flex-end}
 nav a{font-size:.85rem;color:var(--ink-dim);letter-spacing:.2px}
 nav a:hover{color:var(--ink)}
 @media(max-width:560px){
-  nav.wrap{justify-content:center}
-  nav ul{gap:18px}
+  nav.wrap{justify-content:space-between;height:auto;padding:10px 16px;flex-wrap:wrap}
+  nav ul{gap:14px;justify-content:flex-end}
   nav a{font-size:.75rem}
   .term-body{padding:16px 14px 20px}
   .code{padding:16px 14px}
@@ -179,6 +179,7 @@ footer a:hover{color:var(--copper)}
       <li><a href="#capabilities">Capabilities</a></li>
       <li><a href="#why">Why</a></li>
       <li><a href="#install">Install</a></li>
+      <li><a href="/wiki/">Docs</a></li>
     </ul>
   </nav>
 </header>
@@ -345,6 +346,7 @@ footer a:hover{color:var(--copper)}
   <div class="wrap">
     <div><span class="mono">$ coprctl &lt;resource&gt; &lt;verb&gt; [ref]</span></div>
     <div>coprctl · one binary · no runtime</div>
+    <div><a href="https://github.com/abn/coprctl" target="_blank" rel="noopener">Source on GitHub ↗</a></div>
   </div>
 </footer>
 

@@ -31,3 +31,34 @@ jobs:
 
       - name: Verify generated artefacts are in sync
         run: make drift
+
+  site:
+    name: Site generation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: site/go.mod
+          cache: true
+
+      - name: Build and vet the wiki renderer
+        working-directory: site
+        run: |
+          go build ./...
+          go vet ./...
+          make test
+
+      - name: Render the wiki and verify it is complete
+        working-directory: site
+        run: |
+          rm -rf wiki
+          make site
+          test "$(find wiki -name '*.html' | wc -l)" -gt 0
+          test -f wiki/index.html
+          test -f wiki/wiki.css
+          test -f wiki/usage/index.html
+          test -f wiki/contribution/guide.html

@@ -3,6 +3,10 @@
 BIN := coprctl
 PKG := ./cmd/$(BIN)
 GENERATED := docs/reference/commands.md skills/coprctl/SKILL.md skills/coprctl-debug/SKILL.md
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+DATE := $(shell git show -s --format=%cI HEAD 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -X github.com/abn/coprctl/internal/cli.version=$(VERSION) -X github.com/abn/coprctl/internal/cli.commit=$(COMMIT) -X github.com/abn/coprctl/internal/cli.date=$(DATE)
 
 .PHONY: help build check fmt lint test clean gen drift
 
@@ -10,7 +14,7 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build the binary
-	go build -o bin/$(BIN) $(PKG)
+	go build -ldflags "$(LDFLAGS)" -o bin/$(BIN) $(PKG)
 
 # Platforms GoReleaser ships for; verified in CI so a release never surprises us.
 GOOS_LIST := linux darwin windows
@@ -20,7 +24,7 @@ build-all: ## Cross-compile for every release platform (no binaries written)
 	@for os in $(GOOS_LIST); do \
 		for arch in $(GOARCH_LIST); do \
 			echo "building $$os/$$arch"; \
-			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $(PKG) || exit 1; \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -ldflags "$(LDFLAGS)" $(PKG) || exit 1; \
 		done; \
 	done
 

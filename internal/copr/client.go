@@ -174,7 +174,11 @@ func mapHTTPError(resp *http.Response) error {
 		return cerr.New("permission_denied", cerr.ExitPermission, "permission denied (403)").
 			WithHint(apiMsg).Wrap(apiErr(apiMsg))
 	case 404:
-		return cerr.NotFound(resp.Request.URL.Path)
+		e := cerr.NotFound(resp.Request.URL.Path)
+		if apiMsg != "" {
+			e = e.WithHint(apiMsg)
+		}
+		return e
 	case 409:
 		return cerr.New("conflict", cerr.ExitConflict, "conflict (409)").
 			WithHint(apiMsg).Wrap(apiErr(apiMsg))

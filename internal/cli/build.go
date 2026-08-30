@@ -242,7 +242,7 @@ func newBuildListCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			builds, err := c.ListBuilds(cmd.Context(), r.Owner, r.Project, "", limit)
 			if err != nil {
-				return err
+				return wrapGroupNotFoundHint(r.Owner, instanceBase(app), err)
 			}
 			return renderHumanOr(cmd, out, builds, func() *render.Table {
 				t := render.NewTable("ID", "PACKAGE", "STATE")

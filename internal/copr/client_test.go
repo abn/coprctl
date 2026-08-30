@@ -3,10 +3,12 @@ package copr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -241,6 +243,27 @@ func TestPermissionDeniedExitCode(t *testing.T) {
 	}
 	if cerr.ExitCodeFor(err) != 9 {
 		t.Errorf("expected exit code 9 (permission), got %d", cerr.ExitCodeFor(err))
+	}
+}
+
+func TestNotFoundSurfacesAPIMessage(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error": "Group @foo does not exist"}`, http.StatusNotFound)
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	_, err := c.GetProject(context.Background(), "@foo", "proj")
+	if err == nil {
+		t.Fatalf("expected 404 error")
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", cerr.ExitCodeFor(err), cerr.ExitNotFound)
+	}
+	var ce *cerr.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("expected cerr.Error, got %T", err)
+	}
+	if !strings.Contains(ce.Hint, "Group @foo does not exist") {
+		t.Errorf("expected API message in hint, got %q", ce.Hint)
 	}
 }
 

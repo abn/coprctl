@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0](https://github.com/abn/coprctl/compare/v0.5.0...v0.6.0) (2026-08-30)
+
+
+### Features
+
+* **build:** stamp version metadata and teach the skill to run doctor first ([#42](https://github.com/abn/coprctl/issues/42)) ([26c6715](https://github.com/abn/coprctl/commit/26c67153ab5de7a8563ed33bafdee174ffa85a95))
+* **group:** hint at group activation on unknown-group errors ([#44](https://github.com/abn/coprctl/issues/44)) ([bfd51cb](https://github.com/abn/coprctl/commit/bfd51cb68dafddf084ed6958541a9955fce939b5))
+* **rpm:** list the files in an rpm ([#40](https://github.com/abn/coprctl/issues/40)) ([d6272ac](https://github.com/abn/coprctl/commit/d6272ac2f1df42ce22521b2fc5687f2b46c39ffc))
+
+
+### Bug Fixes
+
+* **build:** derive the spec filename from package or project name ([#38](https://github.com/abn/coprctl/issues/38)) ([e59c4c5](https://github.com/abn/coprctl/commit/e59c4c5e94dee192bbfa82add9b35daa57eb7870))
+* **chroot:** fall back to the cached catalog when the instance is unreachable ([#41](https://github.com/abn/coprctl/issues/41)) ([1b56651](https://github.com/abn/coprctl/commit/1b56651c3fdc414288748916684697ceee00ac43))
+* **ref:** default a bare project reference to the current user ([#43](https://github.com/abn/coprctl/issues/43)) ([ab737f3](https://github.com/abn/coprctl/commit/ab737f3b13b09903917044727038e85e3d57fc44))
+
+
+### Documentation
+
+* add group projects and instances guides ([#45](https://github.com/abn/coprctl/issues/45)) ([24a74f3](https://github.com/abn/coprctl/commit/24a74f35a17076d5498ac941b4bd2ee181b028ff))
+
 ## [0.5.0](https://github.com/abn/coprctl/compare/v0.4.7...v0.5.0) (2026-08-29)
 
 

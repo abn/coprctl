@@ -14,7 +14,6 @@ import (
 	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/events"
 	"github.com/abn/coprctl/internal/logstream"
-	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 	ctrruntime "github.com/abn/coprctl/internal/runtime"
 )
@@ -50,7 +49,7 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Rebuild a package from its stored source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parsePackageRef(args)
+			r, err := parsePackageRef(app, args)
 			if err != nil {
 				return err
 			}
@@ -233,7 +232,7 @@ func newBuildListCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "List builds for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -269,7 +268,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Submit a build",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}

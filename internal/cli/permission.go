@@ -30,7 +30,7 @@ func newProjectPermissionListCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "List the permissions of a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -86,7 +86,7 @@ func newProjectPermissionSetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Set a user's permissions on a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -137,7 +137,7 @@ func newProjectPermissionRequestCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Request permissions on a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -168,7 +168,7 @@ func newProjectPermissionCanBuildInCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Check whether a user can build in a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}

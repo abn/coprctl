@@ -73,7 +73,7 @@ func newExportCmd(app *App) *cobra.Command {
 		Short: "Generate a manifest from a live project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}

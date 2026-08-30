@@ -105,16 +105,34 @@ func requireOne(args []string, usage string) (string, error) {
 	return args[0], nil
 }
 
-// parseRef parses a project reference requiring an owner.
-func parseRef(s string) (ref.Ref, error) {
+// resolveRefOwner fills in an empty owner on a project-family ref from the
+// current profile's username, so a bare project name means "the current user".
+// Build refs have no owner and are left untouched.
+func resolveRefOwner(app *App, r ref.Ref) ref.Ref {
+	if r.Owner != "" {
+		return r
+	}
+	switch r.Kind {
+	case ref.KindProject, ref.KindPackage, ref.KindProjectChroot:
+	default:
+		return r
+	}
+	if app.Cfg != nil {
+		if prof, err := app.Cfg.Profile(app.profile); err == nil && prof.Username != "" {
+			r.Owner = prof.Username
+		}
+	}
+	return r
+}
+
+// parseRef parses a project-family reference. A bare project name defaults to
+// the current profile's username; build refs are passed through untouched.
+func parseRef(app *App, s string) (ref.Ref, error) {
 	r, err := ref.Parse(s, nil)
 	if err != nil {
 		return r, err
 	}
-	if r.Owner == "" {
-		return r, cerr.Usage(fmt.Sprintf("reference %q has no owner; use owner/project", s))
-	}
-	return r, nil
+	return resolveRefOwner(app, r), nil
 }
 
 // parseBuildRef parses a reference and requires it to be a build.
@@ -163,9 +181,14 @@ func parseBuildIDs(args []string) ([]int, error) {
 	return ids, nil
 }
 
-// parsePackageRef parses a reference requiring ForcePackage.
-func parsePackageRef(args []string) (ref.Ref, error) {
-	return ref.Parse(args[0], &ref.Options{ForcePackage: true})
+// parsePackageRef parses a reference requiring ForcePackage and defaults a bare
+// owner to the current profile's username.
+func parsePackageRef(app *App, args []string) (ref.Ref, error) {
+	r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
+	if err != nil {
+		return r, err
+	}
+	return resolveRefOwner(app, r), nil
 }
 
 // confirmRequired returns a usage error naming the confirmation flag that a

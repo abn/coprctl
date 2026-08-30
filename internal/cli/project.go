@@ -9,7 +9,6 @@ import (
 
 	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/copr"
-	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 )
 
@@ -47,7 +46,7 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Edit project settings",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -131,7 +130,7 @@ func newProjectRegenCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Regenerate repository metadata for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -186,7 +185,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Show a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -221,7 +220,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Create a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -289,7 +288,7 @@ func newProjectDeleteCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Delete a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -317,11 +316,11 @@ func newProjectForkCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Fork a project",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			src, err := ref.Parse(args[0], nil)
+			src, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
-			dst, err := ref.Parse(args[1], nil)
+			dst, err := parseRef(app, args[1])
 			if err != nil {
 				return err
 			}

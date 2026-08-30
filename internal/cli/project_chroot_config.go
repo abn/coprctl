@@ -19,6 +19,7 @@ func newProjectChrootGetCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			r = resolveRefOwner(app, r)
 			if r.Kind != ref.KindProjectChroot {
 				return fmt.Errorf("expected a project chroot reference, got %q", args[0])
 			}

@@ -1,12 +1,28 @@
 package cli
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/abn/coprctl/internal/cerr"
+	"github.com/abn/coprctl/internal/config"
 	"github.com/abn/coprctl/internal/ref"
 )
+
+// testAppWithProfile returns an App whose profile carries the given username,
+// so bare project refs resolve to it.
+func testAppWithProfile(t *testing.T, username string) *App {
+	t.Helper()
+	dir := t.TempDir()
+	m := config.New(filepath.Join(dir, "config.toml"), filepath.Join(dir, "no-legacy"))
+	if err := m.SetProfile("default", config.Profile{
+		URL: "https://copr.fedorainfracloud.org", Username: username,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return &App{Cfg: m}
+}
 
 func TestParseBuildRef(t *testing.T) {
 	r, err := parseBuildRef([]string{"123"})
@@ -78,7 +94,8 @@ func TestParseBuildIDs(t *testing.T) {
 }
 
 func TestParsePackageRef(t *testing.T) {
-	r, err := parsePackageRef([]string{"owner/proj/epel-9-x86_64"})
+	app := testAppWithProfile(t, "abn")
+	r, err := parsePackageRef(app, []string{"owner/proj/epel-9-x86_64"})
 	if err != nil {
 		t.Fatalf("parsePackageRef: %v", err)
 	}
@@ -87,12 +104,46 @@ func TestParsePackageRef(t *testing.T) {
 	}
 }
 
-func TestParseRefRequiresOwner(t *testing.T) {
-	_, err := parseRef("mypkg")
-	if err == nil {
-		t.Fatal("parseRef expected an error for a bare reference")
+func TestParseRefDefaultsBareOwner(t *testing.T) {
+	app := testAppWithProfile(t, "abn")
+	r, err := parseRef(app, "hello-go")
+	if err != nil {
+		t.Fatalf("parseRef: %v", err)
 	}
-	if cerr.ExitCodeFor(err) != cerr.ExitUsage {
-		t.Errorf("exit code = %d, want %d", cerr.ExitCodeFor(err), cerr.ExitUsage)
+	if r.Kind != ref.KindProject || r.Owner != "abn" || r.Project != "hello-go" {
+		t.Errorf("parseRef = kind %d owner %q project %q, want KindProject abn hello-go", r.Kind, r.Owner, r.Project)
+	}
+}
+
+func TestParseRefKeepsExplicitOwner(t *testing.T) {
+	app := testAppWithProfile(t, "abn")
+	r, err := parseRef(app, "other/proj")
+	if err != nil {
+		t.Fatalf("parseRef: %v", err)
+	}
+	if r.Owner != "other" {
+		t.Errorf("owner = %q, want other (explicit owner wins)", r.Owner)
+	}
+}
+
+func TestParseRefBuildNoOwnerDefault(t *testing.T) {
+	app := testAppWithProfile(t, "abn")
+	r, err := parseRef(app, "123")
+	if err != nil {
+		t.Fatalf("parseRef: %v", err)
+	}
+	if r.Kind != ref.KindBuild || r.Owner != "" {
+		t.Errorf("parseRef = kind %d owner %q, want KindBuild with no owner", r.Kind, r.Owner)
+	}
+}
+
+func TestParseRefBareWithoutProfileLeavesOwnerEmpty(t *testing.T) {
+	app := &App{Cfg: nil}
+	r, err := parseRef(app, "hello-go")
+	if err != nil {
+		t.Fatalf("parseRef: %v", err)
+	}
+	if r.Owner != "" {
+		t.Errorf("owner = %q, want empty when no profile is configured", r.Owner)
 	}
 }

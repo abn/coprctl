@@ -4,6 +4,16 @@ This log tracks the evolution of the knowledge base: page additions,
 deprecations, and structural refactors. It does not track software releases
 or implementation milestones; repository changes belong in the commit history.
 
+## 2026-08-30
+
+* **Creation**: Added the "Group projects" guide (`docs/usage/group-projects.md`)
+  covering `@alias` namespaces: the one-time FAS and web-UI activation, group
+  references in project-family commands, permissions for non-members, and the
+  not-activated error hint.
+* **Creation**: Added the "Instances, staging, and profiles" guide
+  (`docs/usage/instances.md`) covering profile detection, authenticating to any
+  instance, and using Fedora staging for testing.
+
 ## 2026-08-28
 
 * **Update**: Corrected the NVR release steps in the release process to match

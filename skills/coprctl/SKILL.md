@@ -13,6 +13,8 @@ description: Manage Fedora Copr projects, packages, chroots, builds, build
 - `coprctl auth status` confirms the profile and warns if the token is near expiry.
 - Output defaults to JSON when stdout is not a TTY.
 - Exit codes are meaningful: 4 = build failed, 8 = not found, 12 = drift.
+- When a command fails, run `coprctl doctor` first: it distinguishes config, auth, and network problems in one shot.
+- `coprctl chroot list` uses a cached catalog when the instance is unreachable; a warning on stderr means it fell back to cache.
 
 ## Reference
 

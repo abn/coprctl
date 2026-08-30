@@ -1,0 +1,12 @@
+# Caching for the coprctl static site.
+#
+# Cloudflare Workers static assets default to `public, max-age=0,
+# must-revalidate`, which revalidates every asset on every navigation. These
+# rules give CSS a long browser cache (content only changes on deploy) while
+# keeping HTML fresh so docs appear promptly.
+
+/wiki/*.css
+  Cache-Control: public, max-age=86400
+
+/wiki/*.html
+  Cache-Control: public, max-age=60, must-revalidate

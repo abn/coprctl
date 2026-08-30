@@ -79,7 +79,7 @@ func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Print the Copr webhook URL for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -106,7 +106,7 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Enable a GitHub webhook for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -220,7 +220,7 @@ func newIntegrationRotateCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Generate a new webhook secret and cache it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}

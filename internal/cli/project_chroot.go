@@ -32,7 +32,7 @@ func newProjectChrootListCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "List the chroots enabled on a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -89,7 +89,7 @@ func newProjectChrootEnableCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Enable chroots on a project (additive)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -134,7 +134,7 @@ func newProjectChrootDisableCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Disable chroots on a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(args[0])
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}

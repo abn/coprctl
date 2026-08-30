@@ -62,3 +62,34 @@ func TestStatusSurfacesListBuildsError(t *testing.T) {
 		t.Errorf("output missing pkg-a entry:\n%s", buf.String())
 	}
 }
+
+func TestMonitorDefaultsBareRefOwner(t *testing.T) {
+	var gotOwner, gotProject string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api_3/monitor" {
+			http.NotFound(w, r)
+			return
+		}
+		gotOwner = r.URL.Query().Get("ownername")
+		gotProject = r.URL.Query().Get("projectname")
+		json.NewEncoder(w).Encode(map[string]any{"packages": []any{}})
+	}))
+	defer srv.Close()
+
+	app := testAppWithProfile(t, "abn")
+	app.client = copr.New(srv.URL, nil)
+	cmd := newMonitorCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"hello-go", "--output", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("monitor: %v", err)
+	}
+	if gotOwner != "abn" {
+		t.Errorf("ownername = %q, want abn", gotOwner)
+	}
+	if gotProject != "hello-go" {
+		t.Errorf("projectname = %q, want hello-go", gotProject)
+	}
+}

@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/abn/coprctl/internal/cerr"
-	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 )
 
@@ -17,7 +16,7 @@ func newMonitorCmd(app *App) *cobra.Command {
 		Short: "Show a package-by-chroot state matrix for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}
@@ -51,7 +50,7 @@ func newStatusCmd(app *App) *cobra.Command {
 		Short: "One-shot project health summary; exits 4 on failed builds",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := ref.Parse(args[0], nil)
+			r, err := parseRef(app, args[0])
 			if err != nil {
 				return err
 			}

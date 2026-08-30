@@ -10,8 +10,10 @@ Guides and worked examples for using the tool.
   locally
 * [Local builds](local-builds.md) - how SRPM and preflight builds work, and the
   container, mock, and native backends
-* [Quick start](quickstart.md) - first steps, including the chroot lifecycle
-  and retiring EOL chroots
+* [Group projects](group-projects.md) - own a project as a team with group
+  namespaces (@alias)
+* [Instances, staging, and profiles](instances.md) - work with any Copr
+  instance, including Fedora staging, via profiles
 
 Usage documentation is generated alongside the command reference where
 possible, and curated by the technical writer.

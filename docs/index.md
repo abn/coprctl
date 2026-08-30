@@ -33,15 +33,15 @@ maintained to reflect status quo as the project evolves.
 
 ## Decisions
 
-* [ADR index](adr/index.md) - architecture decision records
+* [Architecture decision records](adr/index.md) - decision records
 
 ## Usage
 
-* [Usage index](usage/index.md) - guides and examples
+* [Usage guides](usage/index.md) - guides and examples
 
 ## Reference
 
-* [Reference index](reference/index.md) - generated command reference
+* [Command reference](reference/index.md) - generated command reference
 
 ## Releases
 

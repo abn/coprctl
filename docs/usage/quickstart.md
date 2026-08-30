@@ -132,5 +132,5 @@ lists:
 coprctl apply -f copr.yaml --prune --yes
 ```
 
-See the [usage index](index.md) for the full guides, and the
+See the [usage guides](index.md) for the full guides, and the
 [GitHub integration](github-integration.md) guide to wire webhooks.

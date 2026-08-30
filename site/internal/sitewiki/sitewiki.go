@@ -5,6 +5,7 @@ package sitewiki
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -224,6 +225,7 @@ func (r *Renderer) parsePage(section, slug, file string) (Page, error) {
 
 	doc := r.md.Parser().Parse(text.NewReader(body))
 	src := body
+	usedIDs := map[string]int{}
 	var h1 string
 	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -239,8 +241,20 @@ func (r *Renderer) parsePage(section, slug, file string) (Page, error) {
 		}
 		if isHeading(n) && !isH1(n) {
 			h := n.(*ast.Heading)
-			idStr := headingID(h)
-			p.TOC = append(p.TOC, TOCEntry{ID: idStr, Level: h.Level, Text: headingText(n, src)})
+			// Regenerate the heading id from clean visible text so TOC anchors
+			// and labels are readable (goldmark's auto-id includes link URLs).
+			text := headingText(n, src)
+			id := slugify(text)
+			if id == "" {
+				id = "section"
+			}
+			seenID := usedIDs[id]
+			usedIDs[id]++
+			if seenID > 0 {
+				id = fmt.Sprintf("%s-%d", id, seenID)
+			}
+			h.SetAttributeString("id", []byte(id))
+			p.TOC = append(p.TOC, TOCEntry{ID: id, Level: h.Level, Text: text})
 		}
 		return ast.WalkContinue, nil
 	})
@@ -269,18 +283,6 @@ func isHeading(n ast.Node) bool {
 	return ok
 }
 
-func headingID(h *ast.Heading) string {
-	if v, ok := h.AttributeString("id"); ok {
-		switch t := v.(type) {
-		case string:
-			return t
-		case []byte:
-			return string(t)
-		}
-	}
-	return slugify(headingText(h, nil))
-}
-
 func headingText(n ast.Node, src []byte) string {
 	h, ok := n.(*ast.Heading)
 	if !ok {
@@ -288,8 +290,17 @@ func headingText(n ast.Node, src []byte) string {
 	}
 	var b strings.Builder
 	for c := h.FirstChild(); c != nil; c = c.NextSibling() {
-		if t, ok := c.(*ast.Text); ok {
+		switch t := c.(type) {
+		case *ast.Text:
 			b.Write(t.Segment.Value(src))
+		case *ast.Link:
+			// Include link text (e.g. the version "0.5.0" in a release heading)
+			// but not the destination URL.
+			for lc := t.FirstChild(); lc != nil; lc = lc.NextSibling() {
+				if lt, ok := lc.(*ast.Text); ok {
+					b.Write(lt.Segment.Value(src))
+				}
+			}
 		}
 	}
 	return strings.TrimSpace(b.String())

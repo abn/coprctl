@@ -43,6 +43,10 @@ maintained to reflect status quo as the project evolves.
 
 * [Reference index](reference/index.md) - generated command reference
 
+## Releases
+
+* [Changelog](changelog.md) - version history and release notes
+
 ## Repository contract
 
 See `AGENTS.md` for the operational contract for humans and agents. This wiki

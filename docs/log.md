@@ -6,6 +6,10 @@ or implementation milestones; repository changes belong in the commit history.
 
 ## 2026-08-30
 
+* **Creation**: Added the "Contributor guide" (`docs/contribution/guide.md`)
+  distilling the contribution workflow and conventions from `AGENTS.md`, and
+  pointed the contribution index, `docs/index.md`, and `AGENTS.md` at it.
+  Removed the self-referential "Usage index" link from the usage index.
 * **Creation**: Added the "Group projects" guide (`docs/usage/group-projects.md`)
   covering `@alias` namespaces: the one-time FAS and web-UI activation, group
   references in project-family commands, permissions for non-members, and the

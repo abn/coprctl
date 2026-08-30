@@ -1,8 +1,8 @@
-# Contribution section
+# Contribution
 
 How to contribute to the project.
 
-* [Contribution guide](index.md) - how to contribute
+* [Contributor guide](guide.md) - how to make a first change
 * [Release process](release-process.md) - normal and NVR releases, bump procedures
 * [Maintainer guide](maintainers.md) - for maintainers
 

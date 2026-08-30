@@ -61,5 +61,6 @@ endpoints the swagger never documents. See the
 
 ## Contributor guide
 
-See `docs/contribution/`, especially the [release process](docs/contribution/release-process.md)
-for normal and NVR releases. For maintainers, see `docs/contribution/maintainers.md`.
+See the [contributor guide](docs/contribution/guide.md), the
+[release process](docs/contribution/release-process.md) for normal and NVR
+releases, and for maintainers the [maintainer guide](docs/contribution/maintainers.md).

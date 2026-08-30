@@ -15,7 +15,7 @@ maintained to reflect status quo as the project evolves.
 ## Getting started
 
 * [Overview](overview.md) - what the project is and why it exists
-* [Contribution guide](contribution/index.md) - how to contribute
+* [Contribution guide](contribution/guide.md) - how to contribute
 * [Maintainer guide](contribution/maintainers.md) - for maintainers
 
 ## Design

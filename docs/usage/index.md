@@ -1,8 +1,7 @@
-# Usage section
+# Usage
 
 Guides and worked examples for using the tool.
 
-* [Usage index](index.md) - guides and examples
 * [Quick start](quickstart.md) - first steps
 * [GitHub webhook integration](github-integration.md) - wiring Copr to a
   GitHub repo

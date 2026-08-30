@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -31,13 +33,13 @@ func newChrootListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			chroots, err := c.ListMockChroots(cmd.Context())
+			cacheDir, _ := state.CacheDir(app.profile)
+			chroots, warn, err := loadChrootCatalog(cmd.Context(), c, cacheDir)
 			if err != nil {
 				return err
 			}
-			// Cache the catalog for offline reference disambiguation.
-			if cacheDir, err := state.CacheDir(app.profile); err == nil {
-				_ = state.NewChrootCache(cacheDir).Store(chroots)
+			if warn != "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), warn)
 			}
 			names := filterChroots(chroots.ChrootNames(), filter, distro, arch)
 			// EOL state is derived from the name against a maintained table;
@@ -67,6 +69,25 @@ func newChrootListCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&arch, "arch", "", "arch filter")
 	cmd.Flags().StringVar(&stateFilter, "state", "", "filter by lifecycle state (active, preserved)")
 	return cmd
+}
+
+// loadChrootCatalog fetches the mock-chroot catalog, caching it on success.
+// When the fetch fails, a fresh cached copy is returned instead with a warning
+// line for the caller to print; without a cache the fetch error is returned
+// unchanged.
+func loadChrootCatalog(ctx context.Context, c *copr.Client, cacheDir string) (copr.MockChroots, string, error) {
+	chroots, err := c.ListMockChroots(ctx)
+	if err == nil {
+		_ = state.NewChrootCache(cacheDir).Store(chroots)
+		return chroots, "", nil
+	}
+	cache := state.NewChrootCache(cacheDir)
+	if cached, ok := cache.Load(); ok {
+		return *cached, fmt.Sprintf(
+			"warning: could not reach the instance (%v); using cached chroot catalog from %s",
+			err, filepath.Join(cacheDir, "chroots.json")), nil
+	}
+	return nil, "", err
 }
 
 func filterByState(states []chroot.Info, want string) []chroot.Info {

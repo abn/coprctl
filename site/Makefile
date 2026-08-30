@@ -9,7 +9,9 @@ help: ## Show this help
 # wiki/ and ensure the landing page is present. index.html is hand-written and
 # committed; wiki/ is generated from ../docs and git-ignored.
 site: ## Render docs/ into wiki/ (the Workers Builds entrypoint)
+	cp ../CHANGELOG.md ../docs/changelog.md
 	go run ./cmd/site-wiki ../docs .
+	rm -f ../docs/changelog.md
 
 build: ## Build the wiki renderer binary
 	go build -o bin/site-wiki ./cmd/site-wiki

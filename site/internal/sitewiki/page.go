@@ -13,7 +13,7 @@ func (r *Renderer) RenderPage(p Page) string {
 		var b strings.Builder
 		// <details> gives a no-JS collapsible on mobile (closed by default via
 		// CSS), while desktop keeps it open and inline.
-		b.WriteString(`<details class="toc" open aria-label="On this page">`)
+		b.WriteString(`<details class="toc" aria-label="On this page">`)
 		b.WriteString(`<summary>On this page</summary><ul>`)
 		for _, e := range p.TOC {
 			cls := ""
@@ -72,11 +72,15 @@ func renderShell(r *Renderer, p Page, tocHTML, meta, title string) string {
       <li><a href="https://github.com/abn/coprctl" target="_blank" rel="noopener">GitHub ↗</a></li>
     </ul>
   </nav>
-</header>
-<div class="layout wrap">
-  <aside class="sidebar">%s</aside>
-  <main class="content">
+  <div class="subbar wrap">
+    <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation" aria-expanded="false" aria-controls="sideDrawer">☰</button>
     <nav class="breadcrumb">%s</nav>
+  </div>
+</header>
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<div class="layout wrap">
+  <aside class="sidebar" id="sideDrawer" style="transform:translateX(-100%%)">%s</aside>
+  <main class="content">
     <article>
       <h1>%s</h1>
       %s
@@ -86,12 +90,27 @@ func renderShell(r *Renderer, p Page, tocHTML, meta, title string) string {
   </main>
 </div>
 <script>
-  // On narrow screens collapse the "On this page" dropdown so it does not
-  // span the full width; tap to expand. Desktop keeps it open.
-  var toc = document.querySelector('details.toc');
-  if (toc && window.matchMedia('(max-width: 560px)').matches) {
-    toc.removeAttribute('open');
+  // Slide-out navigation drawer.
+  var menuBtn = document.getElementById('menuBtn');
+  var drawer = document.getElementById('sideDrawer');
+  var backdrop = document.getElementById('drawerBackdrop');
+  function openDrawer() {
+    drawer.classList.add('open');
+    backdrop.classList.add('open');
+    menuBtn.setAttribute('aria-expanded', 'true');
   }
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    backdrop.classList.remove('open');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  }
+  menuBtn.addEventListener('click', function () {
+    drawer.classList.contains('open') ? closeDrawer() : openDrawer();
+  });
+  backdrop.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeDrawer();
+  });
 </script>
 <footer>
   <div class="wrap">
@@ -101,7 +120,8 @@ func renderShell(r *Renderer, p Page, tocHTML, meta, title string) string {
 </footer>
 </body>
 </html>`,
-		template.HTMLEscapeString(title), nav, breadcrumb,
+		template.HTMLEscapeString(title),
+		breadcrumb, nav,
 		template.HTMLEscapeString(title), meta, tocHTML, body)
 }
 

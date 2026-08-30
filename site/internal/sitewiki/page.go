@@ -72,11 +72,15 @@ func renderShell(r *Renderer, p Page, tocHTML, meta, title string) string {
       <li><a href="https://github.com/abn/coprctl" target="_blank" rel="noopener">GitHub ↗</a></li>
     </ul>
   </nav>
-</header>
-<div class="layout wrap">
-  <aside class="sidebar">%s</aside>
-  <main class="content">
+  <div class="subbar wrap">
+    <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation" aria-expanded="false" aria-controls="sideDrawer">☰</button>
     <nav class="breadcrumb">%s</nav>
+  </div>
+</header>
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<div class="layout wrap">
+  <aside class="sidebar" id="sideDrawer" style="transform:translateX(-100%%)">%s</aside>
+  <main class="content">
     <article>
       <h1>%s</h1>
       %s
@@ -92,6 +96,27 @@ func renderShell(r *Renderer, p Page, tocHTML, meta, title string) string {
   if (toc && window.matchMedia('(max-width: 560px)').matches) {
     toc.removeAttribute('open');
   }
+  // Slide-out navigation drawer.
+  var menuBtn = document.getElementById('menuBtn');
+  var drawer = document.getElementById('sideDrawer');
+  var backdrop = document.getElementById('drawerBackdrop');
+  function openDrawer() {
+    drawer.classList.add('open');
+    backdrop.classList.add('open');
+    menuBtn.setAttribute('aria-expanded', 'true');
+  }
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    backdrop.classList.remove('open');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  }
+  menuBtn.addEventListener('click', function () {
+    drawer.classList.contains('open') ? closeDrawer() : openDrawer();
+  });
+  backdrop.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeDrawer();
+  });
 </script>
 <footer>
   <div class="wrap">
@@ -101,7 +126,8 @@ func renderShell(r *Renderer, p Page, tocHTML, meta, title string) string {
 </footer>
 </body>
 </html>`,
-		template.HTMLEscapeString(title), nav, breadcrumb,
+		template.HTMLEscapeString(title),
+		breadcrumb, nav,
 		template.HTMLEscapeString(title), meta, tocHTML, body)
 }
 

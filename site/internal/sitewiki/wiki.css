@@ -30,8 +30,10 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;
 }
 
 /* header */
-header{position:sticky;top:0;z-index:10;background:rgba(19,16,9,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header{position:sticky;top:0;z-index:20;background:rgba(19,16,9,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 nav.wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:60px}
+.menu-btn{background:none;border:1px solid var(--line);color:var(--ink-dim);font-size:1rem;line-height:1;padding:6px 10px;border-radius:6px;cursor:pointer;transition:color .15s,border-color .15s}
+.menu-btn:hover{color:var(--ink);border-color:var(--copper-dark)}
 .brand{font-family:var(--mono);font-weight:700;letter-spacing:.5px;color:var(--ink);white-space:nowrap}
 .brand .dollar{color:var(--copper)}
 .brand b{color:var(--copper-hi)}
@@ -40,34 +42,33 @@ nav a{font-size:.85rem;color:var(--ink-dim);letter-spacing:.2px}
 nav a:hover{color:var(--ink)}
 nav a{border-bottom:none}
 
-/* layout */
-.layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;padding-top:28px;padding-bottom:64px}
-@media(max-width:860px){.layout{grid-template-columns:1fr}.sidebar{display:none}}
+/* subtitle bar: menu button + breadcrumb */
+.subbar{display:flex;align-items:center;gap:14px;height:44px;border-top:1px solid var(--line);padding-top:0;padding-bottom:0}
+.subbar .breadcrumb{margin:0;font-size:.82rem}
+.subbar .breadcrumb a{color:var(--ink-dim)}
+.subbar .breadcrumb a:hover{color:var(--copper)}
 
-/* header on small screens: keep on one row, shrink */
-@media(max-width:560px){
-  nav.wrap{height:auto;padding:10px 16px;flex-wrap:wrap}
-  nav ul{gap:14px}
-  nav a{font-size:.78rem}
-}
+/* layout: single column; sidebar is an off-canvas drawer */
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:0;padding-top:28px;padding-bottom:64px}
 
-/* sidebar */
-.sidebar{border-right:1px solid var(--line);padding-right:20px}
-.side{padding-top:8px}
-.side-sec{margin-bottom:22px}
-.side-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-faint);margin-bottom:8px}
+/* drawer backdrop */
+.drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .2s;z-index:30}
+.drawer-backdrop.open{opacity:1;pointer-events:auto}
+
+/* sidebar as a slide-out drawer: starts below the two-bar header */
+.sidebar{position:fixed;top:104px;left:0;bottom:0;width:280px;background:var(--bg-2);border-right:1px solid var(--line);transform:translateX(-100%);transition:transform .2s ease;overflow-y:auto;z-index:31;padding:24px 18px}
+.sidebar.open{transform:translateX(0) !important}
+.side{padding-top:4px}
+.side-sec{margin-bottom:16px}
+.side-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-faint);margin-bottom:4px;font-weight:600}
 .side-title a{color:var(--ink-faint)}
 .side-title a:hover{color:var(--copper)}
-.side ul{list-style:none}
-.side li{margin:2px 0}
-.side a{font-size:.85rem;color:var(--ink-dim);border-bottom:none;display:block;padding:3px 0}
+.side ul{list-style:none;margin:0;padding:0 0 0 10px;border-left:1px solid var(--line);display:block}
+.side li{margin:0;display:block}
+.side a{font-size:.85rem;color:var(--ink-dim);border-bottom:none;display:block;padding:2px 0 2px 4px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;letter-spacing:normal}
 .side a:hover{color:var(--ink)}
-.side li.active a{color:var(--copper-hi)}
+.side li.active a{color:var(--copper-hi);background:rgba(201,122,61,.08)}
 
-/* breadcrumb */
-.breadcrumb{font-size:.8rem;color:var(--ink-faint);margin-bottom:20px}
-.breadcrumb a{color:var(--ink-dim);border-bottom:none}
-.breadcrumb a:hover{color:var(--copper)}
 .crumb-sep{color:var(--ink-faint);margin:0 6px}
 .crumb-cur{color:var(--ink)}
 
@@ -106,6 +107,9 @@ article hr{border:none;border-top:1px solid var(--line);margin:1.6em 0}
 
 /* mobile: TOC collapses to a toggle, list scrolls if long */
 @media(max-width:560px){
+  nav.wrap{height:auto;padding:10px 16px;flex-wrap:wrap}
+  nav ul{gap:14px}
+  nav a{font-size:.78rem}
   .toc{margin:1.2em 0;padding:10px 12px}
   .toc:not([open]){padding:10px 12px}
   .toc ul{max-height:50vh;overflow-y:auto}

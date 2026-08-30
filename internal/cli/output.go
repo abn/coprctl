@@ -3,11 +3,13 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/abn/coprctl/internal/cerr"
+	"github.com/abn/coprctl/internal/config"
 	"github.com/abn/coprctl/internal/ref"
 	"github.com/abn/coprctl/internal/render"
 )
@@ -195,4 +197,37 @@ func parsePackageRef(app *App, args []string) (ref.Ref, error) {
 // non-interactive destructive command needs.
 func confirmRequired(flag string) error {
 	return cerr.Usage(fmt.Sprintf("this is a destructive operation; pass %s to confirm", flag))
+}
+
+// instanceBase returns the configured instance base URL, falling back to the
+// production instance.
+func instanceBase(app *App) string {
+	if app.Cfg != nil {
+		if prof, err := app.Cfg.Profile(app.profile); err == nil && prof.BaseURL() != "" {
+			return prof.BaseURL()
+		}
+	}
+	return config.DefaultProductionURL
+}
+
+// groupActivationHint returns the remediation hint for an unactivated group
+// owner, or "" when owner is not a group.
+func groupActivationHint(baseURL, owner string) string {
+	if !strings.HasPrefix(owner, "@") {
+		return ""
+	}
+	return fmt.Sprintf("group %q is not activated; activate it at %s/groups/list/my first",
+		owner, strings.TrimRight(baseURL, "/"))
+}
+
+// wrapGroupNotFoundHint wraps an error from a @group-owner operation with an
+// activation hint when the error is a not-found.
+func wrapGroupNotFoundHint(owner, baseURL string, err error) error {
+	if !strings.HasPrefix(owner, "@") {
+		return err
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitNotFound {
+		return err
+	}
+	return cerr.New("not_found", cerr.ExitNotFound, groupActivationHint(baseURL, owner)).Wrap(err)
 }

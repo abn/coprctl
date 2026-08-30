@@ -195,7 +195,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			p, err := c.GetProject(cmd.Context(), r.Owner, r.Project)
 			if err != nil {
-				return err
+				return wrapGroupNotFoundHint(r.Owner, instanceBase(app), err)
 			}
 			return renderHumanOr(cmd, out, p, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
@@ -262,7 +262,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 				EnableNet:    enableNet,
 			}, ifNotExists)
 			if err != nil {
-				return err
+				return wrapGroupNotFoundHint(r.Owner, instanceBase(app), err)
 			}
 			return renderResult(cmd, out, map[string]any{
 				"created": r.String(),

@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/abn/coprctl/internal/cerr"
@@ -145,5 +147,53 @@ func TestParseRefBareWithoutProfileLeavesOwnerEmpty(t *testing.T) {
 	}
 	if r.Owner != "" {
 		t.Errorf("owner = %q, want empty when no profile is configured", r.Owner)
+	}
+}
+
+const testBase = "https://copr.fedorainfracloud.org"
+
+func TestWrapGroupNotFoundHint(t *testing.T) {
+	notFound := cerr.NotFound("/api_3/projects/@foo/proj")
+	transport := cerr.Transport("boom")
+
+	// A non-@ owner passes through unchanged.
+	if got := wrapGroupNotFoundHint("alice", testBase, transport); got != transport {
+		t.Error("non-@ owner should pass the error through unchanged")
+	}
+	if got := wrapGroupNotFoundHint("alice", testBase, notFound); got != notFound {
+		t.Error("non-@ owner should pass a not-found error through unchanged")
+	}
+
+	// A @ owner with a not-found error gets the activation hint.
+	got := wrapGroupNotFoundHint("@foo", testBase, notFound)
+	if got == notFound {
+		t.Error("expected a wrapped error for a @ owner with not-found")
+	}
+	if cerr.ExitCodeFor(got) != cerr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", cerr.ExitCodeFor(got), cerr.ExitNotFound)
+	}
+	if !errors.Is(got, notFound) {
+		t.Error("expected the wrapped error to retain the original not-found")
+	}
+	for _, want := range []string{`"@foo"`, "/groups/list/my", testBase} {
+		if !strings.Contains(got.Error(), want) {
+			t.Errorf("expected %q in message, got %q", want, got.Error())
+		}
+	}
+
+	// A @ owner with a non-not-found error passes through unchanged.
+	if got := wrapGroupNotFoundHint("@foo", testBase, transport); got != transport {
+		t.Error("@ owner with a non-not-found error should pass through unchanged")
+	}
+}
+
+func TestInstanceBaseFallsBackToProduction(t *testing.T) {
+	app := &App{Cfg: nil}
+	if got := instanceBase(app); got != config.DefaultProductionURL {
+		t.Errorf("instanceBase = %q, want %q", got, config.DefaultProductionURL)
+	}
+	app = testAppWithProfile(t, "abn")
+	if got := instanceBase(app); got != testBase {
+		t.Errorf("instanceBase = %q, want %q", got, testBase)
 	}
 }

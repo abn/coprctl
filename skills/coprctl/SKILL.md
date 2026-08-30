@@ -15,6 +15,8 @@ description: Manage Fedora Copr projects, packages, chroots, builds, build
 - Exit codes are meaningful: 4 = build failed, 8 = not found, 12 = drift.
 - When a command fails, run `coprctl doctor` first: it distinguishes config, auth, and network problems in one shot.
 - `coprctl chroot list` uses a cached catalog when the instance is unreachable; a warning on stderr means it fell back to cache.
+- Group-owned projects use `@group/project`; the group must first be activated in the Copr web UI at `/groups/list/my`.
+- coprctl adds an activation hint when a `@group` owner returns not found (404).
 
 ## Reference
 

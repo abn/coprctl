@@ -27,7 +27,7 @@ func newMonitorCmd(app *App) *cobra.Command {
 			// Monitor is a real /api_3 endpoint: package x chroot states.
 			rows, err := c.Monitor(cmd.Context(), r.Owner, r.Project)
 			if err != nil {
-				return err
+				return wrapGroupNotFoundHint(r.Owner, instanceBase(app), err)
 			}
 			trows := make([][]string, 0)
 			for _, row := range rows {

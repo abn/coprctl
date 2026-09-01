@@ -48,6 +48,9 @@ The command prints every created build: a row per build in the human table, a
 JSON array under `--output json`, and one object per build under
 `--output jsonl`. `--watch` waits for each submitted build.
 
+Every submit, not just URL, returns a JSON array under `--output json`; a
+single build is a one-element array, so a script reads `.[0]`.
+
 ## Upload and local source RPMs
 
 `--source upload --upload PATH` uploads a local SRPM. The chroot set comes from

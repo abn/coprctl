@@ -6,6 +6,12 @@ or implementation milestones; repository changes belong in the commit history.
 
 ## 2026-09-01
 
+* **Update**: Documented the breaking machine-output shapes in the CLI
+  grammar: collections stream one object per line under `--output jsonl`,
+  `build submit` returns a JSON array even for a single build, and build
+  output carries `source_package` with the server rollup instead of the
+  `packagename`/`source_type`/`builds` keys. The submitting-builds guide
+  notes the array applies to every submit, not just URL.
 * **Creation**: Added the "The copr.yaml manifest" guide
   (`docs/usage/manifest.md`) documenting the full settings schema, the
   declared-only apply rule, the declared-vs-zero family, and the three

@@ -40,6 +40,21 @@ when stdout is not a TTY**. Piping implies machine consumption. Human formats
 (table, plain) are renderings of the same structs JSON serializes, so there is
 no separate code path to drift.
 
+Two shapes matter to scripts:
+
+- A **collection** under `--output jsonl` streams one object per line, never a
+  single array line. `build list`, `project list`, `package list`, `monitor`,
+  and `build submit` all do this.
+- `build submit` returns a **JSON array** under `--output json` even for a
+  single build, so a script reads `.[0]`. This matches the api_3 create
+  endpoints, which return an `items` envelope for multi-build submissions.
+
+Build machine output uses the current api_3 shape: package identity is
+`source_package` (name/version/url), the server `state` is the build rollup,
+and per-chroot detail is fetched via `build-chroot/list`. The `packagename`,
+`source_type`, and embedded `builds` keys are not part of the wire shape and
+are not emitted.
+
 Exit codes are stable and meaningful: `4` is a failed build, `8` is not found,
 `9` is forbidden, `12` is drift. Errors are structured objects with a code, a
 hint, and a retryability flag.

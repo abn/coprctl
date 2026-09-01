@@ -3,8 +3,8 @@
 Guides and worked examples for using the tool.
 
 * [Quick start](quickstart.md) - first steps
-* [GitHub webhook integration](github-integration.md) - wiring Copr to a
-  GitHub repo
+* [Webhook integrations](webhook-integrations.md) - wiring Copr to GitHub or
+  GitLab repos, disabling, and custom webhooks
 * [Submitting builds](submitting-builds.md) - generic build options, chroot
   globs, uploads, and batch delete
 * [Debugging a failing build](debugging-builds.md) - reproduce and fix failures

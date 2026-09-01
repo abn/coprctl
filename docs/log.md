@@ -22,6 +22,7 @@ or implementation milestones; repository changes belong in the commit history.
   never-present `packagename`/`source_type` keys are gone, the enrichment-only
   `builds` key no longer appears in build output, and `BuildChroot` no longer
   carries a `build_id`.
+<<<<<<< HEAD
 * **Update**: Verified ground-truth wire shapes for two build/package
   operations. `POST /build/create/url` returns every created build in an
   `items` envelope, so a single-URL submit is a one-item list, not a flat build
@@ -37,6 +38,14 @@ or implementation milestones; repository changes belong in the commit history.
   `--from` caveats, the atomic batch delete, and the reproduce fallback to the
   stored source build config. Linked it from the usage index and noted the
   reproduce fallback in the debugging guide.
+* **Update**: Renamed the GitHub integration guide to "Webhook integrations"
+  (`docs/usage/webhook-integrations.md`) and extended it: the GitLab enable
+  command and its tag-only default, the `integration disable` verify-before-
+  delete flow, the `integration url --forge custom --package` form, and the
+  shared secret-masking contract. The usage index link follows the rename.
+  The enable wording was refined to match implementation: a hook is reused by
+  its receiver prefix (forge and project id), which survives a secret
+  rotation, rather than by instance.
 
 ## 2026-08-30
 

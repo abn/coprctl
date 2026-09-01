@@ -79,6 +79,29 @@ func (s *Store) SetHookID(owner, project string, id int64) error {
 	return s.write(owner, project, rec)
 }
 
+// GetHookID returns the cached forge hook id for a project. The store keeps
+// one id per owner/project even though enable is per forge and repo, so callers
+// must treat the value as a hint, not the sole basis for a delete.
+func (s *Store) GetHookID(owner, project string) (int64, error) {
+	rec, err := s.read(owner, project)
+	if err != nil {
+		return 0, err
+	}
+	return rec.HookID, nil
+}
+
+// ClearHookID drops the cached forge hook id for a project, so a disable is
+// followed by honest state and a later disable or enable never reports a
+// stale id.
+func (s *Store) ClearHookID(owner, project string) error {
+	rec, err := s.read(owner, project)
+	if err != nil {
+		return err
+	}
+	rec.HookID = 0
+	return s.write(owner, project, rec)
+}
+
 // read loads the integration record for a project. A missing file is treated
 // as "no record yet" (empty record, nil error); other read and decode errors
 // are surfaced so a corrupt state file is never silently rewritten as empty.

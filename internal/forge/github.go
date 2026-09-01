@@ -1,5 +1,5 @@
-// Package forge manages forge-side webhook hooks (GitHub first, others later).
-// The integration needs admin:repo_hook scope only.
+// Package forge manages forge-side webhook hooks (GitHub and GitLab). The
+// GitHub integration needs admin:repo_hook scope only.
 package forge
 
 import (
@@ -12,7 +12,8 @@ import (
 	"time"
 )
 
-// Hook is a forge webhook.
+// Hook is a forge webhook. GitHub reports the destination under config.url and
+// its own API URL under url; GitLab reports the destination directly under url.
 type Hook struct {
 	ID     int64      `json:"id"`
 	URL    string     `json:"url"`
@@ -21,9 +22,39 @@ type Hook struct {
 	Config HookConfig `json:"config"`
 }
 
+// DestinationURL returns the URL the forge will POST to, independent of how the
+// forge reports it.
+func (h Hook) DestinationURL() string {
+	if h.Config.URL != "" {
+		return h.Config.URL
+	}
+	return h.URL
+}
+
 // HookConfig carries the webhook destination and delivery settings.
 type HookConfig struct {
 	URL string `json:"url"`
+}
+
+// HookOptions carries the trigger selection for a hook. Forges translate it
+// differently: GitHub maps to an event list, GitLab to the
+// push_events/tag_push_events toggles.
+type HookOptions struct {
+	// TagOnly triggers on tag pushes only (GitHub `create` event; GitLab
+	// tag_push_events toggle).
+	TagOnly bool
+	// Events is an explicit GitHub-style event list. GitLab ignores it.
+	Events []string
+}
+
+// HookManager is the narrow forge-side surface the integration needs. It keeps
+// the Copr receiver URL and package scoping testable independently of any one
+// forge client.
+type HookManager interface {
+	ListHooks(ctx context.Context, owner, repo string) ([]Hook, error)
+	CreateHook(ctx context.Context, owner, repo, url string, o HookOptions) (*Hook, error)
+	UpdateHook(ctx context.Context, owner, repo string, id int64, url string, o HookOptions) error
+	DeleteHook(ctx context.Context, owner, repo string, id int64) error
 }
 
 // GitHub is a thin client for the subset of the GitHub API the integration
@@ -77,12 +108,25 @@ func (g *GitHub) ListHooks(ctx context.Context, owner, repo string) ([]Hook, err
 	return hooks, err
 }
 
+// HookEvents resolves the GitHub event list for the options: an explicit list
+// wins, otherwise tag-only maps to the `create` event (which fires on tag
+// creation) and branch pushes opt back in with `push`.
+func HookEvents(o HookOptions) []string {
+	if len(o.Events) > 0 {
+		return o.Events
+	}
+	if o.TagOnly {
+		return []string{"create"}
+	}
+	return []string{"push", "create"}
+}
+
 // CreateHook creates a webhook.
-func (g *GitHub) CreateHook(ctx context.Context, owner, repo, url string, events []string) (*Hook, error) {
+func (g *GitHub) CreateHook(ctx context.Context, owner, repo, url string, o HookOptions) (*Hook, error) {
 	payload := map[string]any{
 		"name":   "web",
 		"active": true,
-		"events": events,
+		"events": HookEvents(o),
 		"config": map[string]any{
 			"url":          url,
 			"content_type": "json",
@@ -95,10 +139,10 @@ func (g *GitHub) CreateHook(ctx context.Context, owner, repo, url string, events
 }
 
 // UpdateHook updates a hook's config and events.
-func (g *GitHub) UpdateHook(ctx context.Context, owner, repo string, id int64, url string, events []string) error {
+func (g *GitHub) UpdateHook(ctx context.Context, owner, repo string, id int64, url string, o HookOptions) error {
 	payload := map[string]any{
 		"active": true,
-		"events": events,
+		"events": HookEvents(o),
 		"config": map[string]any{
 			"url":          url,
 			"content_type": "json",

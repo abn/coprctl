@@ -84,7 +84,7 @@ points:
 - [Overview](docs/overview.md)
 - [Command reference](docs/reference/commands.md)
 - [Debugging a failing build](docs/usage/debugging-builds.md)
-- [GitHub webhook integration](docs/usage/github-integration.md)
+- [Webhook integrations](docs/usage/webhook-integrations.md)
 
 Common workflows:
 

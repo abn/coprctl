@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.0](https://github.com/abn/coprctl/compare/v0.6.0...v1.0.0) (2026-09-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* build machine output now matches the current api_3 wire shape. `build submit` returns an array of builds for every source type (previously a single object), so scripts reading `.id` must use `.[0].id`. `build get` and `build list` output no longer carries `packagename`, `source_type`, or `builds`; package identity is `source_package` and per-chroot detail comes from `build-chroot/list`. `--output jsonl` on collection commands streams one object per line instead of a single array line. `build delete` is atomic: if any build id is invalid or still running the whole batch fails instead of deleting the valid subset. `monitor` now always requests the per-chroot log URL fields, which can 400 on instances that predate `additional_fields[]`; such instances need the newer backend.
+
+### Features
+
+* align with the current Copr api_3 surface ([896fbcd](https://github.com/abn/coprctl/commit/896fbcdf1e7c2e739f06d93e220718caf0261faa))
+
+
+### Documentation
+
+* drop the 'index' suffix from section link labels ([#49](https://github.com/abn/coprctl/issues/49)) ([8ca7ae8](https://github.com/abn/coprctl/commit/8ca7ae881f85eb45c7610a3040ea701d539fcce0))
+
+
+### Continuous Integration
+
+* run the quality gate once per pull request ([5eb13b0](https://github.com/abn/coprctl/commit/5eb13b0f5a75318857e9a7e5e6c7672c9da7d964))
+
 ## [0.6.0](https://github.com/abn/coprctl/compare/v0.5.0...v0.6.0) (2026-08-30)
 
 

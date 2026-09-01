@@ -10,6 +10,11 @@ or implementation milestones; repository changes belong in the commit history.
   (`docs/usage/manifest.md`) documenting the full settings schema, the
   declared-only apply rule, the declared-vs-zero family, and the three
   treatment classes (readable and reconciled, create-only, write-only).
+* **Update**: `monitor` now requests and renders the per-chroot log URLs,
+  backend log URLs, and integer `status` that `/monitor` exposes via
+  `additional_fields[]`, and accepts `:dir` side-repo monitoring. The human
+  table gained `BUILD` and an elided `LOG` column; full URLs stay JSON-only.
+  The `ui` command and its TUI forward the reference's dir.
 * **Update**: The build response schema is now decoded to match the api_3
   wire shape: `source_package` (name/version/url) carries package identity and
   the server `state` is the build rollup, with per-chroot detail fetched via

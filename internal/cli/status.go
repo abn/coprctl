@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -25,21 +26,65 @@ func newMonitorCmd(app *App) *cobra.Command {
 				return err
 			}
 			// Monitor is a real /api_3 endpoint: package x chroot states.
-			rows, err := c.Monitor(cmd.Context(), r.Owner, r.Project)
+			rows, err := c.Monitor(cmd.Context(), r.Owner, r.Project, r.Dir)
 			if err != nil {
 				return wrapGroupNotFoundHint(r.Owner, instanceBase(app), err)
 			}
 			trows := make([][]string, 0)
 			for _, row := range rows {
 				for ch, info := range row.Chroots {
-					trows = append(trows, []string{row.Name, ch, info.State, info.PkgVersion})
+					build := "-"
+					if info.BuildID != 0 {
+						build = fmt.Sprintf("%d", info.BuildID)
+					}
+					log := "-"
+					if info.URLBuildLog != "" {
+						log = elideLogURL(info.URLBuildLog)
+					}
+					trows = append(trows, []string{row.Name, ch, info.State, build, info.PkgVersion, log})
 				}
 			}
-			return renderTableRows(cmd, &out, []string{"PACKAGE", "CHROOT", "STATE", "VERSION"}, trows, rows)
+			return renderTableRows(cmd, &out, []string{"PACKAGE", "CHROOT", "STATE", "BUILD", "VERSION", "LOG"}, trows, rows)
 		},
 	}
 	out.bind(cmd)
 	return cmd
+}
+
+// elideLogURL shortens a live-log URL to its host and final two path segments
+// (the build dir and log filename), so the human monitor table stays narrow
+// and every chroot keeps its own signal; the full URL is the JSON output's
+// job. Short URLs and degenerate inputs pass through unchanged.
+func elideLogURL(u string) string {
+	const maxLen = 48
+	if len(u) <= maxLen {
+		return u
+	}
+	head := u
+	if i := strings.Index(u, "://"); i >= 0 {
+		if j := strings.Index(u[i+3:], "/"); j >= 0 {
+			head = u[:i+3+j]
+		}
+	}
+	segs := strings.Split(u, "/")
+	nonEmpty := make([]string, 0, len(segs))
+	for _, s := range segs {
+		if s != "" {
+			nonEmpty = append(nonEmpty, s)
+		}
+	}
+	tail := ""
+	if n := len(nonEmpty); n >= 2 {
+		tail = nonEmpty[n-2] + "/" + nonEmpty[n-1]
+	} else if n == 1 {
+		tail = nonEmpty[0]
+	}
+	// Elide only when the middle actually shrinks; a host-only URL or a
+	// trailing slash would otherwise grow rather than shorten.
+	if len(head)+len("/.../")+len(tail) < len(u) {
+		return head + "/.../" + tail
+	}
+	return u
 }
 
 func newStatusCmd(app *App) *cobra.Command {

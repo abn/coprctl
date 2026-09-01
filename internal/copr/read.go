@@ -408,11 +408,20 @@ type MonitorRow struct {
 	Chroots map[string]MonitorChrootInfo `json:"chroots"`
 }
 
-// MonitorChrootInfo is a single chroot's state in a monitor row.
+// MonitorChrootInfo is a single chroot's state in a monitor row. status is the
+// int BuildChroot.status upstream; it is always on the wire and never
+// omitempty, because 0 (failed) is a real state. The URL fields are omitempty
+// so a server that has not assigned a result_dir yet (or does not support the
+// fields) keeps the machine output shape.
 type MonitorChrootInfo struct {
-	BuildID    int    `json:"build_id"`
-	State      string `json:"state"`
-	PkgVersion string `json:"pkg_version"`
+	BuildID       int    `json:"build_id"`
+	State         string `json:"state"`
+	Status        int    `json:"status"`
+	PkgVersion    string `json:"pkg_version"`
+	URLBuildLog   string `json:"url_build_log,omitempty"`
+	URLBackendLog string `json:"url_backend_log,omitempty"`
+	// Never requested upstream; decoded anyway in case a future server emits it.
+	URLBuild string `json:"url_build,omitempty"`
 }
 
 // MonitorEnvelope wraps the monitor response.
@@ -422,10 +431,20 @@ type MonitorEnvelope struct {
 	Packages []MonitorRow `json:"packages"`
 }
 
-// Monitor returns the package x chroot state matrix for a project.
-func (c *Client) Monitor(ctx context.Context, owner, project string) ([]MonitorRow, error) {
+// Monitor returns the package x chroot state matrix for a project. A non-empty
+// dir selects a side repo. The url_build_log and url_backend_log fields are
+// requested unconditionally: upstream derives them from result_dir_url during
+// the query, so the cost is fixed. url_build stays in the decode struct for
+// forward compatibility but is never requested: upstream never emits it, and
+// older instances reject additional fields they do not know.
+func (c *Client) Monitor(ctx context.Context, owner, project, dir string) ([]MonitorRow, error) {
+	q := projectQuery(owner, project)
+	if dir != "" {
+		q.Set("project_dirname", dir)
+	}
+	q["additional_fields[]"] = []string{"url_build_log", "url_backend_log"}
 	var env MonitorEnvelope
-	if err := c.Get(ctx, "/monitor", projectQuery(owner, project), &env); err != nil {
+	if err := c.Get(ctx, "/monitor", q, &env); err != nil {
 		return nil, err
 	}
 	return env.Packages, nil

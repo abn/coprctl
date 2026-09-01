@@ -26,6 +26,7 @@ type model struct {
 	ctx      context.Context
 	owner    string
 	project  string
+	dir      string
 	rows     []copr.MonitorRow
 	viewport viewport.Model
 	width    int
@@ -35,13 +36,15 @@ type model struct {
 
 // Run starts the dashboard, blocking until it exits. It is only called when
 // stdout is a TTY. The context cancels in-flight monitor polls and the
-// program's refresh loop.
-func Run(ctx context.Context, client *copr.Client, owner, project string) error {
+// program's refresh loop. dir selects a side repo; an empty dir monitors the
+// project's main directory.
+func Run(ctx context.Context, client *copr.Client, owner, project, dir string) error {
 	m := &model{
 		client:  client,
 		ctx:     ctx,
 		owner:   owner,
 		project: project,
+		dir:     dir,
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
@@ -93,7 +96,7 @@ func (m *model) poll() tea.Cmd {
 }
 
 func (m *model) refresh() error {
-	rows, err := m.client.Monitor(m.ctx, m.owner, m.project)
+	rows, err := m.client.Monitor(m.ctx, m.owner, m.project, m.dir)
 	if err != nil {
 		return err
 	}
@@ -103,11 +106,14 @@ func (m *model) refresh() error {
 
 func (m *model) render() string {
 	var b strings.Builder
-	title := lipgloss.NewStyle().Bold(true).Padding(0, 1).Render(
-		fmt.Sprintf("coprctl: %s/%s", m.owner, m.project))
+	ref := m.owner + "/" + m.project
+	if m.dir != "" {
+		ref += ":" + m.dir
+	}
+	title := lipgloss.NewStyle().Bold(true).Padding(0, 1).Render("coprctl: " + ref)
 	b.WriteString(title + "\n\n")
 	header := lipgloss.NewStyle().Bold(true).
-		Padding(0, 1).Render("PACKAGE\tCHROOT\tSTATE\tVERSION")
+		Padding(0, 1).Render("PACKAGE\tCHROOT\tSTATE\tBUILD\tVERSION")
 	b.WriteString(header + "\n")
 	if m.err != nil {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(
@@ -126,8 +132,12 @@ func (m *model) render() string {
 				color = "3"
 			}
 			stateSty := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(state)
-			b.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\n",
-				row.Name, ch, stateSty, info.PkgVersion))
+			build := "-"
+			if info.BuildID != 0 {
+				build = fmt.Sprintf("%d", info.BuildID)
+			}
+			b.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\t%s\n",
+				row.Name, ch, stateSty, build, info.PkgVersion))
 		}
 	}
 	b.WriteString("\n  j/k scroll   q quit\n")

@@ -22,6 +22,14 @@ to fix, and the piece with the most real engineering in it.
 Each target resolves to a build chroot, whose authoritative `result_url` points
 at the log files. The source-build phase lives under `srpm-builds/<id>`.
 
+`coprctl monitor OWNER/PROJECT` exposes the same source files: each chroot's
+JSON output carries `url_build_log` and `url_backend_log`. The monitor URL and
+the tailer's `Locate` resolve the same `builder-live.log`, but not the same
+bytes. `Locate` always appends `.gz` to the chroot `result_url`; the monitor
+URL points at the uncompressed live log while a chroot runs, switches to the
+`.gz` form once the chroot is terminal, and is `.gz` throughout `importing`.
+Pending, waiting, and starting chroots emit no URL at all.
+
 ## The live log problem
 
 `builder-live.log.gz` is a gzip file being appended to while the build runs.

@@ -3,6 +3,7 @@ package copr
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -102,6 +103,64 @@ func TestBuildDecodeRunningChrootsFallback(t *testing.T) {
 		if m[name] != "running" {
 			t.Errorf("ChrootStates()[%q] = %q, want fallback to the build state running", name, m[name])
 		}
+	}
+}
+
+func TestMonitorDecodeEnriched(t *testing.T) {
+	// monitor-enriched.json is the staging capture for build 2926024,
+	// reformatted from the raw response for readability.
+	var env MonitorEnvelope
+	if err := json.Unmarshal(readFixture(t, "testdata/monitor-enriched.json"), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Output != "ok" || !strings.Contains(env.Message, "successful") {
+		t.Errorf("envelope = %+v, want the ok envelope", env)
+	}
+	if len(env.Packages) != 1 {
+		t.Fatalf("packages = %d, want 1", len(env.Packages))
+	}
+	info, ok := env.Packages[0].Chroots["fedora-rawhide-x86_64"]
+	if !ok {
+		t.Fatalf("missing chroot fedora-rawhide-x86_64 in %v", env.Packages[0].Chroots)
+	}
+	if info.Status != 1 {
+		t.Errorf("status = %d, want 1", info.Status)
+	}
+	if info.State != "succeeded" || info.BuildID != 2926024 || info.PkgVersion != "2.10-1" {
+		t.Errorf("info = %+v, want the succeeded state row", info)
+	}
+	wantLog := "https://download.copr-dev.fedorainfracloud.org/results/devnullcake/hello-rpm/fedora-rawhide-x86_64/02926024-hello/builder-live.log.gz"
+	if info.URLBuildLog != wantLog {
+		t.Errorf("url_build_log = %q, want %q", info.URLBuildLog, wantLog)
+	}
+	wantBackend := "https://download.copr-dev.fedorainfracloud.org/results/devnullcake/hello-rpm/fedora-rawhide-x86_64/02926024-hello/backend.log.gz"
+	if info.URLBackendLog != wantBackend {
+		t.Errorf("url_backend_log = %q, want %q", info.URLBackendLog, wantBackend)
+	}
+	// url_build is never requested or emitted upstream, so an empty string is
+	// the forward-compatible decode.
+	if info.URLBuild != "" {
+		t.Errorf("url_build = %q, want empty", info.URLBuild)
+	}
+}
+
+func TestMonitorDecodeAbsentURLFields(t *testing.T) {
+	// A chroot without a result_dir emits null URL keys. status must survive a
+	// zero value: 0 is failed, a real state.
+	var env MonitorEnvelope
+	raw := `{"packages":[{"name":"hello","chroots":{"fedora-rawhide-x86_64":{"state":"failed","status":0,"build_id":2926024,"url_build_log":null,"url_backend_log":null,"pkg_version":"2.10-1"}}}]}`
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	info := env.Packages[0].Chroots["fedora-rawhide-x86_64"]
+	if info.Status != 0 {
+		t.Errorf("status = %d, want 0 preserved", info.Status)
+	}
+	if info.State != "failed" {
+		t.Errorf("state = %q, want failed", info.State)
+	}
+	if info.URLBuildLog != "" || info.URLBackendLog != "" || info.URLBuild != "" {
+		t.Errorf("url fields = %q/%q/%q, want empty", info.URLBuildLog, info.URLBackendLog, info.URLBuild)
 	}
 }
 

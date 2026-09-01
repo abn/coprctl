@@ -584,6 +584,10 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if len(*chroots) == 0 {
 					return cerr.Usage("--chroot is required for rpm-upload source (an omitted chroot list would publish to every project chroot)")
 				}
+				if unsupported := rpmUploadUnsupportedFlags(cmd); len(unsupported) > 0 {
+					return cerr.Usage(fmt.Sprintf(
+						"rpm-upload does not support the generic build flags yet: %s", strings.Join(unsupported, ", ")))
+				}
 				b, err := c.UploadRpmBuild(cmd.Context(), copr.RpmUploadSubmit{
 					Owner: r.Owner, Project: r.Project, Dir: effDir,
 					RpmPath: rpmPath, Chroots: *chroots, SHA256: sha256,
@@ -658,6 +662,10 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 }
 
 func mapRpmUploadError(err error) error {
+	// The disabled-instance case surfaces as a deterministic 400 whose message
+	// is "Direct RPM upload is not enabled on this Copr instance". This text
+	// match is load-bearing: if the server rewords it, rpm-upload degrades to
+	// a plain bad_request instead of feature_disabled.
 	var ce *cerr.Error
 	if errors.As(err, &ce) && ce.Code == "bad_request" && strings.Contains(ce.Hint, "not enabled") {
 		return cerr.New("feature_disabled", cerr.ExitPrecondition,
@@ -665,6 +673,22 @@ func mapRpmUploadError(err error) error {
 			WithHint("DIRECT_RPM_UPLOAD is off here; rpm-upload works on instances that enable it, typically self-hosted, not on Fedora infrastructure")
 	}
 	return err
+}
+
+// rpmUploadUnsupportedFlags lists the generic build-submit flags that have no
+// effect on rpm-upload yet, so a user is not silently served a synchronous,
+// default-option submit.
+func rpmUploadUnsupportedFlags(cmd *cobra.Command) []string {
+	var out []string
+	for _, name := range []string{
+		"background", "enable-net", "timeout", "bootstrap", "isolation",
+		"exclude-chroot", "after-build-id", "with-build-id",
+	} {
+		if cmd.Flags().Changed(name) {
+			out = append(out, "--"+name)
+		}
+	}
+	return out
 }
 
 func newBuildCancelCmd(app *App, out *outFlags) *cobra.Command {

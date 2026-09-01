@@ -864,6 +864,31 @@ func TestBuildSubmitRpmUploadRequiresFlags(t *testing.T) {
 	}
 }
 
+func TestBuildSubmitRpmUploadRejectsUnsupportedGenericFlags(t *testing.T) {
+	dir := t.TempDir()
+	rpm := filepath.Join(dir, "x.rpm")
+	if err := os.WriteFile(rpm, []byte("fake rpm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"submit", "owner/proj", "--source", "rpm-upload", "--rpm", rpm,
+		"--chroot", "fedora-42-x86_64", "--background"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected a usage error for --background with rpm-upload")
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitUsage {
+		t.Errorf("exit code = %d, want usage", cerr.ExitCodeFor(err))
+	}
+	if !strings.Contains(err.Error(), "--background") {
+		t.Errorf("error = %q, want it to name the unsupported flag", err.Error())
+	}
+}
+
 func TestRpmUploadDisabledInstance(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

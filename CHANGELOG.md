@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/abn/coprctl/compare/v1.0.0...v1.0.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* **packaging:** install shell completions with the RPM ([7f776e7](https://github.com/abn/coprctl/commit/7f776e7e21221aec58b589ed7ba4e11a039ebc18))
+
 ## [1.0.0](https://github.com/abn/coprctl/compare/v0.6.0...v1.0.0) (2026-09-01)
 
 

@@ -138,9 +138,9 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			token := githubToken()
-			if token == "" {
-				return fmt.Errorf("GITHUB_TOKEN or GH_TOKEN is required for the GitHub integration")
+			token, err := forgeToken("github")
+			if err != nil {
+				return err
 			}
 			// Default to tag-only triggers (GitHub `create` fires on tag
 			// creation). `--events` overrides for full control; forge.HookEvents
@@ -150,7 +150,7 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 				opts.Events = splitComma(events)
 			}
 			gh := forge.NewGitHub(token)
-			res, err := enableWebhook(cmd, app, r, repo, "github", "https://github.com/", gh,
+			res, err := enableWebhook(cmd, app, r, repo, "github", cloneBase("github"), gh,
 				opts, noAutoRebuild, reveal, gh.PingHook)
 			if err != nil {
 				return err
@@ -179,12 +179,12 @@ func newIntegrationGitlabEnableCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			token := gitlabToken()
-			if token == "" {
-				return fmt.Errorf("GITLAB_TOKEN is required for the GitLab integration")
+			token, err := forgeToken("gitlab")
+			if err != nil {
+				return err
 			}
 			gl := forge.NewGitLab(token, os.Getenv("GITLAB_API_URL"))
-			res, err := enableWebhook(cmd, app, r, repo, "gitlab", "https://gitlab.com/", gl,
+			res, err := enableWebhook(cmd, app, r, repo, "gitlab", cloneBase("gitlab"), gl,
 				forge.HookOptions{TagOnly: tagOnly}, noAutoRebuild, reveal,
 				func(ctx context.Context, owner, repo string, id int64) (int, error) {
 					// GitLab test hooks have no delivery readback; the test
@@ -233,13 +233,9 @@ func enableWebhook(cmd *cobra.Command, app *App, r ref.Ref, repo, forgeSegment, 
 	// Resolve the project's SCM packages that belong to this repo, so the
 	// webhook can be package-scoped (letting Copr match a bare v<semver> tag by
 	// package name) and auto-rebuild can be enabled.
-	pkgs, err := scmPackages(cmd.Context(), app, r, cloneBase+repo)
+	pkgs, pkgScope, err := webhookPackageScope(cmd.Context(), app, r, cloneBase+repo)
 	if err != nil {
 		return nil, err
-	}
-	pkgScope := ""
-	if len(pkgs) > 0 {
-		pkgScope = pkgs[0].Name
 	}
 	u, err := webhookURL(cmd.Context(), app, r, forgeSegment, pkgScope)
 	if err != nil {
@@ -306,26 +302,54 @@ func enableWebhook(cmd *cobra.Command, app *App, r ref.Ref, repo, forgeSegment, 
 	}, nil
 }
 
+// forgeToken returns the configured token for a forge, or an error naming the
+// missing environment variable. It also rejects forges the integration does
+// not support.
+func forgeToken(name string) (string, error) {
+	switch name {
+	case "github":
+		if t := githubToken(); t != "" {
+			return t, nil
+		}
+		return "", fmt.Errorf("GITHUB_TOKEN or GH_TOKEN is required for the GitHub integration")
+	case "gitlab":
+		if t := gitlabToken(); t != "" {
+			return t, nil
+		}
+		return "", fmt.Errorf("GITLAB_TOKEN is required for the GitLab integration")
+	default:
+		return "", cerr.Usage(fmt.Sprintf("unsupported forge %q (github|gitlab)", name))
+	}
+}
+
 // hookManager builds the forge client for a named forge, enforcing the token
 // requirement. Used by disable; the enable commands build their own concrete
 // clients because they need the forge-specific delivery check.
 func hookManager(name string) (forge.HookManager, error) {
-	switch name {
-	case "github":
-		token := githubToken()
-		if token == "" {
-			return nil, fmt.Errorf("GITHUB_TOKEN or GH_TOKEN is required for the GitHub integration")
-		}
-		return forge.NewGitHub(token), nil
-	case "gitlab":
-		token := gitlabToken()
-		if token == "" {
-			return nil, fmt.Errorf("GITLAB_TOKEN is required for the GitLab integration")
-		}
-		return forge.NewGitLab(token, os.Getenv("GITLAB_API_URL")), nil
-	default:
-		return nil, cerr.Usage(fmt.Sprintf("unsupported forge %q (github|gitlab)", name))
+	token, err := forgeToken(name)
+	if err != nil {
+		return nil, err
 	}
+	if name == "gitlab" {
+		return forge.NewGitLab(token, os.Getenv("GITLAB_API_URL")), nil
+	}
+	return forge.NewGitHub(token), nil
+}
+
+// webhookPackageScope resolves the SCM packages in a project that belong to
+// the given repo and returns the first package name, so the webhook can be
+// package-scoped (letting Copr match a bare v<semver> tag by package name).
+// The package list is returned for the auto-rebuild step; the scope name is
+// empty when no package matches.
+func webhookPackageScope(ctx context.Context, app *App, r ref.Ref, cloneURL string) ([]copr.Package, string, error) {
+	pkgs, err := scmPackages(ctx, app, r, cloneURL)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(pkgs) > 0 {
+		return pkgs, pkgs[0].Name, nil
+	}
+	return pkgs, "", nil
 }
 
 // cloneBase returns the https clone URL prefix used to match SCM packages on a
@@ -365,13 +389,9 @@ func newIntegrationDisableCmd(app *App, out *outFlags) *cobra.Command {
 			// Recompute the same receiver the enable path configured, so the
 			// match is exact: forge segment, project id, and optional package
 			// scope.
-			pkgs, err := scmPackages(cmd.Context(), app, r, cloneBase(forgeName)+repo)
+			_, pkgScope, err := webhookPackageScope(cmd.Context(), app, r, cloneBase(forgeName)+repo)
 			if err != nil {
 				return err
-			}
-			pkgScope := ""
-			if len(pkgs) > 0 {
-				pkgScope = pkgs[0].Name
 			}
 			u, err := webhookURL(cmd.Context(), app, r, forgeName, pkgScope)
 			if err != nil {

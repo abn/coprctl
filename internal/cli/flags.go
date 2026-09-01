@@ -42,6 +42,17 @@ func addExcludeChrootFlag(app *App, cmd *cobra.Command) *[]string {
 	return &chroots
 }
 
+// changedFlag returns a pointer to v when the named flag was explicitly set,
+// and nil otherwise. It drives the tri-state options that must distinguish
+// "absent" (server or project default) from an explicit value, including an
+// explicit false or zero.
+func changedFlag[T any](cmd *cobra.Command, name string, v T) *T {
+	if cmd.Flags().Changed(name) {
+		return &v
+	}
+	return nil
+}
+
 // addRuntimeFlag binds the standard --runtime flag and returns a pointer to
 // read at the gate.
 func addRuntimeFlag(cmd *cobra.Command) *string {

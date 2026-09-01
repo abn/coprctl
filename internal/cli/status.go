@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/abn/coprctl/internal/cerr"
+	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/render"
 )
 
@@ -33,15 +34,11 @@ func newMonitorCmd(app *App) *cobra.Command {
 			trows := make([][]string, 0)
 			for _, row := range rows {
 				for ch, info := range row.Chroots {
-					build := "-"
-					if info.BuildID != 0 {
-						build = fmt.Sprintf("%d", info.BuildID)
-					}
 					log := "-"
 					if info.URLBuildLog != "" {
 						log = elideLogURL(info.URLBuildLog)
 					}
-					trows = append(trows, []string{row.Name, ch, info.State, build, info.PkgVersion, log})
+					trows = append(trows, []string{row.Name, ch, info.State, monitorBuildID(info), info.PkgVersion, log})
 				}
 			}
 			return renderTableRows(cmd, &out, []string{"PACKAGE", "CHROOT", "STATE", "BUILD", "VERSION", "LOG"}, trows, rows)
@@ -49,6 +46,15 @@ func newMonitorCmd(app *App) *cobra.Command {
 	}
 	out.bind(cmd)
 	return cmd
+}
+
+// monitorBuildID renders a monitor chroot's build id, or "-" when the row has
+// none. Shared by the monitor table and the degraded ui table.
+func monitorBuildID(info copr.MonitorChrootInfo) string {
+	if info.BuildID == 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%d", info.BuildID)
 }
 
 // elideLogURL shortens a live-log URL to its host and final two path segments

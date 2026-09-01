@@ -49,11 +49,7 @@ func newUICmd(app *App) *cobra.Command {
 			t := render.NewTable("PACKAGE", "CHROOT", "STATE", "BUILD", "VERSION")
 			for _, row := range rows {
 				for ch, info := range row.Chroots {
-					build := "-"
-					if info.BuildID != 0 {
-						build = fmt.Sprintf("%d", info.BuildID)
-					}
-					t.Add(row.Name, ch, info.State, build, info.PkgVersion)
+					t.Add(row.Name, ch, info.State, monitorBuildID(info), info.PkgVersion)
 				}
 			}
 			return renderResult(cmd, &out, t)

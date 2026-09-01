@@ -219,95 +219,61 @@ func newBuildReproduceCmd(app *App, out *outFlags) *cobra.Command {
 // url (submitted as pkgs), and a distgit package with a custom clone URL
 // stores it under clone_url. Unknown types emit the type only.
 func submitInvocationFromSource(sourceType string, dict map[string]any) string {
+	// link is the stored enum for url packages; the CLI still submits them as
+	// --source url.
+	if sourceType == "link" {
+		sourceType = "url"
+	}
+	var b strings.Builder
+	b.WriteString("coprctl build submit REF --source " + sourceType)
+	flag := func(flag, key string) {
+		if v := dictString(dict, key); v != "" {
+			b.WriteString(" --" + flag + " " + v)
+		}
+	}
 	switch sourceType {
 	case "scm":
-		var b strings.Builder
-		b.WriteString("coprctl build submit REF --source scm")
-		if v := dictString(dict, "clone_url"); v != "" {
-			b.WriteString(" --clone-url " + v)
-		}
-		if v := dictString(dict, "type"); v != "" {
-			b.WriteString(" --scm-type " + v)
-		}
-		if v := dictString(dict, "committish"); v != "" {
-			b.WriteString(" --commit " + v)
-		}
-		if v := dictString(dict, "subdirectory"); v != "" {
-			b.WriteString(" --subdir " + v)
-		}
-		if v := dictString(dict, "spec"); v != "" {
-			b.WriteString(" --spec " + v)
-		}
-		if v := dictString(dict, "srpm_build_method"); v != "" {
-			b.WriteString(" --method " + v)
-		}
-		return b.String()
-	case "link", "url":
-		if v := dictString(dict, "url"); v != "" {
-			return "coprctl build submit REF --source url --url " + v
-		}
-		return "coprctl build submit REF --source url"
+		flag("clone-url", "clone_url")
+		flag("scm-type", "type")
+		flag("commit", "committish")
+		flag("subdir", "subdirectory")
+		flag("spec", "spec")
+		flag("method", "srpm_build_method")
 	case "distgit":
-		var b strings.Builder
-		b.WriteString("coprctl build submit REF --source distgit")
-		if v := dictString(dict, "package_name"); v != "" {
-			b.WriteString(" --name " + v)
-		}
-		if v := dictString(dict, "clone_url"); v != "" {
-			b.WriteString(" --clone-url " + v)
-		}
-		if v := dictString(dict, "distgit"); v != "" {
-			b.WriteString(" --distgit " + v)
-		}
-		if v := dictString(dict, "namespace"); v != "" {
-			b.WriteString(" --namespace " + v)
-		}
-		if v := dictString(dict, "committish"); v != "" {
-			b.WriteString(" --commit " + v)
-		}
-		return b.String()
+		flag("name", "package_name")
+		flag("clone-url", "clone_url")
+		flag("distgit", "distgit")
+		flag("namespace", "namespace")
+		flag("commit", "committish")
 	case "pypi":
-		var b strings.Builder
-		b.WriteString("coprctl build submit REF --source pypi")
-		if v := dictString(dict, "pypi_package_name"); v != "" {
-			b.WriteString(" --pypi-name " + v)
-		}
-		if v := dictString(dict, "pypi_package_version"); v != "" {
-			b.WriteString(" --pypi-version " + v)
-		}
-		if v, ok := dict["python_versions"].([]any); ok && len(v) > 0 {
-			versions := make([]string, 0, len(v))
-			for _, p := range v {
-				if s, ok := p.(string); ok && s != "" {
-					versions = append(versions, s)
-				}
-			}
-			if len(versions) > 0 {
+		flag("pypi-name", "pypi_package_name")
+		flag("pypi-version", "pypi_package_version")
+		if v, ok := dict["python_versions"].([]any); ok {
+			if versions := stringList(v); len(versions) > 0 {
 				b.WriteString(" --python-versions " + strings.Join(versions, ","))
 			}
 		}
-		return b.String()
 	case "rubygems":
-		if v := dictString(dict, "gem_name"); v != "" {
-			return "coprctl build submit REF --source rubygems --gem " + v
-		}
-		return "coprctl build submit REF --source rubygems"
+		flag("gem", "gem_name")
 	case "custom":
-		var b strings.Builder
-		b.WriteString("coprctl build submit REF --source custom")
-		if v := dictString(dict, "script"); v != "" {
-			b.WriteString(" --script " + v)
-		}
-		if v := dictString(dict, "chroot"); v != "" {
-			b.WriteString(" --script-chroot " + v)
-		}
-		if v := dictString(dict, "builddeps"); v != "" {
-			b.WriteString(" --script-builddeps " + v)
-		}
-		return b.String()
-	default:
-		return "coprctl build submit REF --source " + sourceType
+		flag("script", "script")
+		flag("script-chroot", "chroot")
+		flag("script-builddeps", "builddeps")
+	case "url":
+		flag("url", "url")
 	}
+	return b.String()
+}
+
+// stringList returns the non-empty string values of a stored dict array.
+func stringList(v []any) []string {
+	out := make([]string, 0, len(v))
+	for _, p := range v {
+		if s, ok := p.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // dictString returns the string value of a stored source_dict key, or "" when
@@ -449,30 +415,14 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 
 			// Tri-state bools: absent keeps the server/project default, while
 			// an explicit --enable-net=false actively disables it.
-			var backgroundPtr *bool
-			if cmd.Flags().Changed("background") {
-				backgroundPtr = &background
-			}
-			var enableNetPtr *bool
-			if cmd.Flags().Changed("enable-net") {
-				enableNetPtr = &enableNet
-			}
-			var timeoutPtr *int
-			if cmd.Flags().Changed("timeout") {
-				timeoutPtr = &timeout
-			}
-			var afterID *int
-			if cmd.Flags().Changed("after-build-id") {
-				afterID = &afterBuildID
-			}
-			var withID *int
-			if cmd.Flags().Changed("with-build-id") {
-				withID = &withBuildID
-			}
 			opts := copr.UploadOptions{
-				Background: backgroundPtr, EnableNet: enableNetPtr, Timeout: timeoutPtr,
-				Bootstrap: bootstrap, Isolation: isolation,
-				AfterBuildID: afterID, WithBuildID: withID,
+				Background:     changedFlag(cmd, "background", background),
+				EnableNet:      changedFlag(cmd, "enable-net", enableNet),
+				Timeout:        changedFlag(cmd, "timeout", timeout),
+				Bootstrap:      bootstrap,
+				Isolation:      isolation,
+				AfterBuildID:   changedFlag(cmd, "after-build-id", afterBuildID),
+				WithBuildID:    changedFlag(cmd, "with-build-id", withBuildID),
 				ExcludeChroots: *excludeChroots,
 			}
 

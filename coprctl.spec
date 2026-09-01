@@ -1,7 +1,7 @@
 Name:           coprctl
 %global debug_package %{nil}
 # x-release-please-start-version
-Version:        1.0.0
+Version:        1.0.1
 # x-release-please-end
 Release:        2%{?dist}
 Summary:        Reimagined CLI and agent interface for Fedora Copr

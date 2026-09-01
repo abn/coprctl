@@ -476,6 +476,26 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				ExcludeChroots: *excludeChroots,
 			}
 
+			// rpm-upload is a pure local-validation submit path. Its flag
+			// errors are checked before the client is built, so they surface
+			// deterministically instead of being masked by a missing-config
+			// error on machines with no profile.
+			if copr.SourceType(src.sourceType) == copr.SourceRpmUpload {
+				if rpmPath == "" {
+					return cerr.Usage("--rpm is required for rpm-upload source")
+				}
+				if _, statErr := os.Stat(rpmPath); statErr != nil {
+					return fmt.Errorf("path %q not found; pass a local RPM", rpmPath)
+				}
+				if len(*chroots) == 0 {
+					return cerr.Usage("--chroot is required for rpm-upload source (an omitted chroot list would publish to every project chroot)")
+				}
+				if unsupported := rpmUploadUnsupportedFlags(cmd); len(unsupported) > 0 {
+					return cerr.Usage(fmt.Sprintf(
+						"rpm-upload does not support the generic build flags yet: %s", strings.Join(unsupported, ", ")))
+				}
+			}
+
 			c, err := app.Client()
 			if err != nil {
 				return err
@@ -575,19 +595,6 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			}
 
 			if copr.SourceType(src.sourceType) == copr.SourceRpmUpload {
-				if rpmPath == "" {
-					return cerr.Usage("--rpm is required for rpm-upload source")
-				}
-				if _, statErr := os.Stat(rpmPath); statErr != nil {
-					return fmt.Errorf("path %q not found; pass a local RPM", rpmPath)
-				}
-				if len(*chroots) == 0 {
-					return cerr.Usage("--chroot is required for rpm-upload source (an omitted chroot list would publish to every project chroot)")
-				}
-				if unsupported := rpmUploadUnsupportedFlags(cmd); len(unsupported) > 0 {
-					return cerr.Usage(fmt.Sprintf(
-						"rpm-upload does not support the generic build flags yet: %s", strings.Join(unsupported, ", ")))
-				}
 				b, err := c.UploadRpmBuild(cmd.Context(), copr.RpmUploadSubmit{
 					Owner: r.Owner, Project: r.Project, Dir: effDir,
 					RpmPath: rpmPath, Chroots: *chroots, SHA256: sha256,

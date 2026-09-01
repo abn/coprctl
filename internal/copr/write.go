@@ -319,6 +319,49 @@ type BuildSubmit struct {
 	Source                  map[string]any
 	Chroots                 []string
 	Dir                     string
+	UploadOptions
+}
+
+// UploadOptions carries the generic build options shared by submit and upload.
+// A nil pointer or empty value means "not set" and is omitted, so the server
+// or project default applies.
+type UploadOptions struct {
+	Background     *bool
+	EnableNet      *bool
+	Timeout        *int
+	Bootstrap      string
+	Isolation      string
+	AfterBuildID   *int
+	WithBuildID    *int
+	ExcludeChroots []string
+}
+
+// fill writes the set options into payload under their wire keys.
+func (o UploadOptions) fill(payload map[string]any) {
+	if o.Background != nil {
+		payload["background"] = *o.Background
+	}
+	if o.EnableNet != nil {
+		payload["enable_net"] = *o.EnableNet
+	}
+	if o.Timeout != nil {
+		payload["timeout"] = *o.Timeout
+	}
+	if o.Bootstrap != "" {
+		payload["bootstrap"] = o.Bootstrap
+	}
+	if o.Isolation != "" {
+		payload["isolation"] = o.Isolation
+	}
+	if o.AfterBuildID != nil {
+		payload["after_build_id"] = *o.AfterBuildID
+	}
+	if o.WithBuildID != nil {
+		payload["with_build_id"] = *o.WithBuildID
+	}
+	if len(o.ExcludeChroots) > 0 {
+		payload["exclude_chroots"] = o.ExcludeChroots
+	}
 }
 
 // SubmitBuild creates a build. The url source type creates one build per pkgs
@@ -334,6 +377,7 @@ func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) ([]Build, erro
 	if in.Dir != "" {
 		payload["project_dirname"] = dirnameFor(in.Project, in.Dir)
 	}
+	in.UploadOptions.fill(payload)
 	for k, v := range in.Source {
 		payload[k] = v
 	}
@@ -401,9 +445,12 @@ func (c *Client) RebuildPackage(ctx context.Context, owner, project, pkg string,
 	return []Build{b}, nil
 }
 
-// DeleteBuild removes a build.
-func (c *Client) DeleteBuild(ctx context.Context, id int) error {
-	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/build/delete/%d", id), nil, nil)
+// DeleteBuilds removes a batch of builds in one atomic request. The batch
+// list endpoint is the single delete path: if any id is invalid or still
+// running, nothing is deleted.
+func (c *Client) DeleteBuilds(ctx context.Context, ids []int) error {
+	return c.doJSON(ctx, http.MethodPost, "/build/delete/list",
+		map[string]any{"builds": ids}, nil)
 }
 
 // MockChrootEdit edits a project chroot buildroot configuration.
@@ -465,8 +512,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, payload any, o
 }
 
 // UploadBuild uploads a local SRPM and creates a build, optionally into a
-// project directory (side repo) named by dir.
-func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir string) (*Build, error) {
+// project directory (side repo) named by dir. The generic build options ride
+// the multipart json part; the chroot set stays SRPM-declared.
+func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir string, opts UploadOptions) (*Build, error) {
 	f, err := os.Open(srpmPath)
 	if err != nil {
 		return nil, cerr.Config("cannot open SRPM").Wrap(err)
@@ -479,13 +527,14 @@ func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir 
 	// The upstream client sends a "json" file part carrying the JSON payload,
 	// alongside the SRPM as a "pkgs" file part. Without the json part the
 	// endpoint rejects the request with HTTP 415.
-	form := map[string]string{
+	form := map[string]any{
 		"ownername":   owner,
 		"projectname": project,
 	}
 	if dir != "" {
 		form["project_dirname"] = dirnameFor(project, dir)
 	}
+	opts.fill(form)
 	formData, err := json.Marshal(form)
 	if err != nil {
 		return nil, err

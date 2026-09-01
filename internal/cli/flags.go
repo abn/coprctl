@@ -33,6 +33,15 @@ func addChrootFlag(app *App, cmd *cobra.Command, help string, withShort bool) *[
 	return &chroots
 }
 
+// addExcludeChrootFlag binds the repeatable --exclude-chroot flag, wired to
+// the chroot catalog completion like --chroot.
+func addExcludeChrootFlag(app *App, cmd *cobra.Command) *[]string {
+	var chroots []string
+	cmd.Flags().StringSliceVar(&chroots, "exclude-chroot", nil, "chroots to exclude from the build (globs allowed)")
+	bindChrootCompletion(app, cmd, "exclude-chroot")
+	return &chroots
+}
+
 // addRuntimeFlag binds the standard --runtime flag and returns a pointer to
 // read at the gate.
 func addRuntimeFlag(cmd *cobra.Command) *string {

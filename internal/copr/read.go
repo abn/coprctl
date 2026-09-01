@@ -254,6 +254,28 @@ func (c *Client) GetBuild(ctx context.Context, id int) (*Build, error) {
 	return &b, nil
 }
 
+// SourceBuildConfig is the source definition and build options a build was
+// created with, as stored server-side. source_dict mixes strings, ints, and
+// arrays, so it cannot share the string-only Package.SourceDict type.
+type SourceBuildConfig struct {
+	SourceType   string         `json:"source_type"`
+	SourceDict   map[string]any `json:"source_dict"`
+	MemoryLimit  *int           `json:"memory_limit"`
+	Timeout      *int           `json:"timeout"`
+	IsBackground bool           `json:"is_background"`
+}
+
+// GetSourceBuildConfig fetches the stored source build config for a build.
+// The route has no auth decorator upstream, so it works through an anonymous
+// read client.
+func (c *Client) GetSourceBuildConfig(ctx context.Context, buildID int) (*SourceBuildConfig, error) {
+	var cfg SourceBuildConfig
+	if err := c.Get(ctx, fmt.Sprintf("/build/source-build-config/%d", buildID), nil, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
 // BuildList is the list result.
 type BuildList struct {
 	Items []Build `json:"items"`

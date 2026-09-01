@@ -1,7 +1,10 @@
 package copr
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -216,5 +219,56 @@ func TestTimestampNull(t *testing.T) {
 	}
 	if !ts.Time().IsZero() {
 		t.Fatalf("null timestamp should be zero time, got %v", ts.Time())
+	}
+}
+
+func TestGetSourceBuildConfig(t *testing.T) {
+	// Captured live response from the staging instance for a scm build; the
+	// stored dict carries srpm_build_method (not source_build_method).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api_3/build/source-build-config/2926020" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"source_type": "scm",
+			"source_dict": map[string]any{
+				"type":              "git",
+				"clone_url":         "https://github.com/abn/hello-rpm",
+				"committish":        "master",
+				"subdirectory":      nil,
+				"spec":              "hello.spec",
+				"srpm_build_method": "rpkg",
+			},
+			"memory_limit":  2048,
+			"timeout":       18000,
+			"is_background": false,
+		})
+	}))
+	defer srv.Close()
+	c := New(srv.URL, nil)
+	cfg, err := c.GetSourceBuildConfig(context.Background(), 2926020)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SourceType != "scm" {
+		t.Errorf("source_type = %q", cfg.SourceType)
+	}
+	if cfg.SourceDict["srpm_build_method"] != "rpkg" {
+		t.Errorf("srpm_build_method = %v (must use the stored key)", cfg.SourceDict["srpm_build_method"])
+	}
+	if _, ok := cfg.SourceDict["source_build_method"]; ok {
+		t.Errorf("source_dict must not carry the submit-time key source_build_method")
+	}
+	if cfg.SourceDict["clone_url"] != "https://github.com/abn/hello-rpm" {
+		t.Errorf("clone_url = %v", cfg.SourceDict["clone_url"])
+	}
+	if cfg.MemoryLimit == nil || *cfg.MemoryLimit != 2048 {
+		t.Errorf("memory_limit = %v", cfg.MemoryLimit)
+	}
+	if cfg.Timeout == nil || *cfg.Timeout != 18000 {
+		t.Errorf("timeout = %v", cfg.Timeout)
+	}
+	if cfg.IsBackground {
+		t.Errorf("is_background = true, want false")
 	}
 }

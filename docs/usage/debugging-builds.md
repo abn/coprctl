@@ -49,7 +49,9 @@ coprctl build reproduce BUILD_ID/CHROOT
 ```
 
 This prints the `copr-rpmbuild --task-url ...` invocation for mock-level
-fidelity.
+fidelity. When the log carries no recipe, it falls back to the stored source
+build config and prints the reconstructed submit instead, so a build without
+the recipe line is still reproducible.
 
 `coprctl try` runs a local preflight build, choosing a backend by intent:
 

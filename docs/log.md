@@ -31,6 +31,12 @@ or implementation milestones; repository changes belong in the commit history.
 * **Update**: `--output jsonl` on a collection command streams one object per
   line instead of a single array line, so every slice-rendering command
   (submit, list) emits line-delimited JSON.
+* **Creation**: Added "Submitting builds" (`docs/usage/submitting-builds.md`)
+  covering the generic build options shared by every source type, chroot globs
+  with `exclude_chroots`, the mutually exclusive batch options, the upload and
+  `--from` caveats, the atomic batch delete, and the reproduce fallback to the
+  stored source build config. Linked it from the usage index and noted the
+  reproduce fallback in the debugging guide.
 
 ## 2026-08-30
 

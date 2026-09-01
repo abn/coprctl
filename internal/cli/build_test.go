@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/copr"
 )
 
@@ -396,5 +398,392 @@ func TestBuildSubmitUploadRoutesToUploadBuild(t *testing.T) {
 	}
 	if !strings.Contains(ct, "multipart/form-data") {
 		t.Errorf("Content-Type = %q, want multipart/form-data", ct)
+	}
+}
+
+func TestBuildSubmitOptionFlagsEndToEnd(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		check func(t *testing.T, body map[string]any)
+	}{
+		{
+			name: "absent bools are not sent",
+			args: []string{"--source", "scm", "--clone-url", "https://example.com/r.git"},
+			check: func(t *testing.T, body map[string]any) {
+				for _, key := range []string{"background", "enable_net", "timeout", "bootstrap", "isolation", "after_build_id", "with_build_id", "exclude_chroots"} {
+					if _, ok := body[key]; ok {
+						t.Errorf("%s = %v, want absent", key, body[key])
+					}
+				}
+			},
+		},
+		{
+			name: "set bools and options carry wire keys",
+			args: []string{"--source", "scm", "--clone-url", "https://example.com/r.git",
+				"--background", "--enable-net", "--timeout", "3600", "--bootstrap", "on",
+				"--isolation", "simple", "--exclude-chroot", "fedora-rawhide-*"},
+			check: func(t *testing.T, body map[string]any) {
+				if body["background"] != true {
+					t.Errorf("background = %v", body["background"])
+				}
+				if body["enable_net"] != true {
+					t.Errorf("enable_net = %v", body["enable_net"])
+				}
+				if body["timeout"] != float64(3600) {
+					t.Errorf("timeout = %v", body["timeout"])
+				}
+				if body["bootstrap"] != "on" {
+					t.Errorf("bootstrap = %v", body["bootstrap"])
+				}
+				if body["isolation"] != "simple" {
+					t.Errorf("isolation = %v", body["isolation"])
+				}
+				exc, ok := body["exclude_chroots"].([]any)
+				if !ok || len(exc) != 1 || exc[0] != "fedora-rawhide-*" {
+					t.Errorf("exclude_chroots = %v", body["exclude_chroots"])
+				}
+			},
+		},
+		{
+			name: "explicit enable-net=false is sent",
+			args: []string{"--source", "scm", "--clone-url", "https://example.com/r.git",
+				"--enable-net=false"},
+			check: func(t *testing.T, body map[string]any) {
+				if body["enable_net"] != false {
+					t.Errorf("enable_net = %v, want explicit false", body["enable_net"])
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotBody []byte
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api_3/build/create/scm" {
+					t.Errorf("path = %s", r.URL.Path)
+				}
+				gotBody, _ = io.ReadAll(r.Body)
+				json.NewEncoder(w).Encode(map[string]any{"id": 1, "state": "pending"})
+			}))
+			defer srv.Close()
+			app := NewApp()
+			app.client = copr.New(srv.URL, nil)
+			cmd := newBuildCmd(app)
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+			cmd.SetErr(io.Discard)
+			args := append([]string{"submit", "owner/proj", "--output", "json"}, tt.args...)
+			cmd.SetArgs(args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			var sent map[string]any
+			if err := json.Unmarshal(gotBody, &sent); err != nil {
+				t.Fatalf("decode submitted body: %v", err)
+			}
+			tt.check(t, sent)
+		})
+	}
+}
+
+func TestBuildSubmitBatchExclusive(t *testing.T) {
+	app := NewApp()
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"submit", "owner/proj", "--source", "scm", "--clone-url", "u",
+		"--after-build-id", "1", "--with-build-id", "2", "--output", "json"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected a usage error for both batch options")
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitUsage {
+		t.Errorf("exit code = %d, want usage (%d)", cerr.ExitCodeFor(err), cerr.ExitUsage)
+	}
+}
+
+func TestSubmitInvocationFromSource(t *testing.T) {
+	tests := []struct {
+		name       string
+		sourceType string
+		dict       map[string]any
+		want       string
+	}{
+		{
+			name:       "scm stored shape",
+			sourceType: "scm",
+			dict: map[string]any{
+				"type": "git", "clone_url": "https://github.com/abn/hello-rpm",
+				"committish": "master", "spec": "hello.spec", "srpm_build_method": "rpkg",
+			},
+			want: "coprctl build submit REF --source scm --clone-url https://github.com/abn/hello-rpm --scm-type git --commit master --spec hello.spec --method rpkg",
+		},
+		{
+			name:       "url stores the single url, not pkgs",
+			sourceType: "link",
+			dict:       map[string]any{"url": "https://example.com/hello.spec"},
+			want:       "coprctl build submit REF --source url --url https://example.com/hello.spec",
+		},
+		{
+			name:       "distgit custom clone url under clone_url",
+			sourceType: "distgit",
+			dict:       map[string]any{"package_name": "hello", "clone_url": "https://example.com/custom.git", "committish": "main"},
+			want:       "coprctl build submit REF --source distgit --name hello --clone-url https://example.com/custom.git --commit main",
+		},
+		{
+			name:       "pypi joins array python_versions",
+			sourceType: "pypi",
+			dict:       map[string]any{"pypi_package_name": "requests", "python_versions": []any{"3.9", "3.12"}},
+			want:       "coprctl build submit REF --source pypi --pypi-name requests --python-versions 3.9,3.12",
+		},
+		{
+			name:       "rubygems",
+			sourceType: "rubygems",
+			dict:       map[string]any{"gem_name": "rake"},
+			want:       "coprctl build submit REF --source rubygems --gem rake",
+		},
+		{
+			name:       "custom",
+			sourceType: "custom",
+			dict:       map[string]any{"script": "build.sh", "chroot": "fedora-42-x86_64"},
+			want:       "coprctl build submit REF --source custom --script build.sh --script-chroot fedora-42-x86_64",
+		},
+		{
+			name:       "unknown type emits the type only",
+			sourceType: "upload",
+			dict:       map[string]any{"url": "https://example.com/x.src.rpm"},
+			want:       "coprctl build submit REF --source upload",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := submitInvocationFromSource(tt.sourceType, tt.dict)
+			if got != tt.want {
+				t.Errorf("submitInvocationFromSource = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// reproduceServer serves the build-chroot list, a gzip log, and the source
+// build config on one httptest server so result_url resolves locally.
+// logStatus and configStatus override the log and config endpoint responses
+// (200 serves the real bodies, anything else an error of that status).
+func reproduceServer(t *testing.T, logStatus int, logContent string, configStatus int) *httptest.Server {
+	t.Helper()
+	var logBuf bytes.Buffer
+	gz := gzip.NewWriter(&logBuf)
+	_, _ = gz.Write([]byte(logContent))
+	_ = gz.Close()
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/build-chroot/list":
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{
+					{"name": "fedora-rawhide-x86_64", "state": "succeeded", "result_url": srv.URL + "/results/"},
+				},
+				"meta": map[string]any{},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/results/builder-live.log.gz":
+			if logStatus != http.StatusOK {
+				http.Error(w, `{"error": "not found"}`, logStatus)
+				return
+			}
+			_, _ = w.Write(logBuf.Bytes())
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/build/source-build-config/42":
+			if configStatus != http.StatusOK {
+				http.Error(w, `{"error": "server error"}`, configStatus)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"source_type": "scm",
+				"source_dict": map[string]any{
+					"type": "git", "clone_url": "https://github.com/abn/hello-rpm",
+					"committish": "master", "spec": "hello.spec", "srpm_build_method": "rpkg",
+				},
+				"memory_limit":  2048,
+				"timeout":       18000,
+				"is_background": false,
+			})
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+const recipeLine = "copr-rpmbuild --chroot fedora-rawhide-x86_64 --result /var/lib/mock/... --task-url https://example.com/task/42"
+
+func TestBuildReproduceLogFirst(t *testing.T) {
+	srv := reproduceServer(t, http.StatusOK, "info: "+recipeLine+"\n", http.StatusOK)
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"reproduce", "42/fedora-rawhide-x86_64", "--output", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	var res struct {
+		Recipe     string         `json:"recipe"`
+		TaskURL    string         `json:"task_url"`
+		SourceType string         `json:"source_type"`
+		SourceDict map[string]any `json:"source_dict"`
+		Memory     *int           `json:"memory_limit"`
+		Timeout    *int           `json:"timeout"`
+		Background *bool          `json:"is_background"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &res); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if !strings.Contains(res.Recipe, "copr-rpmbuild") {
+		t.Errorf("recipe = %q", res.Recipe)
+	}
+	if res.SourceType != "scm" {
+		t.Errorf("source_type = %q", res.SourceType)
+	}
+	if res.SourceDict["srpm_build_method"] != "rpkg" {
+		t.Errorf("source_dict = %v", res.SourceDict)
+	}
+	if res.Memory == nil || *res.Memory != 2048 {
+		t.Errorf("memory_limit = %v", res.Memory)
+	}
+	if res.Background == nil || *res.Background {
+		t.Errorf("is_background = %v", res.Background)
+	}
+}
+
+func TestBuildReproduceFallbackToConfig(t *testing.T) {
+	srv := reproduceServer(t, http.StatusOK, "some log without a recipe\n", http.StatusOK)
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"reproduce", "42/fedora-rawhide-x86_64", "--output", "table"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("reproduce should fall back to the source config, got: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "# Source definition:") || !strings.Contains(out, "--source scm") {
+		t.Errorf("fallback output = %q", out)
+	}
+}
+
+func TestBuildReproduceFailsWithoutEither(t *testing.T) {
+	srv := reproduceServer(t, http.StatusOK, "some log without a recipe\n", http.StatusNotFound)
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"reproduce", "42/fedora-rawhide-x86_64", "--output", "json"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected a failure with neither a log recipe nor a config")
+	}
+}
+
+func TestBuildReproduceLogNotFoundFallsBackToConfig(t *testing.T) {
+	srv := reproduceServer(t, http.StatusNotFound, "", http.StatusOK)
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"reproduce", "42/fedora-rawhide-x86_64", "--output", "table"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("reproduce should fall back to the source config, got: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "# Reproduce this build locally") {
+		t.Errorf("log 404 must not print a recipe section, got %q", out)
+	}
+	if !strings.Contains(out, "# Source definition:") || !strings.Contains(out, "--source scm") {
+		t.Errorf("log 404 fallback output = %q", out)
+	}
+}
+
+func TestBuildReproduceSurfacesConfigFetchError(t *testing.T) {
+	srv := reproduceServer(t, http.StatusOK, "info: "+recipeLine+"\n", http.StatusInternalServerError)
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"reproduce", "42/fedora-rawhide-x86_64", "--output", "json"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected a failure when the source config fetch errors")
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitTransport {
+		t.Errorf("exit code = %d, want transport (%d)", cerr.ExitCodeFor(err), cerr.ExitTransport)
+	}
+}
+
+func TestBuildDeleteBatch(t *testing.T) {
+	var calls int
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != http.MethodPost || r.URL.Path != "/api_3/build/delete/list" {
+			t.Errorf("got %s %s, want POST /api_3/build/delete/list", r.Method, r.URL.Path)
+		}
+		gotBody, _ = io.ReadAll(r.Body)
+		json.NewEncoder(w).Encode(map[string]any{"builds": []int{1, 2}})
+	}))
+	defer srv.Close()
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"delete", "1", "2", "--yes", "--output", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("calls = %d, want a single batch request", calls)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal(gotBody, &sent); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	ids, ok := sent["builds"].([]any)
+	if !ok || len(ids) != 2 || ids[0] != float64(1) || ids[1] != float64(2) {
+		t.Errorf("builds = %v", sent["builds"])
+	}
+}
+
+func TestBuildDeleteRequiresYes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"delete", "1"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected the --yes gate to block the delete")
+	}
+	if !strings.Contains(err.Error(), "--yes") {
+		t.Errorf("error = %q, want the --yes gate message", err)
 	}
 }

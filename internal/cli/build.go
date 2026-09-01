@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -141,6 +142,18 @@ func runRebuildPreflight(cmd *cobra.Command) error {
 	return nil
 }
 
+// buildReproduceResult wraps the log reproduction recipe with the stored
+// source build config for machine output; the config fields are absent when no
+// config is available.
+type buildReproduceResult struct {
+	*logstream.Reproduction
+	SourceType   string         `json:"source_type,omitempty"`
+	SourceDict   map[string]any `json:"source_dict,omitempty"`
+	MemoryLimit  *int           `json:"memory_limit,omitempty"`
+	Timeout      *int           `json:"timeout,omitempty"`
+	IsBackground *bool          `json:"is_background,omitempty"`
+}
+
 func newBuildReproduceCmd(app *App, out *outFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reproduce BUILD_ID/CHROOT",
@@ -155,27 +168,154 @@ func newBuildReproduceCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rep, err := logstream.NewTailer(client, nil).ExtractReproduction(cmd.Context(), r.BuildID, r.BuildCht)
-			if err != nil {
-				return err
+			rep, recipeErr := logstream.NewTailer(client, nil).ExtractReproduction(cmd.Context(), r.BuildID, r.BuildCht)
+			// The stored source build config enriches the recipe and is the
+			// fallback when the log has none; only a 404 on an old build is
+			// ignored, any other fetch error surfaces.
+			var cfg *copr.SourceBuildConfig
+			cfgC, cfgErr := client.GetSourceBuildConfig(cmd.Context(), r.BuildID)
+			if cfgErr == nil {
+				cfg = cfgC
+			} else if cerr.ExitCodeFor(cfgErr) != cerr.ExitNotFound {
+				return cfgErr
+			}
+			if recipeErr != nil && cfg == nil {
+				return recipeErr
+			}
+			result := &buildReproduceResult{Reproduction: rep}
+			if cfg != nil {
+				result.SourceType = cfg.SourceType
+				result.SourceDict = cfg.SourceDict
+				result.MemoryLimit = cfg.MemoryLimit
+				result.Timeout = cfg.Timeout
+				result.IsBackground = &cfg.IsBackground
 			}
 			if isHuman(cmd, out.format) {
-				fmt.Fprintln(cmd.OutOrStdout(), "# Reproduce this build locally at mock-level fidelity")
-				fmt.Fprintln(cmd.OutOrStdout(), "sudo dnf install copr-rpmbuild mock")
-				if rep.Recipe != "" {
+				if rep != nil && rep.Recipe != "" {
+					fmt.Fprintln(cmd.OutOrStdout(), "# Reproduce this build locally at mock-level fidelity")
+					fmt.Fprintln(cmd.OutOrStdout(), "sudo dnf install copr-rpmbuild mock")
 					fmt.Fprintf(cmd.OutOrStdout(), "%s\n", rep.Recipe)
+					if rep.TaskURL != "" {
+						fmt.Fprintf(cmd.OutOrStdout(), "\n# task: %s\n", rep.TaskURL)
+					}
+					fmt.Fprintln(cmd.OutOrStdout(), "\n# Or reproduce at container (Tier 1) fidelity with:")
+					fmt.Fprintln(cmd.OutOrStdout(), "coprctl try ./rpm --chroot <chroot>")
 				}
-				if rep.TaskURL != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), "\n# task: %s\n", rep.TaskURL)
+				if cfg != nil {
+					fmt.Fprintf(cmd.OutOrStdout(), "\n# Source definition:\n%s\n", submitInvocationFromSource(cfg.SourceType, cfg.SourceDict))
 				}
-				fmt.Fprintln(cmd.OutOrStdout(), "\n# Or reproduce at container (Tier 1) fidelity with:")
-				fmt.Fprintln(cmd.OutOrStdout(), "coprctl try ./rpm --chroot <chroot>")
 				return nil
 			}
-			return renderResult(cmd, out, rep)
+			return renderResult(cmd, out, result)
 		},
 	}
 	return cmd
+}
+
+// submitInvocationFromSource reconstructs a build submit invocation from a
+// stored source-build-config dict. The stored keys differ from the submit-time
+// sourceMap keys: scm stores type and srpm_build_method, url stores the single
+// url (submitted as pkgs), and a distgit package with a custom clone URL
+// stores it under clone_url. Unknown types emit the type only.
+func submitInvocationFromSource(sourceType string, dict map[string]any) string {
+	switch sourceType {
+	case "scm":
+		var b strings.Builder
+		b.WriteString("coprctl build submit REF --source scm")
+		if v := dictString(dict, "clone_url"); v != "" {
+			b.WriteString(" --clone-url " + v)
+		}
+		if v := dictString(dict, "type"); v != "" {
+			b.WriteString(" --scm-type " + v)
+		}
+		if v := dictString(dict, "committish"); v != "" {
+			b.WriteString(" --commit " + v)
+		}
+		if v := dictString(dict, "subdirectory"); v != "" {
+			b.WriteString(" --subdir " + v)
+		}
+		if v := dictString(dict, "spec"); v != "" {
+			b.WriteString(" --spec " + v)
+		}
+		if v := dictString(dict, "srpm_build_method"); v != "" {
+			b.WriteString(" --method " + v)
+		}
+		return b.String()
+	case "link", "url":
+		if v := dictString(dict, "url"); v != "" {
+			return "coprctl build submit REF --source url --url " + v
+		}
+		return "coprctl build submit REF --source url"
+	case "distgit":
+		var b strings.Builder
+		b.WriteString("coprctl build submit REF --source distgit")
+		if v := dictString(dict, "package_name"); v != "" {
+			b.WriteString(" --name " + v)
+		}
+		if v := dictString(dict, "clone_url"); v != "" {
+			b.WriteString(" --clone-url " + v)
+		}
+		if v := dictString(dict, "distgit"); v != "" {
+			b.WriteString(" --distgit " + v)
+		}
+		if v := dictString(dict, "namespace"); v != "" {
+			b.WriteString(" --namespace " + v)
+		}
+		if v := dictString(dict, "committish"); v != "" {
+			b.WriteString(" --commit " + v)
+		}
+		return b.String()
+	case "pypi":
+		var b strings.Builder
+		b.WriteString("coprctl build submit REF --source pypi")
+		if v := dictString(dict, "pypi_package_name"); v != "" {
+			b.WriteString(" --pypi-name " + v)
+		}
+		if v := dictString(dict, "pypi_package_version"); v != "" {
+			b.WriteString(" --pypi-version " + v)
+		}
+		if v, ok := dict["python_versions"].([]any); ok && len(v) > 0 {
+			versions := make([]string, 0, len(v))
+			for _, p := range v {
+				if s, ok := p.(string); ok && s != "" {
+					versions = append(versions, s)
+				}
+			}
+			if len(versions) > 0 {
+				b.WriteString(" --python-versions " + strings.Join(versions, ","))
+			}
+		}
+		return b.String()
+	case "rubygems":
+		if v := dictString(dict, "gem_name"); v != "" {
+			return "coprctl build submit REF --source rubygems --gem " + v
+		}
+		return "coprctl build submit REF --source rubygems"
+	case "custom":
+		var b strings.Builder
+		b.WriteString("coprctl build submit REF --source custom")
+		if v := dictString(dict, "script"); v != "" {
+			b.WriteString(" --script " + v)
+		}
+		if v := dictString(dict, "chroot"); v != "" {
+			b.WriteString(" --script-chroot " + v)
+		}
+		if v := dictString(dict, "builddeps"); v != "" {
+			b.WriteString(" --script-builddeps " + v)
+		}
+		return b.String()
+	default:
+		return "coprctl build submit REF --source " + sourceType
+	}
+}
+
+// dictString returns the string value of a stored source_dict key, or "" when
+// the key is absent or holds a non-string value.
+func dictString(dict map[string]any, key string) string {
+	if v, ok := dict[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // buildGetResult enriches a build with its per-chroot detail for machine
@@ -271,6 +411,11 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	var dir string
 	var from, runtimeName string
 	var watch bool
+	var background, enableNet bool
+	var timeout int
+	var bootstrap, isolation string
+	var excludeChroots *[]string
+	var afterBuildID, withBuildID int
 	cmd := &cobra.Command{
 		Use:   "submit REF --source TYPE [flags]",
 		Short: "Submit a build",
@@ -280,6 +425,55 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// The batch options are mutually exclusive upstream; fail locally
+			// before hitting the server.
+			if cmd.Flags().Changed("after-build-id") && cmd.Flags().Changed("with-build-id") {
+				return cerr.Usage("--after-build-id and --with-build-id are mutually exclusive")
+			}
+			// bootstrap and isolation are whitelisted select values upstream.
+			switch bootstrap {
+			case "", "on", "off", "default", "image", "unchanged":
+			default:
+				return cerr.Usage(fmt.Sprintf("invalid --bootstrap %q: one of on, off, default, image, unchanged", bootstrap))
+			}
+			switch isolation {
+			case "", "simple", "nspawn", "default", "unchanged":
+			default:
+				return cerr.Usage(fmt.Sprintf("invalid --isolation %q: one of simple, nspawn, default, unchanged", isolation))
+			}
+			if cmd.Flags().Changed("timeout") && timeout <= 0 {
+				return cerr.Usage("--timeout must be a positive number of seconds")
+			}
+
+			// Tri-state bools: absent keeps the server/project default, while
+			// an explicit --enable-net=false actively disables it.
+			var backgroundPtr *bool
+			if cmd.Flags().Changed("background") {
+				backgroundPtr = &background
+			}
+			var enableNetPtr *bool
+			if cmd.Flags().Changed("enable-net") {
+				enableNetPtr = &enableNet
+			}
+			var timeoutPtr *int
+			if cmd.Flags().Changed("timeout") {
+				timeoutPtr = &timeout
+			}
+			var afterID *int
+			if cmd.Flags().Changed("after-build-id") {
+				afterID = &afterBuildID
+			}
+			var withID *int
+			if cmd.Flags().Changed("with-build-id") {
+				withID = &withBuildID
+			}
+			opts := copr.UploadOptions{
+				Background: backgroundPtr, EnableNet: enableNetPtr, Timeout: timeoutPtr,
+				Bootstrap: bootstrap, Isolation: isolation,
+				AfterBuildID: afterID, WithBuildID: withID,
+				ExcludeChroots: *excludeChroots,
+			}
+
 			c, err := app.Client()
 			if err != nil {
 				return err
@@ -327,7 +521,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, srpm, effDir)
+				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, srpm, effDir, opts)
 				if err != nil {
 					return err
 				}
@@ -359,7 +553,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				if len(*chroots) > 0 {
 					fmt.Fprintf(cmd.ErrOrStderr(), "note: upload builds build in the chroots declared by the SRPM; --chroot is ignored\n")
 				}
-				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, src.uploadPath, effDir)
+				b, err := c.UploadBuild(cmd.Context(), r.Owner, r.Project, src.uploadPath, effDir, opts)
 				if err != nil {
 					return err
 				}
@@ -385,6 +579,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			builds, err := c.SubmitBuild(cmd.Context(), copr.BuildSubmit{
 				Owner: r.Owner, Project: r.Project,
 				SourceType: st, Source: sm, Chroots: *chroots, Dir: effDir,
+				UploadOptions: opts,
 			})
 			if err != nil {
 				return err
@@ -413,6 +608,14 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&dir, "dir", "", "side repo / project directory")
 	cmd.Flags().StringVar(&from, "from", "", "build a local SRPM from this spec directory, then upload and submit")
 	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend for --from: auto, container, native, mock")
+	cmd.Flags().BoolVar(&background, "background", false, "submit and return after queueing (the server reports is_background)")
+	cmd.Flags().BoolVar(&enableNet, "enable-net", false, "enable network access in the buildroot")
+	cmd.Flags().IntVar(&timeout, "timeout", 0, "per-build timeout in seconds")
+	cmd.Flags().StringVar(&bootstrap, "bootstrap", "", "bootstrap mode: on, off, default, image, unchanged")
+	cmd.Flags().StringVar(&isolation, "isolation", "", "isolation mode: simple, nspawn, default, unchanged")
+	excludeChroots = addExcludeChrootFlag(app, cmd)
+	cmd.Flags().IntVar(&afterBuildID, "after-build-id", 0, "build after the batch containing this build id")
+	cmd.Flags().IntVar(&withBuildID, "with-build-id", 0, "build in the same batch as this build id")
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "wait for the submitted build to reach a terminal state")
 	bindRefCompletion(app, cmd)
 	return cmd
@@ -459,10 +662,10 @@ func newBuildDeleteCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			for _, id := range ids {
-				if err := c.DeleteBuild(cmd.Context(), id); err != nil {
-					return err
-				}
+			// One atomic batch call: a single invalid or running id aborts the
+			// whole delete instead of leaving a partial one.
+			if err := c.DeleteBuilds(cmd.Context(), ids); err != nil {
+				return err
 			}
 			return renderResult(cmd, out, map[string]any{"deleted": len(args)})
 		},

@@ -636,7 +636,7 @@ func TestUploadBuildPayload(t *testing.T) {
 	if err := os.WriteFile(srpm, []byte("fake rpm"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	b, err := c.UploadBuild(context.Background(), "owner", "proj", srpm, "")
+	b, err := c.UploadBuild(context.Background(), "owner", "proj", srpm, "", UploadOptions{})
 	if err != nil {
 		t.Fatalf("upload: %v", err)
 	}
@@ -651,5 +651,145 @@ func TestDirnameFor(t *testing.T) {
 	}
 	if got := dirnameFor("proj", "pr:123"); got != "proj:pr:123" {
 		t.Errorf("dirnameFor pr = %q", got)
+	}
+}
+
+func TestSubmitBuildGenericOptions(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api_3/build/create/scm" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["background"] != true {
+			t.Errorf("background = %v", body["background"])
+		}
+		if body["enable_net"] != false {
+			t.Errorf("enable_net = %v (explicit false must be sent)", body["enable_net"])
+		}
+		if body["timeout"] != float64(3600) {
+			t.Errorf("timeout = %v", body["timeout"])
+		}
+		if body["bootstrap"] != "on" {
+			t.Errorf("bootstrap = %v", body["bootstrap"])
+		}
+		if body["isolation"] != "nspawn" {
+			t.Errorf("isolation = %v", body["isolation"])
+		}
+		if body["after_build_id"] != float64(10) {
+			t.Errorf("after_build_id = %v", body["after_build_id"])
+		}
+		if body["with_build_id"] != nil {
+			t.Errorf("with_build_id = %v, want absent", body["with_build_id"])
+		}
+		exc, ok := body["exclude_chroots"].([]any)
+		if !ok || len(exc) != 1 || exc[0] != "fedora-rawhide-*" {
+			t.Errorf("exclude_chroots = %v", body["exclude_chroots"])
+		}
+		json.NewEncoder(w).Encode(map[string]any{"id": 123, "state": "pending"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	bg := true
+	net := false
+	timeout := 3600
+	after := 10
+	builds, err := c.SubmitBuild(context.Background(), BuildSubmit{
+		Owner: "owner", Project: "proj",
+		SourceType: SourceSCM, Source: map[string]any{"clone_url": "https://example.com/r.git"},
+		Chroots: []string{"fedora-42-x86_64"},
+		UploadOptions: UploadOptions{
+			Background: &bg, EnableNet: &net, Timeout: &timeout,
+			Bootstrap: "on", Isolation: "nspawn", AfterBuildID: &after,
+			ExcludeChroots: []string{"fedora-rawhide-*"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(builds) != 1 || builds[0].ID != 123 {
+		t.Fatalf("builds = %+v", builds)
+	}
+}
+
+func TestSubmitBuildUnsetOptionsAbsent(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		for _, key := range []string{"background", "enable_net", "timeout", "bootstrap", "isolation", "after_build_id", "with_build_id", "exclude_chroots"} {
+			if _, ok := body[key]; ok {
+				t.Errorf("%s = %v, want absent when unset", key, body[key])
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"id": 123, "state": "pending"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	_, err := c.SubmitBuild(context.Background(), BuildSubmit{
+		Owner: "owner", Project: "proj",
+		SourceType: SourceSCM, Source: map[string]any{"clone_url": "https://example.com/r.git"},
+		Chroots: []string{"fedora-42-x86_64"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestUploadBuildGenericOptions(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(body)
+		// The options ride the multipart json part; assert the raw keys and a
+		// value each rather than parsing the multipart envelope.
+		for _, want := range []string{`"background":true`, `"enable_net":false`, `"timeout":600`, `"bootstrap":"on"`, `"exclude_chroots":["fedora-rawhide-*"]`} {
+			if !strings.Contains(s, want) {
+				t.Errorf("multipart json part missing %s: %.300s", want, s)
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"id": 99, "state": "pending"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	dir := t.TempDir()
+	srpm := filepath.Join(dir, "x.src.rpm")
+	if err := os.WriteFile(srpm, []byte("fake rpm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bg := true
+	net := false
+	timeout := 600
+	b, err := c.UploadBuild(context.Background(), "owner", "proj", srpm, "", UploadOptions{
+		Background: &bg, EnableNet: &net, Timeout: &timeout,
+		Bootstrap: "on", ExcludeChroots: []string{"fedora-rawhide-*"},
+	})
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	if b.ID != 99 {
+		t.Errorf("build id = %d", b.ID)
+	}
+}
+
+func TestDeleteBuildsPayload(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s", r.Method)
+		}
+		if r.URL.Path != "/api_3/build/delete/list" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		ids, ok := body["builds"].([]any)
+		if !ok || len(ids) != 2 || ids[0] != float64(2) || ids[1] != float64(3) {
+			t.Errorf("builds = %v", body["builds"])
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"builds": []int{2, 3}})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	if err := c.DeleteBuilds(context.Background(), []int{2, 3}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

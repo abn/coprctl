@@ -61,6 +61,25 @@ container, native, or mock backend) and uploads it in one step:
 coprctl build submit OWNER/PROJECT --from ./rpm --watch
 ```
 
+## Publishing an already-built RPM
+
+`--source rpm-upload --rpm PATH` publishes a local, already-built RPM directly
+into the chosen chroots, skipping the SRPM build and dist-git import. It is a
+build-submit-only source and is not offered to `package create` or
+`package edit`.
+
+```bash
+coprctl build submit OWNER/PROJECT --source rpm-upload --rpm ./hello-1.0.rpm --chroot fedora-rawhide-x86_64
+```
+
+`--chroot` is required: an omitted chroot list would publish to every active
+project chroot. `--sha256 HEX` verifies the uploaded file against an expected
+digest, and the server rejects the build on mismatch.
+
+The route is gated by the instance's `DIRECT_RPM_UPLOAD` setting. On instances
+where it is off (including Fedora infrastructure) the command fails with a
+`feature_disabled` error rather than silently succeeding.
+
 ## Batch delete
 
 `coprctl build delete BUILD_ID... --yes` deletes all given builds in one

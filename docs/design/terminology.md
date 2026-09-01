@@ -23,9 +23,10 @@ one canonical name.
 | **project chroot** | enabled chroot | A mock chroot enabled on a project, plus its per-project buildroot config. |
 | **build chroot** | build target result | One execution of a build in one chroot, with its own state and result. |
 | **package** | — | A named source definition inside a project, not an RPM. |
-| **source type** | build method | One of `scm`, `distgit`, `pypi`, `rubygems`, `custom`, `url`, `upload`. |
+| **source type** | build method | One of `scm`, `distgit`, `pypi`, `rubygems`, `custom`, `url`, `upload`. `rpm-upload` is a build-submit-only source (a direct RPM publish), not a package definition. |
 | **build** | job | One submission: a source-build phase followed by N build chroots. |
 | **devel mode** | "create repositories manually", `--disable_createrepo` | Suppresses automatic repo metadata regeneration. |
+| **module** | — | Module *building* was removed upstream; the `additional_modules` project-chroot field still round-trips as `module_toggle` but has no build effect. |
 
 ## Reference syntax
 

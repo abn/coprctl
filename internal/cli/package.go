@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/render"
 )
@@ -43,7 +44,7 @@ type sourceFlags struct {
 
 func (s *sourceFlags) bind(cmd *cobra.Command) {
 	f := cmd.Flags()
-	f.StringVar(&s.sourceType, "source", "", "source type: scm, distgit, pypi, rubygems, custom, url, upload")
+	f.StringVar(&s.sourceType, "source", "", "source type: scm, distgit, pypi, rubygems, custom, url, upload, rpm-upload (build submit only)")
 
 	f.StringVar(&s.cloneURL, "clone-url", "", "scm: clone URL")
 	f.StringVar(&s.commit, "commit", "", "scm/distgit: commit or branch ref")
@@ -137,6 +138,16 @@ func setSS(m map[string]any, k, v string) {
 	}
 }
 
+// rejectRpmUploadSource fails a package create/edit when the source is
+// rpm-upload: uploaded RPMs are not preserved after the build, so such a
+// package could never rebuild.
+func rejectRpmUploadSource(sourceType string) error {
+	if copr.SourceType(sourceType) == copr.SourceRpmUpload {
+		return cerr.Usage("rpm-upload is a build-submit source; use 'build submit REF --source rpm-upload'")
+	}
+	return nil
+}
+
 func newPackageCreateCmd(app *App, out *outFlags) *cobra.Command {
 	var src sourceFlags
 	cmd := &cobra.Command{
@@ -146,6 +157,9 @@ func newPackageCreateCmd(app *App, out *outFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r, err := parsePackageRef(app, args)
 			if err != nil {
+				return err
+			}
+			if err := rejectRpmUploadSource(src.sourceType); err != nil {
 				return err
 			}
 			st, sm, err := src.sourceMap()
@@ -178,6 +192,9 @@ func newPackageEditCmd(app *App, out *outFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r, err := parsePackageRef(app, args)
 			if err != nil {
+				return err
+			}
+			if err := rejectRpmUploadSource(src.sourceType); err != nil {
 				return err
 			}
 			st, sm, err := src.sourceMap()

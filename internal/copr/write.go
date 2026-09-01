@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,13 +236,14 @@ func (c *Client) ForkProject(ctx context.Context, srcOwner, srcProject, dstOwner
 type SourceType string
 
 const (
-	SourceSCM      SourceType = "scm"
-	SourceDistGit  SourceType = "distgit"
-	SourcePyPI     SourceType = "pypi"
-	SourceRubyGems SourceType = "rubygems"
-	SourceCustom   SourceType = "custom"
-	SourceURL      SourceType = "url"
-	SourceUpload   SourceType = "upload"
+	SourceSCM       SourceType = "scm"
+	SourceDistGit   SourceType = "distgit"
+	SourcePyPI      SourceType = "pypi"
+	SourceRubyGems  SourceType = "rubygems"
+	SourceCustom    SourceType = "custom"
+	SourceURL       SourceType = "url"
+	SourceUpload    SourceType = "upload"
+	SourceRpmUpload SourceType = "rpm-upload"
 )
 
 // PackageCreate is the payload for creating or editing a package.
@@ -555,6 +558,76 @@ func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir 
 	_ = mw.Close()
 
 	resp, err := c.request(ctx, http.MethodPost, "/build/create/upload", nil, &buf, mw.FormDataContentType())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var b Build
+	if err := decode(resp, &b); err != nil {
+		return nil, err
+	}
+	return &b, nil
+}
+
+// RpmUploadSubmit publishes an already-built RPM directly into the chosen
+// chroots, skipping the SRPM build and dist-git import phases.
+type RpmUploadSubmit struct {
+	Owner, Project, Dir string
+	RpmPath             string
+	Chroots             []string
+	SHA256              string
+}
+
+// UploadRpmBuild sends a multipart request with the RPM as the pkgs file part
+// and the form fields (ownername, projectname, project_dirname, chroots,
+// sha256) as plain form fields. Unlike UploadBuild there is no json part: the
+// endpoint parses the multipart form directly. Chroots repeat per field; an
+// empty list sends no chroots field.
+func (c *Client) UploadRpmBuild(ctx context.Context, in RpmUploadSubmit) (*Build, error) {
+	f, err := os.Open(in.RpmPath)
+	if err != nil {
+		return nil, cerr.Config("cannot open RPM").Wrap(err)
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("ownername", in.Owner); err != nil {
+		return nil, err
+	}
+	if err := mw.WriteField("projectname", in.Project); err != nil {
+		return nil, err
+	}
+	if in.Dir != "" {
+		if err := mw.WriteField("project_dirname", dirnameFor(in.Project, in.Dir)); err != nil {
+			return nil, err
+		}
+	}
+	for _, ch := range in.Chroots {
+		if err := mw.WriteField("chroots", ch); err != nil {
+			return nil, err
+		}
+	}
+	if in.SHA256 != "" {
+		if err := mw.WriteField("sha256", in.SHA256); err != nil {
+			return nil, err
+		}
+	}
+
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", mime.FormatMediaType("form-data",
+		map[string]string{"name": "pkgs", "filename": filepath.Base(in.RpmPath)}))
+	h.Set("Content-Type", "application/x-rpm")
+	pkgsPart, err := mw.CreatePart(h)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(pkgsPart, f); err != nil {
+		return nil, err
+	}
+	_ = mw.Close()
+
+	resp, err := c.request(ctx, http.MethodPost, "/build/create/rpm-upload", nil, &buf, mw.FormDataContentType())
 	if err != nil {
 		return nil, err
 	}

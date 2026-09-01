@@ -645,6 +645,123 @@ func TestUploadBuildPayload(t *testing.T) {
 	}
 }
 
+func TestUploadRpmBuildMultipart(t *testing.T) {
+	var gotForm map[string][]string
+	var gotParts []string
+	var gotCT string
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s", r.Method)
+		}
+		if r.URL.Path != "/api_3/build/create/rpm-upload" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		gotCT = r.Header.Get("Content-Type")
+		mr, err := r.MultipartReader()
+		if err != nil {
+			t.Fatal(err)
+		}
+		form := map[string][]string{}
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.FileName() == "" {
+				b, err := io.ReadAll(p)
+				if err != nil {
+					t.Fatal(err)
+				}
+				form[p.FormName()] = append(form[p.FormName()], string(b))
+			} else {
+				gotParts = append(gotParts, p.FormName()+"|"+p.FileName()+"|"+p.Header.Get("Content-Type"))
+			}
+		}
+		gotForm = form
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"id": 123, "state": "pending"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	dir := t.TempDir()
+	rpm := filepath.Join(dir, "hello-1.0-1.fc42.x86_64.rpm")
+	if err := os.WriteFile(rpm, []byte("fake rpm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := c.UploadRpmBuild(context.Background(), RpmUploadSubmit{
+		Owner: "owner", Project: "proj", RpmPath: rpm,
+		Chroots: []string{"fedora-42-x86_64", "fedora-rawhide-x86_64"},
+		SHA256:  "dae37be1717e714967b78e21ea9fdf00928a7652687d462f3ad631cde43d1a3d",
+	})
+	if err != nil {
+		t.Fatalf("upload rpm: %v", err)
+	}
+	if b.ID != 123 {
+		t.Errorf("build id = %d, want 123", b.ID)
+	}
+	if !strings.Contains(gotCT, "multipart/form-data") {
+		t.Errorf("Content-Type = %q, want multipart", gotCT)
+	}
+	want := map[string][]string{
+		"ownername":   {"owner"},
+		"projectname": {"proj"},
+		"chroots":     {"fedora-42-x86_64", "fedora-rawhide-x86_64"},
+		"sha256":      {"dae37be1717e714967b78e21ea9fdf00928a7652687d462f3ad631cde43d1a3d"},
+	}
+	for k, w := range want {
+		if len(gotForm[k]) != len(w) {
+			t.Errorf("form[%q] = %v, want %v", k, gotForm[k], w)
+			continue
+		}
+		for i := range w {
+			if gotForm[k][i] != w[i] {
+				t.Errorf("form[%q][%d] = %q, want %q", k, i, gotForm[k][i], w[i])
+			}
+		}
+	}
+	if len(gotParts) != 1 || gotParts[0] != "pkgs|hello-1.0-1.fc42.x86_64.rpm|application/x-rpm" {
+		t.Errorf("pkgs parts = %v, want a single application/x-rpm pkgs part", gotParts)
+	}
+}
+
+func TestUploadRpmBuildNoChroots(t *testing.T) {
+	var fields []string
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		mr, err := r.MultipartReader()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			fields = append(fields, p.FormName())
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"id": 1, "state": "pending"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	dir := t.TempDir()
+	rpm := filepath.Join(dir, "x.rpm")
+	if err := os.WriteFile(rpm, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.UploadRpmBuild(context.Background(), RpmUploadSubmit{Owner: "o", Project: "p", RpmPath: rpm}); err != nil {
+		t.Fatalf("upload rpm: %v", err)
+	}
+	for _, f := range fields {
+		if f == "chroots" {
+			t.Errorf("empty chroots must not send a chroots field")
+		}
+	}
+}
+
 func TestDirnameFor(t *testing.T) {
 	if got := dirnameFor("proj", "testing"); got != "proj:testing" {
 		t.Errorf("dirnameFor = %q", got)

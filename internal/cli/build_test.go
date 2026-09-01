@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -785,5 +786,157 @@ func TestBuildDeleteRequiresYes(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--yes") {
 		t.Errorf("error = %q, want the --yes gate message", err)
+	}
+}
+
+func TestBuildSubmitRpmUpload(t *testing.T) {
+	var path, ct string
+	var body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		ct = r.Header.Get("Content-Type")
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"id": 77, "state": "pending"})
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	rpm := filepath.Join(dir, "hello-1.0-1.fc42.x86_64.rpm")
+	if err := os.WriteFile(rpm, []byte("fake rpm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"submit", "owner/proj", "--source", "rpm-upload", "--rpm", rpm,
+		"--chroot", "fedora-42-x86_64", "--sha256", "dae37be1717e714967b78e21ea9fdf00928a7652687d462f3ad631cde43d1a3d",
+		"--output", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if path != "/api_3/build/create/rpm-upload" {
+		t.Errorf("path = %q, want the rpm-upload endpoint", path)
+	}
+	if !strings.Contains(ct, "multipart/form-data") {
+		t.Errorf("Content-Type = %q, want multipart/form-data", ct)
+	}
+	if !strings.Contains(body, "name=pkgs") || !strings.Contains(body, "application/x-rpm") ||
+		!strings.Contains(body, "ownername") || !strings.Contains(body, "chroots") || !strings.Contains(body, "sha256") {
+		t.Errorf("multipart body missing expected fields: %.300s", body)
+	}
+}
+
+func TestBuildSubmitRpmUploadRequiresFlags(t *testing.T) {
+	dir := t.TempDir()
+	rpm := filepath.Join(dir, "x.rpm")
+	if err := os.WriteFile(rpm, []byte("fake rpm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "missing --rpm", args: []string{"submit", "owner/proj", "--source", "rpm-upload", "--chroot", "fedora-42-x86_64"}},
+		{name: "missing --chroot", args: []string{"submit", "owner/proj", "--source", "rpm-upload", "--rpm", rpm}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := NewApp()
+			cmd := newBuildCmd(app)
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+			cmd.SetErr(io.Discard)
+			cmd.SetArgs(tt.args)
+			err := cmd.Execute()
+			if err == nil {
+				t.Fatal("expected a usage error")
+			}
+			if cerr.ExitCodeFor(err) != cerr.ExitUsage {
+				t.Errorf("exit code = %d, want usage", cerr.ExitCodeFor(err))
+			}
+		})
+	}
+}
+
+func TestRpmUploadDisabledInstance(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{"error": "Direct RPM upload is not enabled on this Copr instance"})
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	rpm := filepath.Join(dir, "x.rpm")
+	if err := os.WriteFile(rpm, []byte("fake rpm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"submit", "owner/proj", "--source", "rpm-upload", "--rpm", rpm,
+		"--chroot", "fedora-42-x86_64", "--output", "json"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected a feature_disabled error")
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitPrecondition {
+		t.Errorf("exit code = %d, want precondition", cerr.ExitCodeFor(err))
+	}
+	var ce *cerr.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("expected cerr.Error, got %T", err)
+	}
+	if ce.Code != "feature_disabled" {
+		t.Errorf("code = %q, want feature_disabled", ce.Code)
+	}
+	if !strings.Contains(ce.Hint, "DIRECT_RPM_UPLOAD") {
+		t.Errorf("hint = %q, want a DIRECT_RPM_UPLOAD hint", ce.Hint)
+	}
+}
+
+func TestRpmUploadOtherBadRequestPassesThrough(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{"error": "SHA256 mismatch"})
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	rpm := filepath.Join(dir, "x.rpm")
+	if err := os.WriteFile(rpm, []byte("fake rpm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	app.client = copr.New(srv.URL, nil)
+	cmd := newBuildCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"submit", "owner/proj", "--source", "rpm-upload", "--rpm", rpm,
+		"--chroot", "fedora-42-x86_64", "--sha256", "00", "--output", "json"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected a bad_request error")
+	}
+	var ce *cerr.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("expected cerr.Error, got %T", err)
+	}
+	if ce.Code != "bad_request" {
+		t.Errorf("code = %q, want bad_request", ce.Code)
+	}
+	if !strings.Contains(ce.Hint, "SHA256 mismatch") {
+		t.Errorf("hint = %q, want the server SHA256 mismatch message", ce.Hint)
 	}
 }

@@ -22,6 +22,14 @@ or implementation milestones; repository changes belong in the commit history.
   never-present `packagename`/`source_type` keys are gone, the enrichment-only
   `builds` key no longer appears in build output, and `BuildChroot` no longer
   carries a `build_id`.
+* **Update**: Added the `rpm-upload` build-submit source type: `build submit
+  REF --source rpm-upload --rpm PATH [--sha256 HEX]` publishes an already-built
+  RPM directly into the chosen chroots, skipping the SRPM build and dist-git
+  import. `--chroot` is required (an omitted list would publish to every
+  project chroot) and `--sha256` verifies the file against an expected digest.
+  `package create`/`package edit` reject it as a build-submit-only source. On
+  instances without direct RPM upload the command fails with a
+  `feature_disabled` error naming `DIRECT_RPM_UPLOAD`.
 * **Update**: Verified ground-truth wire shapes for two build/package
   operations. `POST /build/create/url` returns every created build in an
   `items` envelope, so a single-URL submit is a one-item list, not a flat build

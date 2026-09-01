@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -410,6 +411,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	var chroots *[]string
 	var dir string
 	var from, runtimeName string
+	var rpmPath, sha256 string
 	var watch bool
 	var background, enableNet bool
 	var timeout int
@@ -572,6 +574,38 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 				return nil
 			}
 
+			if copr.SourceType(src.sourceType) == copr.SourceRpmUpload {
+				if rpmPath == "" {
+					return cerr.Usage("--rpm is required for rpm-upload source")
+				}
+				if _, statErr := os.Stat(rpmPath); statErr != nil {
+					return fmt.Errorf("path %q not found; pass a local RPM", rpmPath)
+				}
+				if len(*chroots) == 0 {
+					return cerr.Usage("--chroot is required for rpm-upload source (an omitted chroot list would publish to every project chroot)")
+				}
+				b, err := c.UploadRpmBuild(cmd.Context(), copr.RpmUploadSubmit{
+					Owner: r.Owner, Project: r.Project, Dir: effDir,
+					RpmPath: rpmPath, Chroots: *chroots, SHA256: sha256,
+				})
+				if err != nil {
+					return mapRpmUploadError(err)
+				}
+				if err := renderHumanOr(cmd, out, b, func() *render.Table {
+					t := render.NewTable("FIELD", "VALUE")
+					t.Add("ID", fmt.Sprintf("%d", b.ID))
+					t.Add("State", b.State)
+					t.Add("RPM", rpmPath)
+					return t
+				}); err != nil {
+					return err
+				}
+				if watch {
+					return watchBuild(cmd, app, b.ID)
+				}
+				return nil
+			}
+
 			st, sm, err := src.sourceMap()
 			if err != nil {
 				return err
@@ -604,10 +638,12 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 		},
 	}
 	src.bind(cmd)
-	chroots = addChrootFlag(app, cmd, "chroots to build in (globs allowed)", true)
+	chroots = addChrootFlag(app, cmd, "chroots to build in (globs allowed; required for rpm-upload)", true)
 	cmd.Flags().StringVar(&dir, "dir", "", "side repo / project directory")
 	cmd.Flags().StringVar(&from, "from", "", "build a local SRPM from this spec directory, then upload and submit")
 	cmd.Flags().StringVar(&runtimeName, "runtime", "auto", "build backend for --from: auto, container, native, mock")
+	cmd.Flags().StringVar(&rpmPath, "rpm", "", "local already-built RPM to publish directly (rpm-upload)")
+	cmd.Flags().StringVar(&sha256, "sha256", "", "expected SHA256 hex digest of the RPM; the build is rejected on mismatch (rpm-upload)")
 	cmd.Flags().BoolVar(&background, "background", false, "submit and return after queueing (the server reports is_background)")
 	cmd.Flags().BoolVar(&enableNet, "enable-net", false, "enable network access in the buildroot")
 	cmd.Flags().IntVar(&timeout, "timeout", 0, "per-build timeout in seconds")
@@ -619,6 +655,16 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "wait for the submitted build to reach a terminal state")
 	bindRefCompletion(app, cmd)
 	return cmd
+}
+
+func mapRpmUploadError(err error) error {
+	var ce *cerr.Error
+	if errors.As(err, &ce) && ce.Code == "bad_request" && strings.Contains(ce.Hint, "not enabled") {
+		return cerr.New("feature_disabled", cerr.ExitPrecondition,
+			"rpm-upload is not enabled on this Copr instance").
+			WithHint("DIRECT_RPM_UPLOAD is off here; rpm-upload works on instances that enable it, typically self-hosted, not on Fedora infrastructure")
+	}
+	return err
 }
 
 func newBuildCancelCmd(app *App, out *outFlags) *cobra.Command {

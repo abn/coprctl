@@ -13,6 +13,8 @@ Guides and worked examples for using the tool.
   namespaces (@alias)
 * [Instances, staging, and profiles](instances.md) - work with any Copr
   instance, including Fedora staging, via profiles
+* [The copr.yaml manifest](manifest.md) - the declarative project state schema,
+  the declared-only apply rule, and what diff and export verify
 
 Usage documentation is generated alongside the command reference where
 possible, and curated by the technical writer.

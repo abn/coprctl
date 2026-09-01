@@ -14,17 +14,30 @@ type Exporter struct {
 	Client *copr.Client
 }
 
-// LiveState is the live snapshot of a project used for diff and export.
+// LiveState is the live snapshot of a project used for diff and export. It
+// carries the readable and reconcilable settings only: create-only fields
+// (persistent, storage) and add+edit/write-only fields (multilib, fedoraReview,
+// deleteAfterDays, runtimeDependencies, package settings) are excluded because
+// apply cannot converge them on an existing project.
 type LiveState struct {
-	Description  string
-	Instructions string
-	Homepage     string
-	Contact      string
-	DevelMode    bool
-	EnableNet    bool
-	Chroots      []string
-	Packages     []copr.Package
-	Permissions  Permissions
+	Description                string
+	Instructions               string
+	Homepage                   string
+	Contact                    string
+	DevelMode                  bool
+	EnableNet                  bool
+	AutoPrune                  bool
+	Bootstrap                  string
+	Isolation                  string
+	ModuleHotfixes             bool
+	Appstream                  bool
+	PackitForgeProjectsAllowed []string
+	FollowFedoraBranching      bool
+	RepoPriority               int
+	UnlistedOnHomepage         bool
+	Chroots                    []string
+	Packages                   []copr.Package
+	Permissions                Permissions
 }
 
 // FetchLiveState pulls the current state of a project.
@@ -42,15 +55,24 @@ func (e *Exporter) FetchLiveState(ctx context.Context, owner, project string) (*
 		return nil, err
 	}
 	return &LiveState{
-		Description:  p.Description,
-		Instructions: p.Instructions,
-		Homepage:     p.Homepage,
-		Contact:      p.Contact,
-		DevelMode:    p.DevelMode,
-		EnableNet:    p.EnableNet,
-		Chroots:      sortedKeys(p.ChrootRepos),
-		Packages:     pkgs,
-		Permissions:  permissionsFromLive(perms),
+		Description:                p.Description,
+		Instructions:               p.Instructions,
+		Homepage:                   p.Homepage,
+		Contact:                    p.Contact,
+		DevelMode:                  p.DevelMode,
+		EnableNet:                  p.EnableNet,
+		AutoPrune:                  p.AutoPrune,
+		Bootstrap:                  p.Bootstrap,
+		Isolation:                  p.Isolation,
+		ModuleHotfixes:             p.ModuleHotfixes,
+		Appstream:                  p.Appstream,
+		PackitForgeProjectsAllowed: p.PackitForgeProjectsAllowed,
+		FollowFedoraBranching:      p.FollowFedoraBranching,
+		RepoPriority:               p.RepoPriority,
+		UnlistedOnHomepage:         p.UnlistedOnHomepage,
+		Chroots:                    sortedKeys(p.ChrootRepos),
+		Packages:                   pkgs,
+		Permissions:                permissionsFromLive(perms),
 	}, nil
 }
 
@@ -114,9 +136,21 @@ func ExportFromLive(ctx context.Context, c *copr.Client, owner, project string) 
 			Instructions: live.Instructions,
 			Homepage:     live.Homepage,
 			Contact:      live.Contact,
-			Settings:     Settings{DevelMode: live.DevelMode, EnableNet: live.EnableNet},
-			Chroots:      Chroots{Enabled: live.Chroots},
-			Permissions:  live.Permissions,
+			Settings: Settings{
+				DevelMode:                  live.DevelMode,
+				EnableNet:                  live.EnableNet,
+				AutoPrune:                  live.AutoPrune,
+				Bootstrap:                  live.Bootstrap,
+				Isolation:                  live.Isolation,
+				ModuleHotfixes:             live.ModuleHotfixes,
+				Appstream:                  live.Appstream,
+				PackitForgeProjectsAllowed: live.PackitForgeProjectsAllowed,
+				FollowFedoraBranching:      live.FollowFedoraBranching,
+				RepoPriority:               live.RepoPriority,
+				UnlistedOnHomepage:         live.UnlistedOnHomepage,
+			},
+			Chroots:     Chroots{Enabled: live.Chroots},
+			Permissions: live.Permissions,
 		},
 	}
 	for _, p := range live.Packages {
@@ -130,11 +164,12 @@ func ExportFromLive(ctx context.Context, c *copr.Client, owner, project string) 
 		case copr.SourceDistGit:
 			src.Committish = p.SourceDict["committish"]
 		}
-		m.Spec.Packages = append(m.Spec.Packages, Package{
-			Name:        p.Name,
-			AutoRebuild: p.AutoRebuild,
-			Source:      src,
-		})
+		pkg := Package{Name: p.Name, Source: src}
+		if p.AutoRebuild {
+			ar := true
+			pkg.AutoRebuild = &ar
+		}
+		m.Spec.Packages = append(m.Spec.Packages, pkg)
 	}
 	return m, nil
 }
@@ -176,6 +211,49 @@ func (m *Manifest) DiffAgainst(ctx context.Context, c *copr.Client) ([]Diff, err
 		diffs = append(diffs, Diff{Path: "spec.settings.enableNet",
 			Manifest: fmt.Sprintf("%v", m.Spec.Settings.EnableNet), Live: fmt.Sprintf("%v", live.EnableNet)})
 	}
+	// The readable settings are compared only when the manifest declares them
+	// (non-zero). Manifest zero-values (autoPrune false, empty
+	// bootstrap/isolation, followFedoraBranching false) diverge from the live
+	// defaults (auto_prune true, bootstrap "default", isolation "default",
+	// follow_fedora_branching true), and apply is declared-only, so an
+	// unconditional comparison would make apply-then-diff permanently red on
+	// minimal manifests.
+	s := m.Spec.Settings
+	for _, d := range []struct {
+		path string
+		want bool
+		live bool
+	}{
+		{"spec.settings.autoPrune", s.AutoPrune, live.AutoPrune},
+		{"spec.settings.moduleHotfixes", s.ModuleHotfixes, live.ModuleHotfixes},
+		{"spec.settings.appstream", s.Appstream, live.Appstream},
+		{"spec.settings.followFedoraBranching", s.FollowFedoraBranching, live.FollowFedoraBranching},
+		{"spec.settings.unlistedOnHomepage", s.UnlistedOnHomepage, live.UnlistedOnHomepage},
+	} {
+		if d.want && d.want != d.live {
+			diffs = append(diffs, Diff{Path: d.path,
+				Manifest: fmt.Sprintf("%v", d.want), Live: fmt.Sprintf("%v", d.live)})
+		}
+	}
+	for _, d := range []struct {
+		path string
+		want string
+		live string
+	}{
+		{"spec.settings.bootstrap", s.Bootstrap, live.Bootstrap},
+		{"spec.settings.isolation", s.Isolation, live.Isolation},
+	} {
+		if d.want != "" && d.want != d.live {
+			diffs = append(diffs, Diff{Path: d.path, Manifest: d.want, Live: d.live})
+		}
+	}
+	if s.RepoPriority != 0 && s.RepoPriority != live.RepoPriority {
+		diffs = append(diffs, Diff{Path: "spec.settings.repoPriority",
+			Manifest: fmt.Sprintf("%d", s.RepoPriority), Live: fmt.Sprintf("%d", live.RepoPriority)})
+	}
+	if len(s.PackitForgeProjectsAllowed) > 0 {
+		diffStrings("spec.settings.packitForgeProjectsAllowed", s.PackitForgeProjectsAllowed, live.PackitForgeProjectsAllowed, &diffs)
+	}
 	// Chroot set drift.
 	manifestChroots := map[string]bool{}
 	for _, ch := range m.Spec.Chroots.Enabled {
@@ -198,31 +276,30 @@ func (m *Manifest) DiffAgainst(ctx context.Context, c *copr.Client) ([]Diff, err
 	// Permission drift only applies when the manifest manages permissions; a
 	// manifest that omits them leaves live permissions untouched.
 	if len(m.Spec.Permissions.Builders) > 0 || len(m.Spec.Permissions.Admins) > 0 {
-		diffPermissionSet("spec.permissions.builders", m.Spec.Permissions.Builders, live.Permissions.Builders, &diffs)
-		diffPermissionSet("spec.permissions.admins", m.Spec.Permissions.Admins, live.Permissions.Admins, &diffs)
+		diffStrings("spec.permissions.builders", m.Spec.Permissions.Builders, live.Permissions.Builders, &diffs)
+		diffStrings("spec.permissions.admins", m.Spec.Permissions.Admins, live.Permissions.Admins, &diffs)
 	}
 	return diffs, nil
 }
 
-// diffPermissionSet appends diffs for names present in one set but not the
-// other.
-func diffPermissionSet(path string, want, live []string, diffs *[]Diff) {
+// diffStrings appends diffs for entries present in one set but not the other.
+func diffStrings(path string, want, live []string, diffs *[]Diff) {
 	wantSet := make(map[string]bool, len(want))
-	for _, u := range want {
-		wantSet[u] = true
+	for _, s := range want {
+		wantSet[s] = true
 	}
 	liveSet := make(map[string]bool, len(live))
-	for _, u := range live {
-		liveSet[u] = true
+	for _, s := range live {
+		liveSet[s] = true
 	}
-	for _, u := range want {
-		if !liveSet[u] {
-			*diffs = append(*diffs, Diff{Path: path, Manifest: u, Live: "(absent)"})
+	for _, s := range want {
+		if !liveSet[s] {
+			*diffs = append(*diffs, Diff{Path: path, Manifest: s, Live: "(absent)"})
 		}
 	}
-	for _, u := range live {
-		if !wantSet[u] {
-			*diffs = append(*diffs, Diff{Path: path, Manifest: "(absent)", Live: u})
+	for _, s := range live {
+		if !wantSet[s] {
+			*diffs = append(*diffs, Diff{Path: path, Manifest: "(absent)", Live: s})
 		}
 	}
 }

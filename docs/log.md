@@ -6,6 +6,10 @@ or implementation milestones; repository changes belong in the commit history.
 
 ## 2026-09-01
 
+* **Creation**: Added the "The copr.yaml manifest" guide
+  (`docs/usage/manifest.md`) documenting the full settings schema, the
+  declared-only apply rule, the declared-vs-zero family, and the three
+  treatment classes (readable and reconciled, create-only, write-only).
 * **Update**: The build response schema is now decoded to match the api_3
   wire shape: `source_package` (name/version/url) carries package identity and
   the server `state` is the build rollup, with per-chroot detail fetched via

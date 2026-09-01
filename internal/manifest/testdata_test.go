@@ -17,7 +17,20 @@ func newManifestServer(t *testing.T) *httptest.Server {
 				"name": "aetherpak", "ownername": "quadzero",
 				"description": "live desc", "instructions": "live instructions",
 				"devel_mode": false, "enable_net": false,
-				"chroot_repos": map[string]string{"fedora-42-x86_64": "u"},
+				// Fedora defaults for the readable settings, so a minimal
+				// manifest diffing only declared fields stays clean.
+				"persistent":                    false,
+				"auto_prune":                    true,
+				"bootstrap":                     "default",
+				"isolation":                     "default",
+				"module_hotfixes":               false,
+				"appstream":                     false,
+				"packit_forge_projects_allowed": []string{},
+				"follow_fedora_branching":       true,
+				"repo_priority":                 99,
+				"storage":                       "backend",
+				"unlisted_on_hp":                false,
+				"chroot_repos":                  map[string]string{"fedora-42-x86_64": "u"},
 			})
 		case "/api_3/project/permissions/get/quadzero/aetherpak":
 			json.NewEncoder(w).Encode(map[string]any{

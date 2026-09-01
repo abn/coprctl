@@ -182,35 +182,21 @@ func applyManifest(ctx context.Context, app *App, m *manifest.Manifest, prune bo
 	_, gerr := c.GetProject(ctx, owner, project)
 	exists := gerr == nil
 	if exists {
-		var devel *bool
-		dv := m.Spec.Settings.DevelMode
-		devel = &dv
-		var enableNet *bool
-		env := m.Spec.Settings.EnableNet
-		enableNet = &env
-		if err := c.EditProject(ctx, copr.ProjectEdit{
-			Owner: owner, Project: project,
-			Description:  m.Spec.Description,
-			Instructions: m.Spec.Instructions,
-			Homepage:     m.Spec.Homepage,
-			Contact:      m.Spec.Contact,
-			DevelMode:    devel,
-			EnableNet:    enableNet,
-		}); err != nil {
+		edit := projectEditFromSettings(owner, project, m.Spec.Settings)
+		edit.Description = m.Spec.Description
+		edit.Instructions = m.Spec.Instructions
+		edit.Homepage = m.Spec.Homepage
+		edit.Contact = m.Spec.Contact
+		if err := c.EditProject(ctx, edit); err != nil {
 			return err
 		}
 	} else {
-		if err := c.CreateProject(ctx, copr.ProjectCreate{
-			Owner: owner, Name: project,
-			Chroots:            m.Spec.Chroots.Enabled,
-			Description:        m.Spec.Description,
-			Instructions:       m.Spec.Instructions,
-			Homepage:           m.Spec.Homepage,
-			Contact:            m.Spec.Contact,
-			DevelMode:          m.Spec.Settings.DevelMode,
-			EnableNet:          m.Spec.Settings.EnableNet,
-			UnlistedOnHomepage: m.Spec.Settings.UnlistedOnHomepage,
-		}, true); err != nil {
+		create := projectCreateFromSettings(owner, project, m.Spec.Settings, m.Spec.Chroots.Enabled)
+		create.Description = m.Spec.Description
+		create.Instructions = m.Spec.Instructions
+		create.Homepage = m.Spec.Homepage
+		create.Contact = m.Spec.Contact
+		if err := c.CreateProject(ctx, create, true); err != nil {
 			return err
 		}
 	}
@@ -274,15 +260,94 @@ func applyManifest(ctx context.Context, app *App, m *manifest.Manifest, prune bo
 		if err != nil {
 			return err
 		}
-		if err := c.UpsertPackage(ctx, copr.PackageCreate{
+		pc := copr.PackageCreate{
 			Owner: owner, Project: project, Name: p.Name,
-			SourceType: st, Source: src, AutoRebuild: p.AutoRebuild,
-			SetAutoRebuild: true,
-		}); err != nil {
+			SourceType: st, Source: src,
+			MaxBuilds:      p.MaxBuilds,
+			Timeout:        p.Timeout,
+			ChrootDenylist: p.ChrootDenylist,
+		}
+		if p.AutoRebuild != nil {
+			pc.AutoRebuild = *p.AutoRebuild
+			pc.SetAutoRebuild = true
+		}
+		if err := c.UpsertPackage(ctx, pc); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// projectCreateFromSettings fills the settings portion of the create payload.
+// Fields are carried only when declared (non-zero): an implicit zero default
+// such as auto_prune:false or persistent:false trips the upstream admin-only
+// exceptions at create, so absent settings are left to the server defaults.
+// persistent and storage are create-only and belong here, never on edit.
+func projectCreateFromSettings(owner, name string, s manifest.Settings, chroots []string) copr.ProjectCreate {
+	return copr.ProjectCreate{
+		Owner: owner, Name: name, Chroots: chroots,
+		DevelMode:                  s.DevelMode,
+		EnableNet:                  s.EnableNet,
+		UnlistedOnHomepage:         s.UnlistedOnHomepage,
+		Persistent:                 s.Persistent,
+		Storage:                    s.Storage,
+		AutoPrune:                  s.AutoPrune,
+		Bootstrap:                  s.Bootstrap,
+		Isolation:                  s.Isolation,
+		ModuleHotfixes:             s.ModuleHotfixes,
+		Appstream:                  s.Appstream,
+		PackitForgeProjectsAllowed: s.PackitForgeProjectsAllowed,
+		FollowFedoraBranching:      s.FollowFedoraBranching,
+		RepoPriority:               s.RepoPriority,
+		Multilib:                   s.Multilib,
+		FedoraReview:               s.FedoraReview,
+		RuntimeDependencies:        s.RuntimeDependencies,
+		DeleteAfterDays:            s.DeleteAfterDays,
+	}
+}
+
+// projectEditFromSettings fills the settings portion of the edit payload.
+// Only settings the manifest declares are set, so the edit clobbers nothing
+// the manifest does not mention. persistent and storage are create-only and
+// are never sent on edit; develMode and enableNet keep the always-set
+// behavior. The edit API applies only the fields present in the request body.
+func projectEditFromSettings(owner, project string, s manifest.Settings) copr.ProjectEdit {
+	return copr.ProjectEdit{
+		Owner: owner, Project: project,
+		DevelMode:                  alwaysBoolPtr(s.DevelMode),
+		EnableNet:                  alwaysBoolPtr(s.EnableNet),
+		AutoPrune:                  boolWhen(s.AutoPrune),
+		Bootstrap:                  s.Bootstrap,
+		Isolation:                  s.Isolation,
+		ModuleHotfixes:             boolWhen(s.ModuleHotfixes),
+		Appstream:                  boolWhen(s.Appstream),
+		PackitForgeProjectsAllowed: s.PackitForgeProjectsAllowed,
+		FollowFedoraBranching:      boolWhen(s.FollowFedoraBranching),
+		RepoPriority:               s.RepoPriority,
+		UnlistedOnHomepage:         boolWhen(s.UnlistedOnHomepage),
+		Multilib:                   boolWhen(s.Multilib),
+		FedoraReview:               boolWhen(s.FedoraReview),
+		RuntimeDependencies:        s.RuntimeDependencies,
+		DeleteAfterDays:            s.DeleteAfterDays,
+	}
+}
+
+// boolWhen returns a pointer to true when the manifest declares a bool
+// setting. The manifest cannot express an explicit false, so an absent value
+// stays nil and is never sent, keeping the declared-only apply rule.
+func boolWhen(declared bool) *bool {
+	if !declared {
+		return nil
+	}
+	v := true
+	return &v
+}
+
+// alwaysBoolPtr returns a pointer to v, so develMode and enableNet are always
+// sent (the historic apply behavior, intentionally unchanged).
+func alwaysBoolPtr(v bool) *bool {
+	p := v
+	return &p
 }
 
 func loadManifest(file string) (*manifest.Manifest, error) {

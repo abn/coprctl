@@ -14,17 +14,28 @@ import (
 
 // Project is a Copr project.
 type Project struct {
-	ID           int               `json:"id"`
-	Name         string            `json:"name"`
-	Ownername    string            `json:"ownername"`
-	FullName     string            `json:"full_name"`
-	Description  string            `json:"description"`
-	Instructions string            `json:"instructions"`
-	Homepage     string            `json:"homepage"`
-	Contact      string            `json:"contact"`
-	DevelMode    bool              `json:"devel_mode"`
-	EnableNet    bool              `json:"enable_net"`
-	ChrootRepos  map[string]string `json:"chroot_repos"`
+	ID                         int               `json:"id"`
+	Name                       string            `json:"name"`
+	Ownername                  string            `json:"ownername"`
+	FullName                   string            `json:"full_name"`
+	Description                string            `json:"description"`
+	Instructions               string            `json:"instructions"`
+	Homepage                   string            `json:"homepage"`
+	Contact                    string            `json:"contact"`
+	DevelMode                  bool              `json:"devel_mode"`
+	EnableNet                  bool              `json:"enable_net"`
+	ChrootRepos                map[string]string `json:"chroot_repos"`
+	Persistent                 bool              `json:"persistent"`
+	AutoPrune                  bool              `json:"auto_prune"`
+	Bootstrap                  string            `json:"bootstrap"`
+	Isolation                  string            `json:"isolation"`
+	ModuleHotfixes             bool              `json:"module_hotfixes"`
+	Appstream                  bool              `json:"appstream"`
+	PackitForgeProjectsAllowed []string          `json:"packit_forge_projects_allowed"`
+	FollowFedoraBranching      bool              `json:"follow_fedora_branching"`
+	RepoPriority               int               `json:"repo_priority"`
+	Storage                    string            `json:"storage"`
+	UnlistedOnHomepage         bool              `json:"unlisted_on_hp"`
 }
 
 // ProjectList is the list result.

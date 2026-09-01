@@ -16,33 +16,95 @@ import (
 	"github.com/abn/coprctl/internal/cerr"
 )
 
-// ProjectCreate is the payload for creating a project.
+// ProjectCreate is the payload for creating a project. The shared, add+edit,
+// and create-only fields are sent only when non-zero, never as implicit zero
+// defaults: an explicit auto_prune:false or persistent:false trips the
+// upstream admin-only exceptions at create.
 type ProjectCreate struct {
-	Owner              string
-	Name               string
-	Chroots            []string
-	Description        string
-	Instructions       string
-	Homepage           string
-	Contact            string
-	DevelMode          bool
-	EnableNet          bool
-	UnlistedOnHomepage bool
+	Owner                      string
+	Name                       string
+	Chroots                    []string
+	Description                string
+	Instructions               string
+	Homepage                   string
+	Contact                    string
+	DevelMode                  bool
+	EnableNet                  bool
+	UnlistedOnHomepage         bool
+	Persistent                 bool
+	Storage                    string
+	AutoPrune                  bool
+	Bootstrap                  string
+	Isolation                  string
+	ModuleHotfixes             bool
+	Appstream                  bool
+	PackitForgeProjectsAllowed []string
+	FollowFedoraBranching      bool
+	RepoPriority               int
+	Multilib                   bool
+	FedoraReview               bool
+	RuntimeDependencies        []string
+	DeleteAfterDays            *int
 }
 
 // CreateProject creates a project. existOK suppresses the conflict when the
 // project already exists.
 func (c *Client) CreateProject(ctx context.Context, in ProjectCreate, existOK bool) error {
 	payload := map[string]any{
-		"name":           in.Name,
-		"chroots":        in.Chroots,
-		"description":    in.Description,
-		"instructions":   in.Instructions,
-		"homepage":       in.Homepage,
-		"contact":        in.Contact,
-		"devel_mode":     in.DevelMode,
-		"enable_net":     in.EnableNet,
+		"name":         in.Name,
+		"chroots":      in.Chroots,
+		"description":  in.Description,
+		"instructions": in.Instructions,
+		"homepage":     in.Homepage,
+		"contact":      in.Contact,
+		"devel_mode":   in.DevelMode,
+		"enable_net":   in.EnableNet,
+		// unlisted_on_hp is always sent: the server default matches the zero
+		// value, so it never changes a fresh project, unlike the declared-only
+		// edit path.
 		"unlisted_on_hp": in.UnlistedOnHomepage,
+	}
+	if in.Persistent {
+		payload["persistent"] = true
+	}
+	if in.Storage != "" {
+		payload["storage"] = in.Storage
+	}
+	if in.AutoPrune {
+		payload["auto_prune"] = true
+	}
+	if in.Bootstrap != "" {
+		payload["bootstrap"] = in.Bootstrap
+	}
+	if in.Isolation != "" {
+		payload["isolation"] = in.Isolation
+	}
+	if in.ModuleHotfixes {
+		payload["module_hotfixes"] = true
+	}
+	if in.Appstream {
+		payload["appstream"] = true
+	}
+	if len(in.PackitForgeProjectsAllowed) > 0 {
+		payload["packit_forge_projects_allowed"] = in.PackitForgeProjectsAllowed
+	}
+	if in.FollowFedoraBranching {
+		payload["follow_fedora_branching"] = true
+	}
+	if in.RepoPriority != 0 {
+		payload["repo_priority"] = in.RepoPriority
+	}
+	if in.Multilib {
+		payload["multilib"] = true
+	}
+	if in.FedoraReview {
+		payload["fedora_review"] = true
+	}
+	if len(in.RuntimeDependencies) > 0 {
+		payload["runtime_dependencies"] = in.RuntimeDependencies
+	}
+	if in.DeleteAfterDays != nil {
+		payload["delete_after_days"] = *in.DeleteAfterDays
 	}
 	err := c.doJSON(ctx, http.MethodPost,
 		fmt.Sprintf("/project/add/%s", in.Owner), payload, nil)
@@ -52,7 +114,9 @@ func (c *Client) CreateProject(ctx context.Context, in ProjectCreate, existOK bo
 	return err
 }
 
-// ProjectEdit updates project settings.
+// ProjectEdit updates project settings. persistent and storage are create-only
+// and are never carried here; unlisted_on_hp is editable upstream and belongs
+// in the edit set.
 type ProjectEdit struct {
 	Owner, Project                 string
 	Description, Homepage, Contact string
@@ -60,6 +124,19 @@ type ProjectEdit struct {
 	DevelMode                      *bool
 	EnableNet                      *bool
 	Chroots                        *[]string
+	AutoPrune                      *bool
+	Bootstrap                      string
+	Isolation                      string
+	ModuleHotfixes                 *bool
+	Appstream                      *bool
+	PackitForgeProjectsAllowed     []string
+	FollowFedoraBranching          *bool
+	RepoPriority                   int
+	UnlistedOnHomepage             *bool
+	Multilib                       *bool
+	FedoraReview                   *bool
+	RuntimeDependencies            []string
+	DeleteAfterDays                *int
 }
 
 // EditProject updates project settings. Only fields that are non-empty (or
@@ -87,6 +164,45 @@ func (c *Client) EditProject(ctx context.Context, in ProjectEdit) error {
 	}
 	if in.Chroots != nil {
 		payload["chroots"] = *in.Chroots
+	}
+	if in.AutoPrune != nil {
+		payload["auto_prune"] = *in.AutoPrune
+	}
+	if in.Bootstrap != "" {
+		payload["bootstrap"] = in.Bootstrap
+	}
+	if in.Isolation != "" {
+		payload["isolation"] = in.Isolation
+	}
+	if in.ModuleHotfixes != nil {
+		payload["module_hotfixes"] = *in.ModuleHotfixes
+	}
+	if in.Appstream != nil {
+		payload["appstream"] = *in.Appstream
+	}
+	if len(in.PackitForgeProjectsAllowed) > 0 {
+		payload["packit_forge_projects_allowed"] = in.PackitForgeProjectsAllowed
+	}
+	if in.FollowFedoraBranching != nil {
+		payload["follow_fedora_branching"] = *in.FollowFedoraBranching
+	}
+	if in.RepoPriority != 0 {
+		payload["repo_priority"] = in.RepoPriority
+	}
+	if in.UnlistedOnHomepage != nil {
+		payload["unlisted_on_hp"] = *in.UnlistedOnHomepage
+	}
+	if in.Multilib != nil {
+		payload["multilib"] = *in.Multilib
+	}
+	if in.FedoraReview != nil {
+		payload["fedora_review"] = *in.FedoraReview
+	}
+	if len(in.RuntimeDependencies) > 0 {
+		payload["runtime_dependencies"] = in.RuntimeDependencies
+	}
+	if in.DeleteAfterDays != nil {
+		payload["delete_after_days"] = *in.DeleteAfterDays
 	}
 	return c.doJSON(ctx, http.MethodPut,
 		fmt.Sprintf("/project/edit/%s/%s", in.Owner, in.Project), payload, nil)
@@ -137,6 +253,15 @@ type PackageCreate struct {
 	// clobber it.
 	AutoRebuild    bool
 	SetAutoRebuild bool
+	// MaxBuilds and Timeout are write-only through the API (GET does not echo
+	// them) and are sent only when non-nil; a zero value is expressible and
+	// means the upstream default.
+	MaxBuilds *int
+	Timeout   *int
+	// ChrootDenylist is comma-joined on the wire, matching the upstream
+	// cleanup_chroot_denylist filter; a multi-entry list sent as a JSON array
+	// would fail the per-item pattern check.
+	ChrootDenylist []string
 }
 
 // CreatePackage adds a package with a source definition.
@@ -155,6 +280,15 @@ func packagePayload(in PackageCreate) map[string]any {
 	payload := map[string]any{"package_name": in.Name}
 	if in.SetAutoRebuild {
 		payload["webhook_rebuild"] = in.AutoRebuild
+	}
+	if in.MaxBuilds != nil {
+		payload["max_builds"] = *in.MaxBuilds
+	}
+	if in.Timeout != nil {
+		payload["timeout"] = *in.Timeout
+	}
+	if len(in.ChrootDenylist) > 0 {
+		payload["chroot_denylist"] = strings.Join(in.ChrootDenylist, ",")
 	}
 	for k, v := range in.Source {
 		payload[k] = v
@@ -387,18 +521,21 @@ func (c *Client) RotateAPIToken(ctx context.Context) (*NewAPIToken, error) {
 	return &out, nil
 }
 
-// UpsertPackage creates a package, tolerating an already-existing one (used
-// by apply, which is additive and safe to re-run).
+// UpsertPackage creates a package, falling back to an edit when it already
+// exists (used by apply, which is additive and safe to re-run). Upstream keeps
+// the existing source on edit by merging the stored source_json_dict for keys
+// the request omits, so the fallback reaches existing packages without
+// clobbering their source.
 func (c *Client) UpsertPackage(ctx context.Context, in PackageCreate) error {
 	err := c.CreatePackage(ctx, in)
 	if err == nil {
 		return nil
 	}
 	if isConflict(err) {
-		return nil
+		return c.EditPackage(ctx, in)
 	}
 	if isBadRequestAlreadyExists(err) {
-		return nil
+		return c.EditPackage(ctx, in)
 	}
 	return err
 }

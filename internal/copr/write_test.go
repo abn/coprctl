@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -45,6 +46,193 @@ func TestCreateProjectJSONBody(t *testing.T) {
 	}, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateProjectDeclaredSettingsPayload(t *testing.T) {
+	var body map[string]any
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "proj"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	d := 7
+	err := c.CreateProject(context.Background(), ProjectCreate{
+		Owner: "owner", Name: "proj",
+		Persistent:                 true,
+		Storage:                    "pulp",
+		AutoPrune:                  true,
+		Bootstrap:                  "on",
+		Isolation:                  "nspawn",
+		ModuleHotfixes:             true,
+		Appstream:                  true,
+		PackitForgeProjectsAllowed: []string{"github.com/quadzero/aetherpak"},
+		FollowFedoraBranching:      true,
+		RepoPriority:               50,
+		Multilib:                   true,
+		FedoraReview:               true,
+		RuntimeDependencies:        []string{"https://repo.example.com/fedora/"},
+		DeleteAfterDays:            &d,
+	}, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := map[string]any{
+		"persistent":                    true,
+		"storage":                       "pulp",
+		"auto_prune":                    true,
+		"bootstrap":                     "on",
+		"isolation":                     "nspawn",
+		"module_hotfixes":               true,
+		"appstream":                     true,
+		"packit_forge_projects_allowed": []any{"github.com/quadzero/aetherpak"},
+		"follow_fedora_branching":       true,
+		"repo_priority":                 float64(50),
+		"multilib":                      true,
+		"fedora_review":                 true,
+		"runtime_dependencies":          []any{"https://repo.example.com/fedora/"},
+		"delete_after_days":             float64(7),
+	}
+	for k, wantV := range want {
+		if gotV, ok := body[k]; !ok || fmt.Sprint(gotV) != fmt.Sprint(wantV) {
+			t.Errorf("create body[%q] = %v (%v), want %v", k, gotV, ok, wantV)
+		}
+	}
+}
+
+func TestCreateProjectOmitsUndeclaredSettings(t *testing.T) {
+	// A minimal create must not send implicit zero defaults: auto_prune:false
+	// and persistent:false trip the upstream admin-only exceptions at create.
+	var body map[string]any
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "proj"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	if err := c.CreateProject(context.Background(), ProjectCreate{Owner: "owner", Name: "proj"}, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, k := range []string{"persistent", "storage", "auto_prune", "bootstrap",
+		"isolation", "module_hotfixes", "appstream", "packit_forge_projects_allowed",
+		"follow_fedora_branching", "repo_priority", "multilib", "fedora_review",
+		"runtime_dependencies", "delete_after_days"} {
+		if _, ok := body[k]; ok {
+			t.Errorf("undeclared field %q sent on create: %v", k, body[k])
+		}
+	}
+}
+
+func TestEditProjectDeclaredSettingsPayload(t *testing.T) {
+	var body map[string]any
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("method = %s", r.Method)
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "proj"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	true_, false_ := true, false
+	d := 30
+	err := c.EditProject(context.Background(), ProjectEdit{
+		Owner: "owner", Project: "proj",
+		AutoPrune:                  &true_,
+		Bootstrap:                  "on",
+		Isolation:                  "nspawn",
+		ModuleHotfixes:             &true_,
+		Appstream:                  &false_,
+		PackitForgeProjectsAllowed: []string{"github.com/quadzero/aetherpak"},
+		FollowFedoraBranching:      &false_,
+		RepoPriority:               42,
+		UnlistedOnHomepage:         &true_,
+		Multilib:                   &true_,
+		FedoraReview:               &false_,
+		RuntimeDependencies:        []string{"https://repo.example.com/fedora/"},
+		DeleteAfterDays:            &d,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := map[string]any{
+		"auto_prune":                    true,
+		"bootstrap":                     "on",
+		"isolation":                     "nspawn",
+		"module_hotfixes":               true,
+		"appstream":                     false,
+		"packit_forge_projects_allowed": []any{"github.com/quadzero/aetherpak"},
+		"follow_fedora_branching":       false,
+		"repo_priority":                 float64(42),
+		"unlisted_on_hp":                true,
+		"multilib":                      true,
+		"fedora_review":                 false,
+		"runtime_dependencies":          []any{"https://repo.example.com/fedora/"},
+		"delete_after_days":             float64(30),
+	}
+	for k, wantV := range want {
+		if gotV, ok := body[k]; !ok || fmt.Sprint(gotV) != fmt.Sprint(wantV) {
+			t.Errorf("edit body[%q] = %v (%v), want %v", k, gotV, ok, wantV)
+		}
+	}
+	for _, k := range []string{"persistent", "storage"} {
+		if _, ok := body[k]; ok {
+			t.Errorf("create-only field %q sent on edit: %v", k, body[k])
+		}
+	}
+}
+
+func TestPackageCreateSettingsPayload(t *testing.T) {
+	var body map[string]any
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api_3/package/add/owner/proj/pkgo/scm" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "pkgo"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	maxB, timeout := 5, 3600
+	err := c.CreatePackage(context.Background(), PackageCreate{
+		Owner: "owner", Project: "proj", Name: "pkgo",
+		SourceType: SourceSCM, Source: map[string]any{"clone_url": "https://example.com/r.git"},
+		MaxBuilds: &maxB, Timeout: &timeout,
+		ChrootDenylist: []string{"fedora-rawhide-*", "epel-9-*"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body["max_builds"] != float64(5) {
+		t.Errorf("max_builds = %v", body["max_builds"])
+	}
+	if body["timeout"] != float64(3600) {
+		t.Errorf("timeout = %v", body["timeout"])
+	}
+	if body["chroot_denylist"] != "fedora-rawhide-*,epel-9-*" {
+		t.Errorf("chroot_denylist = %v, want comma-joined", body["chroot_denylist"])
+	}
+}
+
+func TestPackageCreateOmitsNilSettings(t *testing.T) {
+	var body map[string]any
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "pkgo"})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	if err := c.CreatePackage(context.Background(), PackageCreate{
+		Owner: "owner", Project: "proj", Name: "pkgo",
+		SourceType: SourceSCM, Source: map[string]any{"clone_url": "u"},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, k := range []string{"max_builds", "timeout", "chroot_denylist"} {
+		if _, ok := body[k]; ok {
+			t.Errorf("nil setting %q sent: %v", k, body[k])
+		}
 	}
 }
 
@@ -199,17 +387,33 @@ func TestUpsertPackageToleratesExisting(t *testing.T) {
 	calls := 0
 	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		http.Error(w, `{"error": "Package already exists in this project."}`, http.StatusBadRequest)
+		if calls == 1 {
+			// The add conflicts; upsert must fall back to an edit so package
+			// settings reach the existing package.
+			http.Error(w, `{"error": "Package already exists in this project."}`, http.StatusBadRequest)
+			return
+		}
+		if r.URL.Path != "/api_3/package/edit/o/p/x/scm" {
+			t.Errorf("fallback path = %s, want package edit", r.URL.Path)
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["max_builds"] != float64(5) {
+			t.Errorf("edit max_builds = %v", body["max_builds"])
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"name": "x"})
 	})
 	c := New(srv.URL, TokenAuth("l", "t"))
+	m := 5
 	if err := c.UpsertPackage(context.Background(), PackageCreate{
 		Owner: "o", Project: "p", Name: "x", SourceType: SourceSCM,
-		Source: map[string]any{"clone_url": "u"},
+		Source: map[string]any{"clone_url": "u"}, MaxBuilds: &m,
 	}); err != nil {
-		t.Fatalf("upsert should tolerate already-exists: %v", err)
+		t.Fatalf("upsert should fall back to edit on already-exists: %v", err)
 	}
-	if calls != 1 {
-		t.Errorf("expected 1 call, got %d", calls)
+	if calls != 2 {
+		t.Errorf("expected 2 calls (add then edit), got %d", calls)
 	}
 }
 

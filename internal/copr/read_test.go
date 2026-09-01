@@ -15,6 +15,42 @@ func readFixture(t *testing.T, name string) []byte {
 	return raw
 }
 
+func TestProjectDecodeModernFields(t *testing.T) {
+	var p Project
+	raw := []byte(`{
+		"id": 1, "name": "aetherpak", "ownername": "quadzero",
+		"persistent": true, "auto_prune": false, "bootstrap": "on",
+		"isolation": "nspawn", "module_hotfixes": true, "appstream": true,
+		"packit_forge_projects_allowed": ["github.com/quadzero/aetherpak"],
+		"follow_fedora_branching": false, "repo_priority": 42,
+		"storage": "pulp", "unlisted_on_hp": true
+	}`)
+	if err := json.Unmarshal(raw, &p); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if p.Name != "aetherpak" || p.Ownername != "quadzero" {
+		t.Errorf("identity = %+v", p)
+	}
+	if !p.Persistent || p.AutoPrune {
+		t.Errorf("persistent/auto_prune = %v/%v", p.Persistent, p.AutoPrune)
+	}
+	if p.Bootstrap != "on" || p.Isolation != "nspawn" {
+		t.Errorf("bootstrap/isolation = %q/%q", p.Bootstrap, p.Isolation)
+	}
+	if !p.ModuleHotfixes || !p.Appstream {
+		t.Errorf("module_hotfixes/appstream = %v/%v", p.ModuleHotfixes, p.Appstream)
+	}
+	if len(p.PackitForgeProjectsAllowed) != 1 || p.PackitForgeProjectsAllowed[0] != "github.com/quadzero/aetherpak" {
+		t.Errorf("packit_forge_projects_allowed = %v", p.PackitForgeProjectsAllowed)
+	}
+	if p.FollowFedoraBranching {
+		t.Errorf("follow_fedora_branching = %v", p.FollowFedoraBranching)
+	}
+	if p.RepoPriority != 42 || p.Storage != "pulp" || !p.UnlistedOnHomepage {
+		t.Errorf("repo_priority/storage/unlisted_on_hp = %v/%q/%v", p.RepoPriority, p.Storage, p.UnlistedOnHomepage)
+	}
+}
+
 func TestBuildDecodeWireShape(t *testing.T) {
 	var b Build
 	if err := json.Unmarshal(readFixture(t, "testdata/build-2926020.json"), &b); err != nil {

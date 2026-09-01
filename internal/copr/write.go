@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,33 +18,95 @@ import (
 	"github.com/abn/coprctl/internal/cerr"
 )
 
-// ProjectCreate is the payload for creating a project.
+// ProjectCreate is the payload for creating a project. The shared, add+edit,
+// and create-only fields are sent only when non-zero, never as implicit zero
+// defaults: an explicit auto_prune:false or persistent:false trips the
+// upstream admin-only exceptions at create.
 type ProjectCreate struct {
-	Owner              string
-	Name               string
-	Chroots            []string
-	Description        string
-	Instructions       string
-	Homepage           string
-	Contact            string
-	DevelMode          bool
-	EnableNet          bool
-	UnlistedOnHomepage bool
+	Owner                      string
+	Name                       string
+	Chroots                    []string
+	Description                string
+	Instructions               string
+	Homepage                   string
+	Contact                    string
+	DevelMode                  bool
+	EnableNet                  bool
+	UnlistedOnHomepage         bool
+	Persistent                 bool
+	Storage                    string
+	AutoPrune                  bool
+	Bootstrap                  string
+	Isolation                  string
+	ModuleHotfixes             bool
+	Appstream                  bool
+	PackitForgeProjectsAllowed []string
+	FollowFedoraBranching      bool
+	RepoPriority               int
+	Multilib                   bool
+	FedoraReview               bool
+	RuntimeDependencies        []string
+	DeleteAfterDays            *int
 }
 
 // CreateProject creates a project. existOK suppresses the conflict when the
 // project already exists.
 func (c *Client) CreateProject(ctx context.Context, in ProjectCreate, existOK bool) error {
 	payload := map[string]any{
-		"name":           in.Name,
-		"chroots":        in.Chroots,
-		"description":    in.Description,
-		"instructions":   in.Instructions,
-		"homepage":       in.Homepage,
-		"contact":        in.Contact,
-		"devel_mode":     in.DevelMode,
-		"enable_net":     in.EnableNet,
+		"name":         in.Name,
+		"chroots":      in.Chroots,
+		"description":  in.Description,
+		"instructions": in.Instructions,
+		"homepage":     in.Homepage,
+		"contact":      in.Contact,
+		"devel_mode":   in.DevelMode,
+		"enable_net":   in.EnableNet,
+		// unlisted_on_hp is always sent: the server default matches the zero
+		// value, so it never changes a fresh project, unlike the declared-only
+		// edit path.
 		"unlisted_on_hp": in.UnlistedOnHomepage,
+	}
+	if in.Persistent {
+		payload["persistent"] = true
+	}
+	if in.Storage != "" {
+		payload["storage"] = in.Storage
+	}
+	if in.AutoPrune {
+		payload["auto_prune"] = true
+	}
+	if in.Bootstrap != "" {
+		payload["bootstrap"] = in.Bootstrap
+	}
+	if in.Isolation != "" {
+		payload["isolation"] = in.Isolation
+	}
+	if in.ModuleHotfixes {
+		payload["module_hotfixes"] = true
+	}
+	if in.Appstream {
+		payload["appstream"] = true
+	}
+	if len(in.PackitForgeProjectsAllowed) > 0 {
+		payload["packit_forge_projects_allowed"] = in.PackitForgeProjectsAllowed
+	}
+	if in.FollowFedoraBranching {
+		payload["follow_fedora_branching"] = true
+	}
+	if in.RepoPriority != 0 {
+		payload["repo_priority"] = in.RepoPriority
+	}
+	if in.Multilib {
+		payload["multilib"] = true
+	}
+	if in.FedoraReview {
+		payload["fedora_review"] = true
+	}
+	if len(in.RuntimeDependencies) > 0 {
+		payload["runtime_dependencies"] = in.RuntimeDependencies
+	}
+	if in.DeleteAfterDays != nil {
+		payload["delete_after_days"] = *in.DeleteAfterDays
 	}
 	err := c.doJSON(ctx, http.MethodPost,
 		fmt.Sprintf("/project/add/%s", in.Owner), payload, nil)
@@ -52,7 +116,9 @@ func (c *Client) CreateProject(ctx context.Context, in ProjectCreate, existOK bo
 	return err
 }
 
-// ProjectEdit updates project settings.
+// ProjectEdit updates project settings. persistent and storage are create-only
+// and are never carried here; unlisted_on_hp is editable upstream and belongs
+// in the edit set.
 type ProjectEdit struct {
 	Owner, Project                 string
 	Description, Homepage, Contact string
@@ -60,6 +126,19 @@ type ProjectEdit struct {
 	DevelMode                      *bool
 	EnableNet                      *bool
 	Chroots                        *[]string
+	AutoPrune                      *bool
+	Bootstrap                      string
+	Isolation                      string
+	ModuleHotfixes                 *bool
+	Appstream                      *bool
+	PackitForgeProjectsAllowed     []string
+	FollowFedoraBranching          *bool
+	RepoPriority                   int
+	UnlistedOnHomepage             *bool
+	Multilib                       *bool
+	FedoraReview                   *bool
+	RuntimeDependencies            []string
+	DeleteAfterDays                *int
 }
 
 // EditProject updates project settings. Only fields that are non-empty (or
@@ -87,6 +166,45 @@ func (c *Client) EditProject(ctx context.Context, in ProjectEdit) error {
 	}
 	if in.Chroots != nil {
 		payload["chroots"] = *in.Chroots
+	}
+	if in.AutoPrune != nil {
+		payload["auto_prune"] = *in.AutoPrune
+	}
+	if in.Bootstrap != "" {
+		payload["bootstrap"] = in.Bootstrap
+	}
+	if in.Isolation != "" {
+		payload["isolation"] = in.Isolation
+	}
+	if in.ModuleHotfixes != nil {
+		payload["module_hotfixes"] = *in.ModuleHotfixes
+	}
+	if in.Appstream != nil {
+		payload["appstream"] = *in.Appstream
+	}
+	if len(in.PackitForgeProjectsAllowed) > 0 {
+		payload["packit_forge_projects_allowed"] = in.PackitForgeProjectsAllowed
+	}
+	if in.FollowFedoraBranching != nil {
+		payload["follow_fedora_branching"] = *in.FollowFedoraBranching
+	}
+	if in.RepoPriority != 0 {
+		payload["repo_priority"] = in.RepoPriority
+	}
+	if in.UnlistedOnHomepage != nil {
+		payload["unlisted_on_hp"] = *in.UnlistedOnHomepage
+	}
+	if in.Multilib != nil {
+		payload["multilib"] = *in.Multilib
+	}
+	if in.FedoraReview != nil {
+		payload["fedora_review"] = *in.FedoraReview
+	}
+	if len(in.RuntimeDependencies) > 0 {
+		payload["runtime_dependencies"] = in.RuntimeDependencies
+	}
+	if in.DeleteAfterDays != nil {
+		payload["delete_after_days"] = *in.DeleteAfterDays
 	}
 	return c.doJSON(ctx, http.MethodPut,
 		fmt.Sprintf("/project/edit/%s/%s", in.Owner, in.Project), payload, nil)
@@ -118,13 +236,14 @@ func (c *Client) ForkProject(ctx context.Context, srcOwner, srcProject, dstOwner
 type SourceType string
 
 const (
-	SourceSCM      SourceType = "scm"
-	SourceDistGit  SourceType = "distgit"
-	SourcePyPI     SourceType = "pypi"
-	SourceRubyGems SourceType = "rubygems"
-	SourceCustom   SourceType = "custom"
-	SourceURL      SourceType = "url"
-	SourceUpload   SourceType = "upload"
+	SourceSCM       SourceType = "scm"
+	SourceDistGit   SourceType = "distgit"
+	SourcePyPI      SourceType = "pypi"
+	SourceRubyGems  SourceType = "rubygems"
+	SourceCustom    SourceType = "custom"
+	SourceURL       SourceType = "url"
+	SourceUpload    SourceType = "upload"
+	SourceRpmUpload SourceType = "rpm-upload"
 )
 
 // PackageCreate is the payload for creating or editing a package.
@@ -137,6 +256,15 @@ type PackageCreate struct {
 	// clobber it.
 	AutoRebuild    bool
 	SetAutoRebuild bool
+	// MaxBuilds and Timeout are write-only through the API (GET does not echo
+	// them) and are sent only when non-nil; a zero value is expressible and
+	// means the upstream default.
+	MaxBuilds *int
+	Timeout   *int
+	// ChrootDenylist is comma-joined on the wire, matching the upstream
+	// cleanup_chroot_denylist filter; a multi-entry list sent as a JSON array
+	// would fail the per-item pattern check.
+	ChrootDenylist []string
 }
 
 // CreatePackage adds a package with a source definition.
@@ -156,17 +284,27 @@ func packagePayload(in PackageCreate) map[string]any {
 	if in.SetAutoRebuild {
 		payload["webhook_rebuild"] = in.AutoRebuild
 	}
+	if in.MaxBuilds != nil {
+		payload["max_builds"] = *in.MaxBuilds
+	}
+	if in.Timeout != nil {
+		payload["timeout"] = *in.Timeout
+	}
+	if len(in.ChrootDenylist) > 0 {
+		payload["chroot_denylist"] = strings.Join(in.ChrootDenylist, ",")
+	}
 	for k, v := range in.Source {
 		payload[k] = v
 	}
 	return payload
 }
 
-// DeletePackage removes a package.
+// DeletePackage removes a package. The route is the fixed /package/delete
+// endpoint, which needs the full owner/project/name body; the old
+// /package/delete/{owner}/{project} route does not exist upstream.
 func (c *Client) DeletePackage(ctx context.Context, owner, project, name string) error {
-	payload := map[string]any{"packagename": name}
-	path := fmt.Sprintf("/package/delete/%s/%s", owner, project)
-	return c.doJSON(ctx, http.MethodDelete, path, payload, nil)
+	payload := map[string]any{"ownername": owner, "projectname": project, "package_name": name}
+	return c.doJSON(ctx, http.MethodDelete, "/package/delete", payload, nil)
 }
 
 // ResetPackage clears a package's stored source definition (source_type and
@@ -184,10 +322,56 @@ type BuildSubmit struct {
 	Source                  map[string]any
 	Chroots                 []string
 	Dir                     string
+	UploadOptions
 }
 
-// SubmitBuild creates a build.
-func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) (*Build, error) {
+// UploadOptions carries the generic build options shared by submit and upload.
+// A nil pointer or empty value means "not set" and is omitted, so the server
+// or project default applies.
+type UploadOptions struct {
+	Background     *bool
+	EnableNet      *bool
+	Timeout        *int
+	Bootstrap      string
+	Isolation      string
+	AfterBuildID   *int
+	WithBuildID    *int
+	ExcludeChroots []string
+}
+
+// fill writes the set options into payload under their wire keys.
+func (o UploadOptions) fill(payload map[string]any) {
+	if o.Background != nil {
+		payload["background"] = *o.Background
+	}
+	if o.EnableNet != nil {
+		payload["enable_net"] = *o.EnableNet
+	}
+	if o.Timeout != nil {
+		payload["timeout"] = *o.Timeout
+	}
+	if o.Bootstrap != "" {
+		payload["bootstrap"] = o.Bootstrap
+	}
+	if o.Isolation != "" {
+		payload["isolation"] = o.Isolation
+	}
+	if o.AfterBuildID != nil {
+		payload["after_build_id"] = *o.AfterBuildID
+	}
+	if o.WithBuildID != nil {
+		payload["with_build_id"] = *o.WithBuildID
+	}
+	if len(o.ExcludeChroots) > 0 {
+		payload["exclude_chroots"] = o.ExcludeChroots
+	}
+}
+
+// SubmitBuild creates a build. The url source type creates one build per pkgs
+// entry and returns them all in an items envelope, so it is decoded into a
+// BuildList and every build is returned; all other source types return a
+// single flat build object, wrapped in a one-element slice.
+func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) ([]Build, error) {
 	payload := map[string]any{
 		"ownername":    in.Owner,
 		"projectname":  in.Project,
@@ -196,15 +380,31 @@ func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) (*Build, error
 	if in.Dir != "" {
 		payload["project_dirname"] = dirnameFor(in.Project, in.Dir)
 	}
+	in.UploadOptions.fill(payload)
 	for k, v := range in.Source {
 		payload[k] = v
 	}
 	path := fmt.Sprintf("/build/create/%s", in.SourceType)
+	if in.SourceType == SourceURL {
+		var bl BuildList
+		if err := c.doJSON(ctx, http.MethodPost, path, payload, &bl); err != nil {
+			return nil, err
+		}
+		if len(bl.Items) == 0 {
+			return nil, cerr.Transport("build submit returned no builds")
+		}
+		return bl.Items, nil
+	}
 	var b Build
 	if err := c.doJSON(ctx, http.MethodPost, path, payload, &b); err != nil {
 		return nil, err
 	}
-	return &b, nil
+	// An empty 200 yields an all-zero Build; treat it as a transport error so
+	// the CLI never reports success for a build that was not created.
+	if b.ID == 0 {
+		return nil, cerr.Transport("build submit returned an empty build")
+	}
+	return []Build{b}, nil
 }
 
 // dirnameFor builds the full Copr dirname for a project directory. Copr
@@ -221,8 +421,10 @@ func (c *Client) CancelBuild(ctx context.Context, id int) error {
 
 // RebuildPackage submits a build for an existing package using its stored
 // source definition. The source_dict is resolved and passed to the build
-// endpoint.
-func (c *Client) RebuildPackage(ctx context.Context, owner, project, pkg string, chroots []string) (*Build, error) {
+// endpoint. A package cannot be url-sourced (such packages are stored with the
+// "link" enum and have no /build/create/<type> route), so there is no envelope
+// branch and a single build is always returned.
+func (c *Client) RebuildPackage(ctx context.Context, owner, project, pkg string, chroots []string) ([]Build, error) {
 	p, err := c.GetPackage(ctx, owner, project, pkg)
 	if err != nil {
 		return nil, err
@@ -240,12 +442,18 @@ func (c *Client) RebuildPackage(ctx context.Context, owner, project, pkg string,
 	if err := c.doJSON(ctx, http.MethodPost, path, payload, &b); err != nil {
 		return nil, err
 	}
-	return &b, nil
+	if b.ID == 0 {
+		return nil, cerr.Transport("build submit returned an empty build")
+	}
+	return []Build{b}, nil
 }
 
-// DeleteBuild removes a build.
-func (c *Client) DeleteBuild(ctx context.Context, id int) error {
-	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/build/delete/%d", id), nil, nil)
+// DeleteBuilds removes a batch of builds in one atomic request. The batch
+// list endpoint is the single delete path: if any id is invalid or still
+// running, nothing is deleted.
+func (c *Client) DeleteBuilds(ctx context.Context, ids []int) error {
+	return c.doJSON(ctx, http.MethodPost, "/build/delete/list",
+		map[string]any{"builds": ids}, nil)
 }
 
 // MockChrootEdit edits a project chroot buildroot configuration.
@@ -307,8 +515,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, payload any, o
 }
 
 // UploadBuild uploads a local SRPM and creates a build, optionally into a
-// project directory (side repo) named by dir.
-func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir string) (*Build, error) {
+// project directory (side repo) named by dir. The generic build options ride
+// the multipart json part; the chroot set stays SRPM-declared.
+func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir string, opts UploadOptions) (*Build, error) {
 	f, err := os.Open(srpmPath)
 	if err != nil {
 		return nil, cerr.Config("cannot open SRPM").Wrap(err)
@@ -321,13 +530,14 @@ func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir 
 	// The upstream client sends a "json" file part carrying the JSON payload,
 	// alongside the SRPM as a "pkgs" file part. Without the json part the
 	// endpoint rejects the request with HTTP 415.
-	form := map[string]string{
+	form := map[string]any{
 		"ownername":   owner,
 		"projectname": project,
 	}
 	if dir != "" {
 		form["project_dirname"] = dirnameFor(project, dir)
 	}
+	opts.fill(form)
 	formData, err := json.Marshal(form)
 	if err != nil {
 		return nil, err
@@ -348,6 +558,76 @@ func (c *Client) UploadBuild(ctx context.Context, owner, project, srpmPath, dir 
 	_ = mw.Close()
 
 	resp, err := c.request(ctx, http.MethodPost, "/build/create/upload", nil, &buf, mw.FormDataContentType())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var b Build
+	if err := decode(resp, &b); err != nil {
+		return nil, err
+	}
+	return &b, nil
+}
+
+// RpmUploadSubmit publishes an already-built RPM directly into the chosen
+// chroots, skipping the SRPM build and dist-git import phases.
+type RpmUploadSubmit struct {
+	Owner, Project, Dir string
+	RpmPath             string
+	Chroots             []string
+	SHA256              string
+}
+
+// UploadRpmBuild sends a multipart request with the RPM as the pkgs file part
+// and the form fields (ownername, projectname, project_dirname, chroots,
+// sha256) as plain form fields. Unlike UploadBuild there is no json part: the
+// endpoint parses the multipart form directly. Chroots repeat per field; an
+// empty list sends no chroots field.
+func (c *Client) UploadRpmBuild(ctx context.Context, in RpmUploadSubmit) (*Build, error) {
+	f, err := os.Open(in.RpmPath)
+	if err != nil {
+		return nil, cerr.Config("cannot open RPM").Wrap(err)
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("ownername", in.Owner); err != nil {
+		return nil, err
+	}
+	if err := mw.WriteField("projectname", in.Project); err != nil {
+		return nil, err
+	}
+	if in.Dir != "" {
+		if err := mw.WriteField("project_dirname", dirnameFor(in.Project, in.Dir)); err != nil {
+			return nil, err
+		}
+	}
+	for _, ch := range in.Chroots {
+		if err := mw.WriteField("chroots", ch); err != nil {
+			return nil, err
+		}
+	}
+	if in.SHA256 != "" {
+		if err := mw.WriteField("sha256", in.SHA256); err != nil {
+			return nil, err
+		}
+	}
+
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", mime.FormatMediaType("form-data",
+		map[string]string{"name": "pkgs", "filename": filepath.Base(in.RpmPath)}))
+	h.Set("Content-Type", "application/x-rpm")
+	pkgsPart, err := mw.CreatePart(h)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(pkgsPart, f); err != nil {
+		return nil, err
+	}
+	_ = mw.Close()
+
+	resp, err := c.request(ctx, http.MethodPost, "/build/create/rpm-upload", nil, &buf, mw.FormDataContentType())
 	if err != nil {
 		return nil, err
 	}
@@ -387,18 +667,21 @@ func (c *Client) RotateAPIToken(ctx context.Context) (*NewAPIToken, error) {
 	return &out, nil
 }
 
-// UpsertPackage creates a package, tolerating an already-existing one (used
-// by apply, which is additive and safe to re-run).
+// UpsertPackage creates a package, falling back to an edit when it already
+// exists (used by apply, which is additive and safe to re-run). Upstream keeps
+// the existing source on edit by merging the stored source_json_dict for keys
+// the request omits, so the fallback reaches existing packages without
+// clobbering their source.
 func (c *Client) UpsertPackage(ctx context.Context, in PackageCreate) error {
 	err := c.CreatePackage(ctx, in)
 	if err == nil {
 		return nil
 	}
 	if isConflict(err) {
-		return nil
+		return c.EditPackage(ctx, in)
 	}
 	if isBadRequestAlreadyExists(err) {
-		return nil
+		return c.EditPackage(ctx, in)
 	}
 	return err
 }

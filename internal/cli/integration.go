@@ -3,11 +3,13 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/forge"
 	"github.com/abn/coprctl/internal/ref"
@@ -22,6 +24,11 @@ func githubToken() string {
 	return os.Getenv("GH_TOKEN")
 }
 
+// gitlabToken resolves a GitLab token from GITLAB_TOKEN.
+func gitlabToken() string {
+	return os.Getenv("GITLAB_TOKEN")
+}
+
 func newIntegrationCmd(app *App) *cobra.Command {
 	var out outFlags
 	cmd := &cobra.Command{
@@ -34,21 +41,39 @@ func newIntegrationCmd(app *App) *cobra.Command {
 		Short: "GitHub webhook integration",
 	}
 	github.AddCommand(newIntegrationGithubEnableCmd(app, &out))
+	gitlab := &cobra.Command{
+		Use:   "gitlab",
+		Short: "GitLab webhook integration",
+	}
+	gitlab.AddCommand(newIntegrationGitlabEnableCmd(app, &out))
 	cmd.AddCommand(
 		github,
+		gitlab,
 		newIntegrationURLCmd(app, &out),
+		newIntegrationDisableCmd(app, &out),
 		newIntegrationRotateCmd(app, &out),
 	)
 	return cmd
 }
 
-// webhookURL builds the Copr webhook URL. The upstream-documented shape is
-// https://<instance>/webhooks/<forge>/<project_id>/<secret>/. Project id is
-// webhookURL returns the Copr webhook URL for a project. When pkgName is
-// non-empty the URL is package-scoped, which lets Copr match the tag to that
-// package by name (so a bare v<semver> tag works regardless of the package
-// name). The secret comes from local state (never invented).
-func webhookURL(ctx context.Context, app *App, r ref.Ref, pkgName string) (string, error) {
+// webhookURL returns the Copr webhook URL for a project and forge. The shape
+// is the same for github, gitlab, and bitbucket: /webhooks/<forge>/<project_id>/
+// <secret>[/<pkg>/] (webhooks_general.py). custom requires the package name;
+// the server rejects the bare route with PACKAGE_NAME_REQUIRED. When pkgName is
+// set the URL is package-scoped, which lets Copr match a tag to that package
+// by name. The secret comes from local state (never invented).
+func webhookURL(ctx context.Context, app *App, r ref.Ref, forge, pkgName string) (string, error) {
+	if forge == "" {
+		forge = "github"
+	}
+	switch forge {
+	case "github", "gitlab", "bitbucket", "custom":
+	default:
+		return "", cerr.Usage(fmt.Sprintf("unsupported webhook forge %q", forge))
+	}
+	if forge == "custom" && pkgName == "" {
+		return "", cerr.Usage("the custom webhook needs a package name; pass --package PKG")
+	}
 	c, err := app.Client()
 	if err != nil {
 		return "", err
@@ -65,7 +90,7 @@ func webhookURL(ctx context.Context, app *App, r ref.Ref, pkgName string) (strin
 	if err != nil || secret == "" {
 		return "", fmt.Errorf("no webhook secret known for %s; run 'integration rotate-secret' first", r.String())
 	}
-	u := fmt.Sprintf("%s/webhooks/github/%d/%s/", profileURL(app), proj.ID, secret)
+	u := fmt.Sprintf("%s/webhooks/%s/%d/%s/", profileURL(app), forge, proj.ID, secret)
 	if pkgName != "" {
 		u += pkgName + "/"
 	}
@@ -73,6 +98,7 @@ func webhookURL(ctx context.Context, app *App, r ref.Ref, pkgName string) (strin
 }
 
 func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
+	var forgeName, pkg string
 	var reveal bool
 	cmd := &cobra.Command{
 		Use:   "url REF",
@@ -83,7 +109,7 @@ func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			u, err := webhookURL(cmd.Context(), app, r, "")
+			u, err := webhookURL(cmd.Context(), app, r, forgeName, pkg)
 			if err != nil {
 				return err
 			}
@@ -94,6 +120,8 @@ func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&forgeName, "forge", "github", "webhook forge: github, gitlab, bitbucket, custom")
+	cmd.Flags().StringVar(&pkg, "package", "", "scope the URL to a package (required for custom)")
 	cmd.Flags().BoolVar(&reveal, "reveal", false, "print the secret in the URL")
 	return cmd
 }
@@ -110,85 +138,25 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			token := githubToken()
-			if token == "" {
-				return fmt.Errorf("GITHUB_TOKEN or GH_TOKEN is required for the GitHub integration")
+			token, err := forgeToken("github")
+			if err != nil {
+				return err
 			}
 			// Default to tag-only triggers (GitHub `create` fires on tag
-			// creation). `--events` overrides for full control.
-			evs := defaultHookEvents(tagOnly, events)
+			// creation). `--events` overrides for full control; forge.HookEvents
+			// owns the tag-only to event-list mapping.
+			opts := forge.HookOptions{TagOnly: tagOnly}
+			if events != "" {
+				opts.Events = splitComma(events)
+			}
 			gh := forge.NewGitHub(token)
-			owner, repoName := splitRepo(repo)
-			// Resolve the project's SCM packages that belong to this repo, so
-			// the webhook can be package-scoped (letting Copr match a bare
-			// v<semver> tag by package name) and auto-rebuild can be enabled.
-			pkgs, err := scmPackages(cmd.Context(), app, r, "https://github.com/"+repo)
+			res, err := enableWebhook(cmd, app, r, repo, "github", cloneBase("github"), gh,
+				opts, noAutoRebuild, reveal, gh.PingHook)
 			if err != nil {
 				return err
 			}
-			pkgScope := ""
-			if len(pkgs) > 0 {
-				pkgScope = pkgs[0].Name
-			}
-			u, err := webhookURL(cmd.Context(), app, r, pkgScope)
-			if err != nil {
-				return err
-			}
-			// Idempotent: reuse an existing hook pointing at this instance.
-			hooks, err := gh.ListHooks(cmd.Context(), owner, repoName)
-			if err != nil {
-				return err
-			}
-			var hook *forge.Hook
-			for i := range hooks {
-				// Match on the configured webhook destination, not the API
-				// resource URL (hooks[i].URL is the GitHub API endpoint).
-				if strings.Contains(hooks[i].Config.URL, "/webhooks/") {
-					hook = &hooks[i]
-					break
-				}
-			}
-			if hook != nil {
-				if err := gh.UpdateHook(cmd.Context(), owner, repoName, hook.ID, u, evs); err != nil {
-					return err
-				}
-			} else {
-				hook, err = gh.CreateHook(cmd.Context(), owner, repoName, u, evs)
-				if err != nil {
-					return err
-				}
-			}
-			// Persist the hook id for reconcile-on-rotate.
-			store, err := state.NewStore(mustStateDir(app.profile))
-			if err != nil {
-				return fmt.Errorf("state store: %w", err)
-			}
-			if err := store.SetHookID(r.Owner, r.Project, hook.ID); err != nil {
-				return fmt.Errorf("record forge hook id: %w", err)
-			}
-			// Verify with a ping.
-			code, err := gh.PingHook(cmd.Context(), owner, repoName, hook.ID)
-			if err != nil {
-				return err
-			}
-			// Enabling a webhook implies the tag pushes should rebuild the
-			// package. Enable webhook auto-rebuild on the project's packages
-			// unless the user opts out.
-			autoRebuilt := false
-			if !noAutoRebuild {
-				autoRebuilt, err = enableAutoRebuild(cmd, app, r, pkgs)
-				if err != nil {
-					return err
-				}
-			}
-			if !reveal {
-				u = maskSecret(u)
-			}
-			return renderResult(cmd, out, map[string]any{
-				"enabled": true, "repo": repo, "hook_id": hook.ID,
-				"url": u, "ping_status": code, "events": evs,
-				"auto_rebuild": autoRebuilt, "package": pkgScope,
-			})
+			res["events"] = forge.HookEvents(opts)
+			return renderResult(cmd, out, res)
 		},
 	}
 	cmd.Flags().StringVar(&repo, "repo", "", "GitHub repo owner/name")
@@ -199,18 +167,289 @@ func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {
 	return cmd
 }
 
-// defaultHookEvents resolves the hook events. The default is tag-only (the
-// GitHub `create` event fires when a tag is created, which drives Copr's
-// tag-triggered rebuilds). An explicit --events value overrides it; setting
-// --tag-only=false opts back in to branch pushes.
-func defaultHookEvents(tagOnly bool, events string) []string {
-	if events != "" {
-		return splitComma(events)
+func newIntegrationGitlabEnableCmd(app *App, out *outFlags) *cobra.Command {
+	var repo string
+	var reveal, tagOnly, noAutoRebuild bool
+	cmd := &cobra.Command{
+		Use:   "enable REF --repo GROUP/PROJECT",
+		Short: "Enable a GitLab webhook for a project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := parseRef(app, args[0])
+			if err != nil {
+				return err
+			}
+			token, err := forgeToken("gitlab")
+			if err != nil {
+				return err
+			}
+			gl := forge.NewGitLab(token, os.Getenv("GITLAB_API_URL"))
+			res, err := enableWebhook(cmd, app, r, repo, "gitlab", cloneBase("gitlab"), gl,
+				forge.HookOptions{TagOnly: tagOnly}, noAutoRebuild, reveal,
+				func(ctx context.Context, owner, repo string, id int64) (int, error) {
+					// GitLab test hooks have no delivery readback; the test
+					// endpoint is newer than most self-hosted instances, so a
+					// missing route must not undo the enable. Auth and rate-limit
+					// failures are real problems and should not be hidden.
+					trigger := "tag_push_events"
+					if !tagOnly {
+						trigger = "push_events"
+					}
+					status, err := gl.TestHook(ctx, owner, repo, id, trigger)
+					if err != nil {
+						if status == http.StatusNotFound || status == http.StatusMethodNotAllowed {
+							return 0, nil
+						}
+						fmt.Fprintf(cmd.ErrOrStderr(), "warning: gitlab webhook test failed: %v\n", err)
+						return 0, nil
+					}
+					return status, nil
+				})
+			if err != nil {
+				return err
+			}
+			return renderResult(cmd, out, res)
+		},
 	}
-	if tagOnly {
-		return []string{"create"}
+	cmd.Flags().StringVar(&repo, "repo", "", "GitLab group/project")
+	cmd.Flags().BoolVar(&tagOnly, "tag-only", true, "trigger only on push of a tag (GitLab tag push event)")
+	cmd.Flags().BoolVar(&reveal, "reveal", false, "reveal the secret in output")
+	cmd.Flags().BoolVar(&noAutoRebuild, "no-auto-rebuild", false, "do not enable webhook auto-rebuild on the project's packages")
+	return cmd
+}
+
+// enableWebhook performs the enable flow shared by the github and gitlab
+// commands: resolve the SCM package scope, compute the Copr receiver URL, list
+// hooks on the repo and create or update the one aimed at this instance, record
+// the hook id, run the forge delivery check, enable auto-rebuild, and assemble
+// the result map. forgeSegment is the webhook URL segment; cloneBase the https
+// clone prefix used to match SCM packages; ping, when non-nil, runs the
+// forge-specific delivery check. The caller renders and can add forge-specific
+// result fields.
+func enableWebhook(cmd *cobra.Command, app *App, r ref.Ref, repo, forgeSegment, cloneBase string,
+	mgr forge.HookManager, opts forge.HookOptions, noAutoRebuild, reveal bool,
+	ping func(ctx context.Context, owner, repo string, id int64) (int, error)) (map[string]any, error) {
+	owner, repoName := splitRepo(repo)
+	// Resolve the project's SCM packages that belong to this repo, so the
+	// webhook can be package-scoped (letting Copr match a bare v<semver> tag by
+	// package name) and auto-rebuild can be enabled.
+	pkgs, pkgScope, err := webhookPackageScope(cmd.Context(), app, r, cloneBase+repo)
+	if err != nil {
+		return nil, err
 	}
-	return []string{"push", "create"}
+	u, err := webhookURL(cmd.Context(), app, r, forgeSegment, pkgScope)
+	if err != nil {
+		return nil, err
+	}
+	// Idempotent: reuse an existing hook pointing at this instance.
+	hooks, err := mgr.ListHooks(cmd.Context(), owner, repoName)
+	if err != nil {
+		return nil, err
+	}
+	var hook *forge.Hook
+	// Match on the receiver prefix (forge and Copr project id), which is stable
+	// across secret rotations, rather than the loose /webhooks/ substring that
+	// could repoint a hook aimed at another project or instance.
+	prefix := receiverPrefix(u)
+	for i := range hooks {
+		if prefix != "" && strings.Contains(hooks[i].DestinationURL(), prefix) {
+			hook = &hooks[i]
+			break
+		}
+	}
+	if hook != nil {
+		if err := mgr.UpdateHook(cmd.Context(), owner, repoName, hook.ID, u, opts); err != nil {
+			return nil, err
+		}
+	} else {
+		hook, err = mgr.CreateHook(cmd.Context(), owner, repoName, u, opts)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Persist the hook id so disable can reconcile.
+	store, err := state.NewStore(mustStateDir(app.profile))
+	if err != nil {
+		return nil, fmt.Errorf("state store: %w", err)
+	}
+	if err := store.SetHookID(r.Owner, r.Project, hook.ID); err != nil {
+		return nil, fmt.Errorf("record forge hook id: %w", err)
+	}
+	pingStatus := 0
+	if ping != nil {
+		pingStatus, err = ping(cmd.Context(), owner, repoName, hook.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Enabling a webhook implies the tag pushes should rebuild the package.
+	// Enable webhook auto-rebuild on the project's packages unless the user
+	// opts out.
+	autoRebuilt := false
+	if !noAutoRebuild {
+		autoRebuilt, err = enableAutoRebuild(cmd, app, r, pkgs)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !reveal {
+		u = maskSecret(u)
+	}
+	return map[string]any{
+		"enabled": true, "repo": repo, "hook_id": hook.ID,
+		"url": u, "ping_status": pingStatus,
+		"auto_rebuild": autoRebuilt, "package": pkgScope,
+	}, nil
+}
+
+// forgeToken returns the configured token for a forge, or an error naming the
+// missing environment variable. It also rejects forges the integration does
+// not support.
+func forgeToken(name string) (string, error) {
+	switch name {
+	case "github":
+		if t := githubToken(); t != "" {
+			return t, nil
+		}
+		return "", fmt.Errorf("GITHUB_TOKEN or GH_TOKEN is required for the GitHub integration")
+	case "gitlab":
+		if t := gitlabToken(); t != "" {
+			return t, nil
+		}
+		return "", fmt.Errorf("GITLAB_TOKEN is required for the GitLab integration")
+	default:
+		return "", cerr.Usage(fmt.Sprintf("unsupported forge %q (github|gitlab)", name))
+	}
+}
+
+// hookManager builds the forge client for a named forge, enforcing the token
+// requirement. Used by disable; the enable commands build their own concrete
+// clients because they need the forge-specific delivery check.
+func hookManager(name string) (forge.HookManager, error) {
+	token, err := forgeToken(name)
+	if err != nil {
+		return nil, err
+	}
+	if name == "gitlab" {
+		return forge.NewGitLab(token, os.Getenv("GITLAB_API_URL")), nil
+	}
+	return forge.NewGitHub(token), nil
+}
+
+// webhookPackageScope resolves the SCM packages in a project that belong to
+// the given repo and returns the first package name, so the webhook can be
+// package-scoped (letting Copr match a bare v<semver> tag by package name).
+// The package list is returned for the auto-rebuild step; the scope name is
+// empty when no package matches.
+func webhookPackageScope(ctx context.Context, app *App, r ref.Ref, cloneURL string) ([]copr.Package, string, error) {
+	pkgs, err := scmPackages(ctx, app, r, cloneURL)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(pkgs) > 0 {
+		return pkgs, pkgs[0].Name, nil
+	}
+	return pkgs, "", nil
+}
+
+// cloneBase returns the https clone URL prefix used to match SCM packages on a
+// forge. Self-hosted GitLab (GITLAB_API_URL) is not reflected here: package
+// scoping is best-effort and the receiver URL is independent of the clone host.
+func cloneBase(forge string) string {
+	if forge == "gitlab" {
+		return "https://gitlab.com/"
+	}
+	return "https://github.com/"
+}
+
+// newIntegrationDisableCmd removes a forge webhook, verifying before it deletes
+// that the hook's destination matches the expected Copr receiver URL for this
+// forge and project. The stored hook id is a hint only and never the sole basis
+// for the delete.
+func newIntegrationDisableCmd(app *App, out *outFlags) *cobra.Command {
+	var forgeName, repo string
+	var yes *bool
+	cmd := &cobra.Command{
+		Use:   "disable REF --forge github|gitlab --repo OWNER/REPO",
+		Short: "Disable a forge webhook for a project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := parseRef(app, args[0])
+			if err != nil {
+				return err
+			}
+			if !*yes {
+				return confirmRequired("--yes")
+			}
+			mgr, err := hookManager(forgeName)
+			if err != nil {
+				return err
+			}
+			owner, repoName := splitRepo(repo)
+			// Recompute the same receiver the enable path configured, so the
+			// match is exact: forge segment, project id, and optional package
+			// scope.
+			_, pkgScope, err := webhookPackageScope(cmd.Context(), app, r, cloneBase(forgeName)+repo)
+			if err != nil {
+				return err
+			}
+			u, err := webhookURL(cmd.Context(), app, r, forgeName, pkgScope)
+			if err != nil {
+				return err
+			}
+			hooks, err := mgr.ListHooks(cmd.Context(), owner, repoName)
+			if err != nil {
+				return err
+			}
+			var target *forge.Hook
+			for i := range hooks {
+				if hooks[i].DestinationURL() == u {
+					target = &hooks[i]
+					break
+				}
+			}
+			if target == nil {
+				return fmt.Errorf("no %s webhook on %s/%s points at %s; nothing to disable",
+					forgeName, owner, repoName, maskSecret(u))
+			}
+			if err := mgr.DeleteHook(cmd.Context(), owner, repoName, target.ID); err != nil {
+				return err
+			}
+			store, err := state.NewStore(mustStateDir(app.profile))
+			if err != nil {
+				return fmt.Errorf("state store: %w", err)
+			}
+			if err := store.ClearHookID(r.Owner, r.Project); err != nil {
+				return fmt.Errorf("state store: %w", err)
+			}
+			// disable does NOT rotate the Copr webhook secret: the secret is
+			// project-scoped and shared across every hook, and rotation would
+			// break other consumers. A future change must not "fix" this.
+			return renderResult(cmd, out, map[string]any{
+				"disabled": true, "forge": forgeName, "repo": repo,
+				"hook_id": target.ID, "stored_hook_id": 0, "url": maskSecret(u),
+			})
+		},
+	}
+	cmd.Flags().StringVar(&forgeName, "forge", "", "forge: github or gitlab")
+	cmd.Flags().StringVar(&repo, "repo", "", "forge repo owner/name")
+	yes = addYesFlag(cmd, "delete the forge webhook", true)
+	return cmd
+}
+
+// receiverPrefix returns the path prefix that identifies a hook aimed at this
+// Copr project and forge, independent of the secret and package scope. A
+// rotated secret changes the stored destination, but the prefix survives.
+func receiverPrefix(u string) string {
+	i := strings.Index(u, "/webhooks/")
+	if i < 0 {
+		return ""
+	}
+	parts := strings.Split(u[i:], "/")
+	if len(parts) < 5 {
+		return ""
+	}
+	return strings.Join(parts[:4], "/") + "/"
 }
 
 func newIntegrationRotateCmd(app *App, out *outFlags) *cobra.Command {
@@ -268,23 +507,20 @@ func profileURL(app *App) string {
 }
 
 func maskSecret(u string) string {
-	// webhooks/github/<id>/<secret>/ -> replace secret with ****
+	// webhooks/<forge>/<id>/<secret>/[...] masks the segment after the id for
+	// every forge using that shape (github, gitlab, bitbucket, custom). The
+	// masking is positional on that shape; a future custom-dir receiver would
+	// need a different mask.
 	i := strings.Index(u, "/webhooks/")
 	if i < 0 {
 		return u
 	}
-	prefix := u[:i]
 	parts := strings.Split(u[i:], "/")
-	// parts: ["", "webhooks", "github", id, secret, ""]
-	for idx := range parts {
-		if parts[idx] == "github" || parts[idx] == "gitlab" || parts[idx] == "pagure" {
-			if idx+2 < len(parts) {
-				parts[idx+2] = "****"
-			}
-			break
-		}
+	// parts: ["", "webhooks", forge, id, secret, pkg?, ""]
+	if len(parts) >= 6 {
+		parts[4] = "****"
 	}
-	return prefix + strings.Join(parts, "/")
+	return u[:i] + strings.Join(parts, "/")
 }
 
 func splitComma(s string) []string {
@@ -298,7 +534,7 @@ func splitComma(s string) []string {
 }
 
 // scmPackages returns the SCM packages in a project that belong to the given
-// GitHub clone URL (or all SCM packages when cloneURL is empty).
+// clone URL (or all SCM packages when cloneURL is empty).
 func scmPackages(ctx context.Context, app *App, r ref.Ref, cloneURL string) ([]copr.Package, error) {
 	c, err := app.Client()
 	if err != nil {
@@ -350,15 +586,26 @@ func enableAutoRebuild(cmd *cobra.Command, app *App, r ref.Ref, pkgs []copr.Pack
 	return updated, nil
 }
 
-// normalizeCloneURL normalizes a GitHub clone URL for comparison, producing
-// the canonical github.com/OWNER/REPO form.
+// normalizeCloneURL canonicalizes a clone URL for comparison, producing the
+// host/owner/repo form for the https and git@host:path ssh forms on any host.
 func normalizeCloneURL(u string) string {
 	u = strings.TrimSuffix(strings.TrimSpace(u), ".git")
-	if strings.HasPrefix(u, "git@github.com:") {
-		u = "github.com/" + strings.TrimPrefix(u, "git@github.com:")
+	for _, scheme := range []string{"https://", "http://", "ssh://", "git://"} {
+		u = strings.TrimPrefix(u, scheme)
 	}
-	u = strings.TrimPrefix(u, "https://")
-	u = strings.TrimPrefix(u, "http://")
+	// git@host:path scp-like form -> host/path. ssh://git@host:port/path drops
+	// the port the same way.
+	if at := strings.Index(u, "@"); at >= 0 {
+		u = u[at+1:]
+		if c := strings.Index(u, ":"); c >= 0 {
+			rest := u[c+1:]
+			if slash := strings.Index(rest, "/"); rest != "" && rest[0] >= '0' && rest[0] <= '9' && slash >= 0 {
+				u = u[:c] + rest[slash:]
+			} else {
+				u = u[:c] + "/" + rest
+			}
+		}
+	}
 	return strings.Trim(u, "/")
 }
 

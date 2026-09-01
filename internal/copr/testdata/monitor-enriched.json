@@ -1,0 +1,19 @@
+{
+  "output": "ok",
+  "message": "Project monitor request successful",
+  "packages": [
+    {
+      "name": "hello",
+      "chroots": {
+        "fedora-rawhide-x86_64": {
+          "state": "succeeded",
+          "status": 1,
+          "build_id": 2926024,
+          "url_build_log": "https://download.copr-dev.fedorainfracloud.org/results/devnullcake/hello-rpm/fedora-rawhide-x86_64/02926024-hello/builder-live.log.gz",
+          "url_backend_log": "https://download.copr-dev.fedorainfracloud.org/results/devnullcake/hello-rpm/fedora-rawhide-x86_64/02926024-hello/backend.log.gz",
+          "pkg_version": "2.10-1"
+        }
+      }
+    }
+  ]
+}

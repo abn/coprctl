@@ -60,8 +60,11 @@ Generated from the command registry; every command below exists.
   - `coprctl export` - Generate a manifest from a live project
   - `coprctl init` - Scaffold a manifest and create a working Copr project
   - `coprctl integration` - Configure forge webhook integrations
+    - `coprctl integration disable` - Disable a forge webhook for a project
     - `coprctl integration github` - GitHub webhook integration
       - `coprctl integration github enable` - Enable a GitHub webhook for a project
+    - `coprctl integration gitlab` - GitLab webhook integration
+      - `coprctl integration gitlab enable` - Enable a GitLab webhook for a project
     - `coprctl integration rotate-secret` - Generate a new webhook secret and cache it
     - `coprctl integration url` - Print the Copr webhook URL for a project
   - `coprctl log` - Tail and inspect build logs

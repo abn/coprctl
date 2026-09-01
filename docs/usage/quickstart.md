@@ -133,4 +133,4 @@ coprctl apply -f copr.yaml --prune --yes
 ```
 
 See the [usage guides](index.md) for the full guides, and the
-[GitHub integration](github-integration.md) guide to wire webhooks.
+[Webhook integrations](webhook-integrations.md) guide to wire webhooks.

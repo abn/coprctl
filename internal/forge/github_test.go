@@ -5,8 +5,28 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
+
+func TestHookEvents(t *testing.T) {
+	tests := []struct {
+		name string
+		o    HookOptions
+		want []string
+	}{
+		{"tag-only default", HookOptions{TagOnly: true}, []string{"create"}},
+		{"branch pushes opt-in", HookOptions{TagOnly: false}, []string{"push", "create"}},
+		{"explicit events override", HookOptions{TagOnly: true, Events: []string{"push"}}, []string{"push"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := HookEvents(tt.o); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("HookEvents(%+v) = %v, want %v", tt.o, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestGitHubHookLifecycle(t *testing.T) {
 	hookID := int64(42)
@@ -43,11 +63,11 @@ func TestGitHubHookLifecycle(t *testing.T) {
 	if err != nil || len(hooks) != 1 || hooks[0].ID != 42 {
 		t.Fatalf("list hooks: %+v err=%v", hooks, err)
 	}
-	h, err := g.CreateHook(ctx, "o", "r", "https://copr/webhooks/github/1/secret/", []string{"push"})
+	h, err := g.CreateHook(ctx, "o", "r", "https://copr/webhooks/github/1/secret/", HookOptions{Events: []string{"push"}})
 	if err != nil || h.ID != 42 {
 		t.Fatalf("create hook: %+v err=%v", h, err)
 	}
-	if err := g.UpdateHook(ctx, "o", "r", 42, "https://copr/webhooks/github/1/secret/", []string{"push"}); err != nil {
+	if err := g.UpdateHook(ctx, "o", "r", 42, "https://copr/webhooks/github/1/secret/", HookOptions{Events: []string{"push"}}); err != nil {
 		t.Fatalf("update hook: %v", err)
 	}
 	code, err := g.PingHook(ctx, "o", "r", 42)

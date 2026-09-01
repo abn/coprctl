@@ -10,6 +10,19 @@ status: stable
 When a build fails, the tool is built to take you from the failure to a
 reproduced, fixed build without reading whole logs.
 
+## Monitor the state matrix
+
+`coprctl monitor OWNER/PROJECT` shows every package's chroot states in one
+table. `STATE` is the human state; the raw chroot `status` integer is JSON-only
+output. `BUILD` is the latest build id, `VERSION` its package version, and
+`LOG` the live build log URL, elided so the table stays narrow; `--output json`
+carries the full URLs. A `:dir` suffix on the reference monitors a side repo
+instead of the project's main directory.
+
+The log URLs point straight at the backend results directory. They appear in
+JSON output only once a chroot has a result dir, so agents must not assume the
+`url_build_log` and `url_backend_log` keys are present.
+
 ## 1. Find why it failed
 
 Do not ingest a whole build log. Extract the failing region from each failed
@@ -36,7 +49,9 @@ coprctl build reproduce BUILD_ID/CHROOT
 ```
 
 This prints the `copr-rpmbuild --task-url ...` invocation for mock-level
-fidelity.
+fidelity. When the log carries no recipe, it falls back to the stored source
+build config and prints the reconstructed submit instead, so a build without
+the recipe line is still reproducible.
 
 `coprctl try` runs a local preflight build, choosing a backend by intent:
 

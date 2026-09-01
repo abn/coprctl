@@ -1,6 +1,30 @@
 package copr
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestAttachBuildChroots(t *testing.T) {
+	var l struct {
+		Items []BuildChroot `json:"items"`
+	}
+	if err := json.Unmarshal(readFixture(t, "testdata/build-chroot-list.json"), &l); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	b := &Build{}
+	b.AttachBuildChroots(l.Items)
+	states := b.ChrootStates()
+	if states["epel-9-x86_64"] != "failed" {
+		t.Errorf("ChrootStates()[epel-9-x86_64] = %q, want failed", states["epel-9-x86_64"])
+	}
+	if states["fedora-rawhide-x86_64"] != "succeeded" {
+		t.Errorf("ChrootStates()[fedora-rawhide-x86_64] = %q, want succeeded", states["fedora-rawhide-x86_64"])
+	}
+	if got := b.RollupState(); got != "failed" {
+		t.Errorf("RollupState() = %q, want failed", got)
+	}
+}
 
 func TestRollupState(t *testing.T) {
 	tests := []struct {

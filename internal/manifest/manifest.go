@@ -5,9 +5,16 @@ package manifest
 
 import (
 	"fmt"
+	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
+
+// chrootDenylistPattern matches upstream REGEX_CHROOT_DENYLIST (forms.py). The
+// check is deliberately weaker than upstream, which also rejects patterns that
+// match no active chroot or all chroots; offline tolerance requires local-only
+// checks, and the server re-validates against active chroots on apply.
+var chrootDenylistPattern = regexp.MustCompile(`^[a-z0-9-_*.+]+$`)
 
 // Manifest is the root document of copr.yaml.
 type Manifest struct {
@@ -48,20 +55,24 @@ type Spec struct {
 
 // Settings are project-level flags.
 type Settings struct {
-	EnableNet             bool     `yaml:"enableNet,omitempty" json:"enableNet,omitempty"`
-	Appstream             bool     `yaml:"appstream,omitempty" json:"appstream,omitempty"`
-	DevelMode             bool     `yaml:"develMode,omitempty" json:"develMode,omitempty"`
-	AutoPrune             bool     `yaml:"autoPrune,omitempty" json:"autoPrune,omitempty"`
-	UnlistedOnHomepage    bool     `yaml:"unlistedOnHomepage,omitempty" json:"unlistedOnHomepage,omitempty"`
-	FollowFedoraBranching bool     `yaml:"followFedoraBranching,omitempty" json:"followFedoraBranching,omitempty"`
-	ModuleHotfixes        bool     `yaml:"moduleHotfixes,omitempty" json:"moduleHotfixes,omitempty"`
-	Multilib              bool     `yaml:"multilib,omitempty" json:"multilib,omitempty"`
-	FedoraReview          bool     `yaml:"fedoraReview,omitempty" json:"fedoraReview,omitempty"`
-	Isolation             string   `yaml:"isolation,omitempty" json:"isolation,omitempty"`
-	Bootstrap             string   `yaml:"bootstrap,omitempty" json:"bootstrap,omitempty"`
-	RepoPriority          int      `yaml:"repoPriority,omitempty" json:"repoPriority,omitempty"`
-	DeleteAfterDays       *int     `yaml:"deleteAfterDays,omitempty" json:"deleteAfterDays,omitempty"`
-	AdditionalRepos       []string `yaml:"additionalRepos,omitempty" json:"additionalRepos,omitempty"`
+	EnableNet                  bool     `yaml:"enableNet,omitempty" json:"enableNet,omitempty"`
+	Appstream                  bool     `yaml:"appstream,omitempty" json:"appstream,omitempty"`
+	DevelMode                  bool     `yaml:"develMode,omitempty" json:"develMode,omitempty"`
+	AutoPrune                  bool     `yaml:"autoPrune,omitempty" json:"autoPrune,omitempty"`
+	UnlistedOnHomepage         bool     `yaml:"unlistedOnHomepage,omitempty" json:"unlistedOnHomepage,omitempty"`
+	FollowFedoraBranching      bool     `yaml:"followFedoraBranching,omitempty" json:"followFedoraBranching,omitempty"`
+	ModuleHotfixes             bool     `yaml:"moduleHotfixes,omitempty" json:"moduleHotfixes,omitempty"`
+	Multilib                   bool     `yaml:"multilib,omitempty" json:"multilib,omitempty"`
+	FedoraReview               bool     `yaml:"fedoraReview,omitempty" json:"fedoraReview,omitempty"`
+	Isolation                  string   `yaml:"isolation,omitempty" json:"isolation,omitempty"`
+	Bootstrap                  string   `yaml:"bootstrap,omitempty" json:"bootstrap,omitempty"`
+	RepoPriority               int      `yaml:"repoPriority,omitempty" json:"repoPriority,omitempty"`
+	DeleteAfterDays            *int     `yaml:"deleteAfterDays,omitempty" json:"deleteAfterDays,omitempty"`
+	AdditionalRepos            []string `yaml:"additionalRepos,omitempty" json:"additionalRepos,omitempty"`
+	Persistent                 bool     `yaml:"persistent,omitempty" json:"persistent,omitempty"`
+	Storage                    string   `yaml:"storage,omitempty" json:"storage,omitempty"`
+	PackitForgeProjectsAllowed []string `yaml:"packitForgeProjectsAllowed,omitempty" json:"packitForgeProjectsAllowed,omitempty"`
+	RuntimeDependencies        []string `yaml:"runtimeDependencies,omitempty" json:"runtimeDependencies,omitempty"`
 }
 
 // Chroots describes the enabled chroots and per-chroot config.
@@ -82,9 +93,20 @@ type ChrootConfig struct {
 
 // Package is a package source definition.
 type Package struct {
-	Name        string `yaml:"name" json:"name"`
-	Source      Source `yaml:"source" json:"source"`
-	AutoRebuild bool   `yaml:"autoRebuild,omitempty" json:"autoRebuild,omitempty"`
+	Name   string `yaml:"name" json:"name"`
+	Source Source `yaml:"source" json:"source"`
+	// AutoRebuild is a pointer so apply can tell a declared value from an
+	// absent one: an undeclared autoRebuild must not clobber a live webhook
+	// trigger on re-apply, while a declared value round-trips.
+	AutoRebuild *bool `yaml:"autoRebuild,omitempty" json:"autoRebuild,omitempty"`
+	// MaxBuilds and Timeout are write-only through the API (GET does not echo
+	// them); pointers keep a declared zero expressible. ChrootDenylist is a
+	// comma-joined list on the wire; an empty slice cannot clear a live
+	// denylist, and the pointer form is not worth the schema complexity for a
+	// field the API never echoes.
+	MaxBuilds      *int     `yaml:"maxBuilds,omitempty" json:"maxBuilds,omitempty"`
+	Timeout        *int     `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	ChrootDenylist []string `yaml:"chrootDenylist,omitempty" json:"chrootDenylist,omitempty"`
 }
 
 // Source is a source definition.
@@ -136,34 +158,40 @@ func (m *Manifest) Validate() []ValidationIssue {
 		issues = append(issues, ValidationIssue{Path: "kind", Level: "error",
 			Detail: fmt.Sprintf("unsupported kind %q", m.Kind)})
 	}
-	// The Copr client does not model these settings, so a manifest that sets
-	// them would silently drift. Flag them as warnings rather than errors: the
-	// manifest is well-formed, but the declared state is not fully applied.
+	// persistent and storage are create-only: the edit API has no field for
+	// them, so re-apply cannot converge them on an existing project.
+	// additionalRepos is editable upstream but the client does not model it, so
+	// it is likewise never sent on apply. Flag all three as warnings rather
+	// than errors: the manifest is well-formed, but the declared state is not
+	// reconciled after creation.
 	s := &m.Spec.Settings
 	for _, u := range []struct {
 		path    string
 		present bool
+		detail  string
 	}{
-		{"spec.settings.appstream", s.Appstream},
-		{"spec.settings.autoPrune", s.AutoPrune},
-		{"spec.settings.followFedoraBranching", s.FollowFedoraBranching},
-		{"spec.settings.moduleHotfixes", s.ModuleHotfixes},
-		{"spec.settings.multilib", s.Multilib},
-		{"spec.settings.fedoraReview", s.FedoraReview},
-		{"spec.settings.isolation", s.Isolation != ""},
-		{"spec.settings.bootstrap", s.Bootstrap != ""},
-		{"spec.settings.repoPriority", s.RepoPriority != 0},
-		{"spec.settings.deleteAfterDays", s.DeleteAfterDays != nil},
-		{"spec.settings.additionalRepos", len(s.AdditionalRepos) > 0},
+		{"spec.settings.additionalRepos", len(s.AdditionalRepos) > 0,
+			"not modeled by the Copr client; ignored on apply"},
+		{"spec.settings.persistent", s.Persistent,
+			"only applied on project creation; the edit API has no field"},
+		{"spec.settings.storage", s.Storage != "",
+			"only applied on project creation; the edit API has no field"},
 	} {
 		if u.present {
-			issues = append(issues, ValidationIssue{Path: u.path, Level: "warning",
-				Detail: "not supported by the Copr client; ignored on apply"})
+			issues = append(issues, ValidationIssue{Path: u.path, Level: "warning", Detail: u.detail})
 		}
 	}
-	if s.UnlistedOnHomepage {
-		issues = append(issues, ValidationIssue{Path: "spec.settings.unlistedOnHomepage", Level: "warning",
-			Detail: "only applied on project creation; the edit API has no field"})
+	// Upstream forbids combining the two: a persistent project cannot be set
+	// to auto-delete (forms.py CoprForm).
+	if s.Persistent && s.DeleteAfterDays != nil {
+		issues = append(issues, ValidationIssue{Path: "spec.settings", Level: "error",
+			Detail: "persistent cannot be combined with deleteAfterDays"})
+	}
+	// Upstream bound: delete_after_days -1..720 (forms.py CoprForm
+	// NumberRange); a value outside it would be rejected by the server.
+	if s.DeleteAfterDays != nil && (*s.DeleteAfterDays < -1 || *s.DeleteAfterDays > 720) {
+		issues = append(issues, ValidationIssue{Path: "spec.settings.deleteAfterDays", Level: "error",
+			Detail: "deleteAfterDays must be in -1..720"})
 	}
 	for i, p := range m.Spec.Packages {
 		path := fmt.Sprintf("spec.packages[%d]", i)
@@ -181,6 +209,23 @@ func (m *Manifest) Validate() []ValidationIssue {
 		case "distgit":
 			if p.Source.Committish == "" {
 				issues = append(issues, ValidationIssue{Path: path + ".source.committish", Level: "error", Detail: "distgit source requires committish"})
+			}
+		}
+		// Upstream bounds: max_builds 0..100 and timeout 0..108000 (forms.py
+		// BasePackageForm, config.py MAX_BUILD_TIMEOUT); zero or absent means
+		// the default.
+		if p.MaxBuilds != nil && (*p.MaxBuilds < 0 || *p.MaxBuilds > 100) {
+			issues = append(issues, ValidationIssue{Path: path + ".maxBuilds", Level: "error",
+				Detail: "maxBuilds must be in 0..100"})
+		}
+		if p.Timeout != nil && (*p.Timeout < 0 || *p.Timeout > 108000) {
+			issues = append(issues, ValidationIssue{Path: path + ".timeout", Level: "error",
+				Detail: "timeout must be in 0..108000"})
+		}
+		for _, pattern := range p.ChrootDenylist {
+			if !chrootDenylistPattern.MatchString(pattern) {
+				issues = append(issues, ValidationIssue{Path: path + ".chrootDenylist", Level: "error",
+					Detail: fmt.Sprintf("invalid chroot pattern %q", pattern)})
 			}
 		}
 	}

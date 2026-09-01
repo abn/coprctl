@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -85,6 +86,17 @@ func renderYAML(w io.Writer, v any) error {
 
 func renderJSONL(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
+	// A collection is one object per line, not a single array line, so a
+	// multi-build submit streams one line per build.
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
+		for i := 0; i < rv.Len(); i++ {
+			if err := enc.Encode(rv.Index(i).Interface()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	return enc.Encode(v)
 }
 

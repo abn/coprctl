@@ -252,7 +252,9 @@ func (r *Result) buildProposal() *manifest.Manifest {
 				Spec:       base,
 				Method:     s.Method,
 			},
-			AutoRebuild: r.Forge != "" && r.Forge != "other",
+		}
+		if ar := r.Forge != "" && r.Forge != "other"; ar {
+			pkg.AutoRebuild = &ar
 		}
 		if dir != "" && dir != "./" {
 			pkg.Source.Subdirectory = strings.TrimSuffix(dir, "/")

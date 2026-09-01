@@ -4,6 +4,62 @@ This log tracks the evolution of the knowledge base: page additions,
 deprecations, and structural refactors. It does not track software releases
 or implementation milestones; repository changes belong in the commit history.
 
+## 2026-09-01
+
+* **Update**: Documented the breaking machine-output shapes in the CLI
+  grammar: collections stream one object per line under `--output jsonl`,
+  `build submit` returns a JSON array even for a single build, and build
+  output carries `source_package` with the server rollup instead of the
+  `packagename`/`source_type`/`builds` keys. The submitting-builds guide
+  notes the array applies to every submit, not just URL.
+* **Creation**: Added the "The copr.yaml manifest" guide
+  (`docs/usage/manifest.md`) documenting the full settings schema, the
+  declared-only apply rule, the declared-vs-zero family, and the three
+  treatment classes (readable and reconciled, create-only, write-only).
+* **Update**: `monitor` now requests and renders the per-chroot log URLs,
+  backend log URLs, and integer `status` that `/monitor` exposes via
+  `additional_fields[]`, and accepts `:dir` side-repo monitoring. The human
+  table gained `BUILD` and an elided `LOG` column; full URLs stay JSON-only.
+  The `ui` command and its TUI forward the reference's dir.
+* **Update**: The build response schema is now decoded to match the api_3
+  wire shape: `source_package` (name/version/url) carries package identity and
+  the server `state` is the build rollup, with per-chroot detail fetched via
+  `build-chroot/list`. The output-shape changes land in one bullet: the
+  never-present `packagename`/`source_type` keys are gone, the enrichment-only
+  `builds` key no longer appears in build output, and `BuildChroot` no longer
+  carries a `build_id`.
+* **Update**: Added the `rpm-upload` build-submit source type: `build submit
+  REF --source rpm-upload --rpm PATH [--sha256 HEX]` publishes an already-built
+  RPM directly into the chosen chroots, skipping the SRPM build and dist-git
+  import. `--chroot` is required (an omitted list would publish to every
+  project chroot) and `--sha256` verifies the file against an expected digest.
+  `package create`/`package edit` reject it as a build-submit-only source. On
+  instances without direct RPM upload the command fails with a
+  `feature_disabled` error naming `DIRECT_RPM_UPLOAD`.
+* **Update**: Verified ground-truth wire shapes for two build/package
+  operations. `POST /build/create/url` returns every created build in an
+  `items` envelope, so a single-URL submit is a one-item list, not a flat build
+  object. `DELETE /package/delete` takes a body of
+  `ownername`/`projectname`/`package_name`; the path-segment route does not
+  exist upstream.
+* **Update**: `--output jsonl` on a collection command streams one object per
+  line instead of a single array line, so every slice-rendering command
+  (submit, list) emits line-delimited JSON.
+* **Creation**: Added "Submitting builds" (`docs/usage/submitting-builds.md`)
+  covering the generic build options shared by every source type, chroot globs
+  with `exclude_chroots`, the mutually exclusive batch options, the upload and
+  `--from` caveats, the atomic batch delete, and the reproduce fallback to the
+  stored source build config. Linked it from the usage index and noted the
+  reproduce fallback in the debugging guide.
+* **Update**: Renamed the GitHub integration guide to "Webhook integrations"
+  (`docs/usage/webhook-integrations.md`) and extended it: the GitLab enable
+  command and its tag-only default, the `integration disable` verify-before-
+  delete flow, the `integration url --forge custom --package` form, and the
+  shared secret-masking contract. The usage index link follows the rename.
+  The enable wording was refined to match implementation: a hook is reused by
+  its receiver prefix (forge and project id), which survives a secret
+  rotation, rather than by instance.
+
 ## 2026-08-30
 
 * **Creation**: Added the "Contributor guide" (`docs/contribution/guide.md`)

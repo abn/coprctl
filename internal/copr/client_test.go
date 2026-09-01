@@ -103,7 +103,7 @@ func mkProject(i int) Project {
 }
 
 func mkBuild(i int) Build {
-	return Build{ID: i, PackageName: fmt.Sprintf("p%d", i), State: "succeeded"}
+	return Build{ID: i, State: "succeeded"}
 }
 
 func TestPaginationInternal(t *testing.T) {
@@ -195,14 +195,15 @@ func TestGetBuildAuthHeader(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"id":           42,
-			"state":        "succeeded",
-			"chroots":      []string{"fedora-42-x86_64"},
-			"submitted_on": 1700000000,
-			"started_on":   1700000100,
-			"ended_on":     1700000200,
-			"ownername":    "owner",
-			"projectname":  "proj",
+			"id":             42,
+			"state":          "succeeded",
+			"chroots":        []string{"fedora-42-x86_64"},
+			"submitted_on":   1700000000,
+			"started_on":     1700000100,
+			"ended_on":       1700000200,
+			"ownername":      "owner",
+			"projectname":    "proj",
+			"source_package": map[string]any{"name": "pkg", "version": "1.0", "url": "https://example.com/pkg"},
 		})
 	})
 	c := New(srv.URL, TokenAuth("mylogin", "mytoken"))
@@ -213,8 +214,91 @@ func TestGetBuildAuthHeader(t *testing.T) {
 	if b.ID != 42 || b.State != "succeeded" || len(b.Chroots) != 1 {
 		t.Fatalf("build = %+v", b)
 	}
+	if got := b.PackageName(); got != "pkg" {
+		t.Errorf("PackageName() = %q, want pkg", got)
+	}
 	if !b.Started.IsSet || b.Started.Time().Unix() != 1700000100 {
 		t.Fatalf("started timestamp not parsed: %+v", b.Started)
+	}
+}
+
+func TestGetBuildDetail(t *testing.T) {
+	buildRaw := readFixture(t, "testdata/build-2926020.json")
+	listRaw := readFixture(t, "testdata/build-chroot-list.json")
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api_3/build/2926020":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(buildRaw)
+		case r.URL.Path == "/api_3/build-chroot/list":
+			if got := r.URL.Query().Get("build_id"); got != "2926020" {
+				t.Errorf("build_id query = %q, want 2926020", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(listRaw)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+	c := New(srv.URL, nil)
+	b, err := c.GetBuildDetail(context.Background(), 2926020)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	states := b.ChrootStates()
+	if states["epel-9-x86_64"] != "failed" {
+		t.Errorf("ChrootStates()[epel-9-x86_64] = %q, want failed", states["epel-9-x86_64"])
+	}
+	if states["fedora-rawhide-x86_64"] != "succeeded" {
+		t.Errorf("ChrootStates()[fedora-rawhide-x86_64] = %q, want succeeded", states["fedora-rawhide-x86_64"])
+	}
+}
+
+func TestGetBuildDetailDegradesToBareBuild(t *testing.T) {
+	buildRaw := readFixture(t, "testdata/build-source-package.json")
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api_3/build/2926022":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(buildRaw)
+		case r.URL.Path == "/api_3/build-chroot/list":
+			http.Error(w, "boom", http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+	c := New(srv.URL, nil)
+	b, err := c.GetBuildDetail(context.Background(), 2926022)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := b.PackageName(); got != "hello" {
+		t.Errorf("PackageName() = %q, want hello", got)
+	}
+	if b.Builds != nil {
+		t.Errorf("builds = %v, want nil when build-chroot/list fails", b.Builds)
+	}
+}
+
+func TestGetBuildDetailPermanentError(t *testing.T) {
+	buildRaw := readFixture(t, "testdata/build-source-package.json")
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api_3/build/2926022":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(buildRaw)
+		case r.URL.Path == "/api_3/build-chroot/list":
+			http.Error(w, "not found", http.StatusNotFound)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
+	c := New(srv.URL, nil)
+	if _, err := c.GetBuildDetail(context.Background(), 2926022); err == nil {
+		t.Fatal("expected an error for a permanent build-chroot/list failure")
 	}
 }
 

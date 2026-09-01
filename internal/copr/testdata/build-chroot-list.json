@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "name": "fedora-rawhide-x86_64",
+      "started_on": 1788281100,
+      "ended_on": 1788282000,
+      "result_url": "https://copr.stg.fedoraproject.org/backend/builders/42/results/devnullcake-hello-rpm/",
+      "state": "succeeded"
+    },
+    {
+      "name": "epel-9-x86_64",
+      "started_on": 1788281100,
+      "ended_on": null,
+      "result_url": "https://copr.stg.fedoraproject.org/backend/builders/43/results/devnullcake-hello-rpm/",
+      "state": "failed"
+    }
+  ],
+  "meta": {
+    "limit": 100,
+    "offset": 0,
+    "order": "id",
+    "order_type": "ASC"
+  }
+}

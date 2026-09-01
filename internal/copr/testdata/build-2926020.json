@@ -1,0 +1,15 @@
+{
+  "chroots": [],
+  "ended_on": null,
+  "id": 2926020,
+  "is_background": false,
+  "ownername": "devnullcake",
+  "project_dirname": "hello-rpm",
+  "projectname": "hello-rpm",
+  "repo_url": "https://copr.stg.fedoraproject.org/coprs/devnullcake/hello-rpm/repo/",
+  "started_on": null,
+  "state": "starting",
+  "submitted_on": 1788280396,
+  "submitter": "devnullcake",
+  "source_package": { "name": null, "url": null, "version": null }
+}

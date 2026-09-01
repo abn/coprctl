@@ -81,8 +81,8 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 				}
 				if spec {
 					// Package-scoped builds name the spec after the package;
-					// project-scoped (webhook) builds leave packagename empty, in
-					// which case the spec is named after the project.
+					// project-scoped (webhook) builds leave source_package.name
+					// empty, in which case the spec is named after the project.
 					fn := specFilename(*build)
 					if err := downloadArtifact(cmd, c, ctx, resultURLs[name], fn, dir); err != nil {
 						return err
@@ -122,9 +122,9 @@ func newBuildDownloadCmd(app *App, out *outFlags) *cobra.Command {
 
 // specFilename derives the package spec filename for a build. Package-scoped
 // builds name it after the package; project-scoped (webhook) builds leave
-// packagename empty, in which case the project name is used.
+// source_package.name empty, in which case the project name is used.
 func specFilename(b copr.Build) string {
-	pkg := b.PackageName
+	pkg := b.PackageName()
 	if pkg == "" {
 		pkg = b.ProjectName
 	}

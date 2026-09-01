@@ -63,9 +63,16 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 					return cerr.New("invalid_build_id", cerr.ExitUsage,
 						"--only-failed expects a numeric build id")
 				}
-				prev, err := c.GetBuild(cmd.Context(), buildID)
+				prev, err := c.GetBuildDetail(cmd.Context(), buildID)
 				if err != nil {
 					return err
+				}
+				if prev.Builds == nil {
+					// A degraded fetch leaves Builds nil; without per-chroot
+					// states we cannot know which chroots failed, and guessing
+					// would submit a full rebuild.
+					return cerr.Transport(fmt.Sprintf(
+						"per-chroot detail for build %d could not be fetched; rebuild was not submitted", buildID))
 				}
 				failed := failedChroots(prev)
 				if len(failed) == 0 {
@@ -203,7 +210,7 @@ func newBuildGetCmd(app *App, out *outFlags) *cobra.Command {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("Project", b.OwnerName+"/"+b.ProjectName)
-				t.Add("Package", b.PackageName)
+				t.Add("Package", b.PackageName())
 				t.Add("State", b.State)
 				if err := renderResult(cmd, out, t); err != nil {
 					return err
@@ -247,7 +254,7 @@ func newBuildListCmd(app *App, out *outFlags) *cobra.Command {
 			return renderHumanOr(cmd, out, builds, func() *render.Table {
 				t := render.NewTable("ID", "PACKAGE", "STATE")
 				for _, b := range builds {
-					t.Add(fmt.Sprintf("%d", b.ID), b.PackageName, b.State)
+					t.Add(fmt.Sprintf("%d", b.ID), b.PackageName(), b.State)
 				}
 				return t
 			})

@@ -4,6 +4,16 @@ This log tracks the evolution of the knowledge base: page additions,
 deprecations, and structural refactors. It does not track software releases
 or implementation milestones; repository changes belong in the commit history.
 
+## 2026-09-01
+
+* **Update**: The build response schema is now decoded to match the api_3
+  wire shape: `source_package` (name/version/url) carries package identity and
+  the server `state` is the build rollup, with per-chroot detail fetched via
+  `build-chroot/list`. The output-shape changes land in one bullet: the
+  never-present `packagename`/`source_type` keys are gone, the enrichment-only
+  `builds` key no longer appears in build output, and `BuildChroot` no longer
+  carries a `build_id`.
+
 ## 2026-08-30
 
 * **Creation**: Added the "Contributor guide" (`docs/contribution/guide.md`)

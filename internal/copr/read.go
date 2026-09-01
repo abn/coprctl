@@ -3,6 +3,7 @@ package copr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -136,22 +137,35 @@ func (m MockChroots) ChrootNames() []string {
 
 // Build is a Copr build.
 type Build struct {
-	ID          int       `json:"id"`
-	ProjectName string    `json:"projectname"`
-	OwnerName   string    `json:"ownername"`
-	ProjectDir  string    `json:"project_dirname"`
-	PackageName string    `json:"packagename"`
-	State       string    `json:"state"`
-	SourceType  string    `json:"source_type"`
-	Submitted   Timestamp `json:"submitted_on"`
-	Started     Timestamp `json:"started_on"`
-	Ended       Timestamp `json:"ended_on"`
-	RepoURL     string    `json:"repo_url"`
+	ID            int           `json:"id"`
+	ProjectName   string        `json:"projectname"`
+	OwnerName     string        `json:"ownername"`
+	ProjectDir    string        `json:"project_dirname"`
+	SourcePackage SourcePackage `json:"source_package"`
+	State         string        `json:"state"`
+	Submitted     Timestamp     `json:"submitted_on"`
+	Started       Timestamp     `json:"started_on"`
+	Ended         Timestamp     `json:"ended_on"`
+	RepoURL       string        `json:"repo_url"`
 	// Chroots lists the chroot names this build targets.
 	Chroots []string `json:"chroots"`
-	// Builds maps chroot name to build chroot detail when present.
-	Builds map[string]*BuildChroot `json:"builds"`
+	// Builds maps chroot name to build chroot detail. It is enrichment-only,
+	// populated via AttachBuildChroots and hidden from the wire.
+	Builds map[string]*BuildChroot `json:"-"`
 }
+
+// SourcePackage is the source package a build was created from. The wire
+// always emits it as {name,url,version}, with null members for project-scoped
+// builds.
+type SourcePackage struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	URL     string `json:"url"`
+}
+
+// PackageName returns the source package name, empty for webhook and
+// project-scoped builds that have no package.
+func (b *Build) PackageName() string { return b.SourcePackage.Name }
 
 // Timestamp is a Copr timestamp that may arrive as a unix epoch integer or an
 // ISO-8601 string depending on the endpoint.
@@ -213,7 +227,6 @@ func (t Timestamp) Time() time.Time {
 
 // BuildChroot is one execution of a build in one chroot.
 type BuildChroot struct {
-	BuildID   int       `json:"build_id"`
 	Chroot    string    `json:"name"`
 	State     string    `json:"state"`
 	ResultURL string    `json:"result_url"`
@@ -305,8 +318,8 @@ var runningStates = map[string]bool{
 }
 
 // ChrootStates returns the per-chroot state map for a build, preferring the
-// detailed Builds map and falling back to the Chroots name list with the
-// build's own state.
+// detailed Builds map (populated only via AttachBuildChroots) and falling back
+// to the Chroots name list with the build's own state.
 func (b *Build) ChrootStates() map[string]string {
 	if len(b.Builds) > 0 {
 		m := map[string]string{}
@@ -332,8 +345,11 @@ func IsTerminal(state string) bool { return terminalStates[state] }
 // IsRunning reports whether a build state is in progress.
 func IsRunning(state string) bool { return runningStates[state] }
 
-// RollupState derives a single build-level state from per-chroot states,
-// following the documented rollup rules.
+// RollupState derives a single build-level state from the attached per-chroot
+// states, following the documented rollup rules. It is a model utility for
+// consumers that already hold per-chroot data, not a substitute for the server
+// rollup b.State, which is authoritative and may diverge for in-flight and
+// mixed states.
 func (b *Build) RollupState() string {
 	return RollupState(b)
 }
@@ -416,4 +432,50 @@ func (c *Client) ListBuildChroots(ctx context.Context, buildID int) ([]BuildChro
 		return nil, err
 	}
 	return l.Items, nil
+}
+
+// AttachBuildChroots merges per-chroot detail into b.Builds keyed by chroot
+// name. It is the only way Builds gets populated; a bare GetBuild leaves it
+// nil and ChrootStates falls back to the Chroots name list.
+func (b *Build) AttachBuildChroots(chroots []BuildChroot) {
+	if b.Builds == nil {
+		b.Builds = map[string]*BuildChroot{}
+	}
+	for i := range chroots {
+		bc := chroots[i]
+		b.Builds[bc.Chroot] = &bc
+	}
+}
+
+// GetBuildDetail fetches a build and attaches its per-chroot detail when
+// available. A transient failure of the build-chroot/list request degrades to
+// the bare build; a permanent client error fails the call, because a degraded
+// fetch would otherwise look like a valid empty chroot set to consumers that
+// act on per-chroot data.
+func (c *Client) GetBuildDetail(ctx context.Context, id int) (*Build, error) {
+	b, err := c.GetBuild(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	chroots, err := c.ListBuildChroots(ctx, id)
+	if err != nil {
+		if !transientErr(err) {
+			return nil, err
+		}
+		return b, nil
+	}
+	b.AttachBuildChroots(chroots)
+	return b, nil
+}
+
+// transientErr reports whether a request failed transiently: a server error,
+// a network failure, or a context deadline. Permanent 4xx client errors are
+// not transient, so a permanent build-chroot/list failure is never swallowed
+// as a degraded fetch.
+func transientErr(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var ce *cerr.Error
+	return errors.As(err, &ce) && ce.ExitCode == cerr.ExitTransport
 }

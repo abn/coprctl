@@ -13,9 +13,9 @@ func TestSpecFilename(t *testing.T) {
 		build copr.Build
 		want  string
 	}{
-		{name: "package-scoped build", build: copr.Build{PackageName: "coprctl"}, want: "coprctl.spec"},
+		{name: "package-scoped build", build: copr.Build{SourcePackage: copr.SourcePackage{Name: "coprctl"}}, want: "coprctl.spec"},
 		{name: "project-scoped build falls back to project", build: copr.Build{ProjectName: "coprctl"}, want: "coprctl.spec"},
-		{name: "both set prefers package", build: copr.Build{PackageName: "pkg", ProjectName: "proj"}, want: "pkg.spec"},
+		{name: "both set prefers package", build: copr.Build{SourcePackage: copr.SourcePackage{Name: "pkg"}, ProjectName: "proj"}, want: "pkg.spec"},
 		{name: "neither set yields bare spec", build: copr.Build{}, want: ".spec"},
 	}
 	for _, tt := range tests {

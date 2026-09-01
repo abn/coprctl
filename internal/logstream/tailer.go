@@ -132,6 +132,12 @@ func (t *Tailer) runStream(ctx context.Context, done chan struct{}, tg Target) {
 // monitorTerminal polls build states and returns when all targets are terminal
 // and two quiet passes have completed.
 func (t *Tailer) monitorTerminal(ctx context.Context, targets []Target) <-chan struct{} {
+	// Dedupe targets by build id: N chroots of one build share one
+	// GetBuildDetail per pass.
+	byBuild := map[int][]string{}
+	for _, tg := range targets {
+		byBuild[tg.BuildID] = append(byBuild[tg.BuildID], tg.Chroot)
+	}
 	term := make(chan struct{})
 	go func() {
 		defer close(term)
@@ -143,14 +149,25 @@ func (t *Tailer) monitorTerminal(ctx context.Context, targets []Target) <-chan s
 			default:
 			}
 			allTerminal := true
-			for _, tg := range targets {
-				b, err := t.Client.GetBuild(ctx, tg.BuildID)
+			for id, chroots := range byBuild {
+				b, err := t.Client.GetBuildDetail(ctx, id)
 				if err != nil {
 					allTerminal = false
 					continue
 				}
-				if st := b.ChrootStates()[tg.Chroot]; !copr.IsTerminal(st) {
-					allTerminal = false
+				states := b.ChrootStates()
+				for _, chroot := range chroots {
+					st, ok := states[chroot]
+					if !ok {
+						// A chroot missing from the enriched map (bogus name or
+						// a truncated list) must not read as forever
+						// non-terminal; the build rollup is the closest state
+						// we have.
+						st = b.State
+					}
+					if !copr.IsTerminal(st) {
+						allTerminal = false
+					}
 				}
 			}
 			if allTerminal {

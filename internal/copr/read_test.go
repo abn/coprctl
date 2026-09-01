@@ -2,8 +2,72 @@ package copr
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 )
+
+func readFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", name, err)
+	}
+	return raw
+}
+
+func TestBuildDecodeWireShape(t *testing.T) {
+	var b Build
+	if err := json.Unmarshal(readFixture(t, "testdata/build-2926020.json"), &b); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if b.SourcePackage.Name != "" || b.SourcePackage.Version != "" || b.SourcePackage.URL != "" {
+		t.Errorf("source_package = %+v, want the always-present value struct with null members", b.SourcePackage)
+	}
+	if b.State != "starting" {
+		t.Errorf("state = %q, want starting", b.State)
+	}
+	if len(b.Chroots) != 0 {
+		t.Errorf("chroots = %v, want empty before the build starts", b.Chroots)
+	}
+	if b.Builds != nil {
+		t.Errorf("builds = %v, want nil on a bare build", b.Builds)
+	}
+	if got := b.PackageName(); got != "" {
+		t.Errorf("PackageName() = %q, want empty", got)
+	}
+	if got := b.ChrootStates(); len(got) != 0 {
+		t.Errorf("ChrootStates() = %v, want empty", got)
+	}
+	if got := b.RollupState(); got != "starting" {
+		t.Errorf("RollupState() = %q, want starting", got)
+	}
+}
+
+func TestBuildDecodeSourcePackage(t *testing.T) {
+	var b Build
+	if err := json.Unmarshal(readFixture(t, "testdata/build-source-package.json"), &b); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := b.PackageName(); got != "hello" {
+		t.Errorf("PackageName() = %q, want hello", got)
+	}
+}
+
+func TestBuildDecodeRunningChrootsFallback(t *testing.T) {
+	var b Build
+	if err := json.Unmarshal(readFixture(t, "testdata/build-running-chroots.json"), &b); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if b.State != "running" {
+		t.Errorf("state = %q, want running", b.State)
+	}
+	m := b.ChrootStates()
+	for _, name := range b.Chroots {
+		if m[name] != "running" {
+			t.Errorf("ChrootStates()[%q] = %q, want fallback to the build state running", name, m[name])
+		}
+	}
+}
 
 func TestTimestampUnmarshalJSON(t *testing.T) {
 	cases := []struct {

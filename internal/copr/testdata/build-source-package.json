@@ -1,0 +1,15 @@
+{
+  "chroots": ["fedora-rawhide-x86_64", "fedora-42-x86_64"],
+  "ended_on": 1788282000,
+  "id": 2926022,
+  "is_background": false,
+  "ownername": "devnullcake",
+  "project_dirname": "hello-rpm",
+  "projectname": "hello-rpm",
+  "repo_url": "https://copr.stg.fedoraproject.org/coprs/devnullcake/hello-rpm/repo/",
+  "started_on": 1788281100,
+  "state": "succeeded",
+  "submitted_on": 1788281000,
+  "submitter": "devnullcake",
+  "source_package": { "name": "hello", "url": "https://github.com/abn/hello-rpm", "version": "1.0-1" }
+}

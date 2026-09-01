@@ -37,7 +37,7 @@ func (p *PollSource) Run(ctx context.Context, bus *Bus) {
 
 func (p *PollSource) pollOnce(ctx context.Context, bus *Bus, prev map[int]map[string]string) {
 	for _, id := range p.BuildIDs {
-		b, err := p.Client.GetBuild(ctx, id)
+		b, err := p.Client.GetBuildDetail(ctx, id)
 		if err != nil {
 			bus.Publish(Event{Kind: KindError, BuildID: id, Err: err})
 			continue
@@ -45,25 +45,28 @@ func (p *PollSource) pollOnce(ctx context.Context, bus *Bus, prev map[int]map[st
 		if p.OnBuild != nil {
 			p.OnBuild(b)
 		}
-		// Whole-build rollup state change.
-		rollup := copr.RollupState(b)
-		if prev[id] == nil || prev[id]["_rollup"] != rollup {
-			bus.Publish(Event{Kind: KindBuildState, BuildID: id, State: rollup,
-				Prev: prev[id]["_rollup"]})
-		}
-		// Per-chroot state changes.
 		if prev[id] == nil {
 			prev[id] = map[string]string{}
 		}
+		// Whole-build server rollup state change.
+		if prev[id]["_state"] != b.State {
+			bus.Publish(Event{Kind: KindBuildState, BuildID: id, State: b.State,
+				Prev: prev[id]["_state"]})
+			prev[id]["_state"] = b.State
+		}
+		// On a degraded fetch the per-chroot fallback maps every chroot name to
+		// the build rollup, so emitting it would re-publish chroot events that
+		// flip with the rollup each poll. Emit build-level state only.
+		if b.Builds == nil {
+			continue
+		}
+		// Per-chroot state changes.
 		for chroot, state := range b.ChrootStates() {
 			if prev[id][chroot] != state {
 				bus.Publish(Event{Kind: KindChrootState, BuildID: id, Chroot: chroot,
 					State: state, Prev: prev[id][chroot]})
 				prev[id][chroot] = state
 			}
-		}
-		if prev[id]["_rollup"] != rollup {
-			prev[id]["_rollup"] = rollup
 		}
 	}
 }

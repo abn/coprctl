@@ -22,6 +22,15 @@ or implementation milestones; repository changes belong in the commit history.
   never-present `packagename`/`source_type` keys are gone, the enrichment-only
   `builds` key no longer appears in build output, and `BuildChroot` no longer
   carries a `build_id`.
+* **Update**: Verified ground-truth wire shapes for two build/package
+  operations. `POST /build/create/url` returns every created build in an
+  `items` envelope, so a single-URL submit is a one-item list, not a flat build
+  object. `DELETE /package/delete` takes a body of
+  `ownername`/`projectname`/`package_name`; the path-segment route does not
+  exist upstream.
+* **Update**: `--output jsonl` on a collection command streams one object per
+  line instead of a single array line, so every slice-rendering command
+  (submit, list) emits line-delimited JSON.
 
 ## 2026-08-30
 

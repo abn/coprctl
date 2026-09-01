@@ -91,11 +91,12 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 					return err
 				}
 			}
-			b, err := c.RebuildPackage(cmd.Context(), r.Owner, r.Project, r.Segment, *chroots)
+			builds, err := c.RebuildPackage(cmd.Context(), r.Owner, r.Project, r.Segment, *chroots)
 			if err != nil {
 				return err
 			}
-			return renderHumanOr(cmd, out, b, func() *render.Table {
+			b := builds[0]
+			return renderHumanOr(cmd, out, builds, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("ID", fmt.Sprintf("%d", b.ID))
 				t.Add("State", b.State)
@@ -381,23 +382,28 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			b, err := c.SubmitBuild(cmd.Context(), copr.BuildSubmit{
+			builds, err := c.SubmitBuild(cmd.Context(), copr.BuildSubmit{
 				Owner: r.Owner, Project: r.Project,
 				SourceType: st, Source: sm, Chroots: *chroots, Dir: effDir,
 			})
 			if err != nil {
 				return err
 			}
-			if err := renderHumanOr(cmd, out, b, func() *render.Table {
-				t := render.NewTable("FIELD", "VALUE")
-				t.Add("ID", fmt.Sprintf("%d", b.ID))
-				t.Add("State", b.State)
+			if err := renderHumanOr(cmd, out, builds, func() *render.Table {
+				t := render.NewTable("ID", "STATE")
+				for _, b := range builds {
+					t.Add(fmt.Sprintf("%d", b.ID), b.State)
+				}
 				return t
 			}); err != nil {
 				return err
 			}
 			if watch {
-				return watchBuild(cmd, app, b.ID)
+				for _, b := range builds {
+					if err := watchBuild(cmd, app, b.ID); err != nil {
+						return err
+					}
+				}
 			}
 			return nil
 		},

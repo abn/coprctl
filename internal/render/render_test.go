@@ -41,6 +41,32 @@ func TestRenderYAML(t *testing.T) {
 	}
 }
 
+func TestRenderJSONLSlice(t *testing.T) {
+	var buf bytes.Buffer
+	v := []map[string]any{{"id": 1}, {"id": 2}}
+	if err := Render(&buf, FormatJSONL, v); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("jsonl lines = %q, want one object per line", buf.String())
+	}
+	if !strings.Contains(lines[0], `"id":1`) || !strings.Contains(lines[1], `"id":2`) {
+		t.Errorf("jsonl output = %q", buf.String())
+	}
+}
+
+func TestRenderJSONLSingle(t *testing.T) {
+	var buf bytes.Buffer
+	v := map[string]any{"id": 1}
+	if err := Render(&buf, FormatJSONL, v); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(buf.String(), "\n"); got != 1 {
+		t.Errorf("single-object jsonl should be one line, got %d newlines in %q", got, buf.String())
+	}
+}
+
 func TestParseFormat(t *testing.T) {
 	if f, err := ParseFormat("JSON"); err != nil || f != FormatJSON {
 		t.Errorf("ParseFormat(JSON) = %v, %v", f, err)

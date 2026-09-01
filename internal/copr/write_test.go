@@ -321,7 +321,7 @@ func TestSubmitBuildPayload(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{"id": 123, "state": "pending"})
 	})
 	c := New(srv.URL, TokenAuth("l", "t"))
-	b, err := c.SubmitBuild(context.Background(), BuildSubmit{
+	builds, err := c.SubmitBuild(context.Background(), BuildSubmit{
 		Owner: "owner", Project: "proj",
 		SourceType: SourceSCM, Source: map[string]any{"clone_url": "https://example.com/r.git"},
 		Chroots: []string{"fedora-42-x86_64"},
@@ -329,8 +329,117 @@ func TestSubmitBuildPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if b.ID != 123 || b.State != "pending" {
-		t.Fatalf("build = %+v", b)
+	if len(builds) != 1 || builds[0].ID != 123 || builds[0].State != "pending" {
+		t.Fatalf("builds = %+v", builds)
+	}
+}
+
+func TestSubmitBuildURLDecodesEnvelope(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api_3/build/create/url" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if pkgs, ok := body["pkgs"].([]any); !ok || len(pkgs) != 1 {
+			t.Errorf("pkgs = %v", body["pkgs"])
+		}
+		// The url endpoint wraps every build (even a single one) in an items
+		// envelope; decoding it as one flat build would yield an all-zero id.
+		json.NewEncoder(w).Encode(map[string]any{
+			"items": []map[string]any{
+				{"id": 1, "state": "pending"},
+				{"id": 2, "state": "pending"},
+			},
+			"meta": map[string]any{},
+		})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	builds, err := c.SubmitBuild(context.Background(), BuildSubmit{
+		Owner: "owner", Project: "proj",
+		SourceType: SourceURL, Source: map[string]any{"pkgs": []string{"https://example.com/a.spec"}},
+		Chroots: []string{"fedora-42-x86_64"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(builds) != 2 || builds[0].ID != 1 || builds[1].ID != 2 {
+		t.Fatalf("builds = %+v, want both envelope items", builds)
+	}
+}
+
+func TestSubmitBuildURLEmptyEnvelopeErrors(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"items": []any{}, "meta": map[string]any{}})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	_, err := c.SubmitBuild(context.Background(), BuildSubmit{
+		Owner: "owner", Project: "proj",
+		SourceType: SourceURL, Source: map[string]any{"pkgs": []string{"https://example.com/a.spec"}},
+	})
+	if err == nil {
+		t.Fatal("expected an error for an empty items envelope")
+	}
+}
+
+func TestSubmitBuildFlatEmptyBuildErrors(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{})
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	_, err := c.SubmitBuild(context.Background(), BuildSubmit{
+		Owner: "owner", Project: "proj",
+		SourceType: SourceSCM, Source: map[string]any{"clone_url": "https://example.com/r.git"},
+	})
+	if err == nil {
+		t.Fatal("expected an error for an empty flat build")
+	}
+}
+
+func TestRebuildPackage(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/package/list":
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{
+					{"id": 1, "name": "pkgo", "source_type": "scm", "source_dict": map[string]any{"clone_url": "https://example.com/r.git"}},
+				},
+				"meta": map[string]any{"limit": 100, "offset": 0},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api_3/build/create/scm":
+			json.NewEncoder(w).Encode(map[string]any{"id": 456, "state": "pending"})
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	builds, err := c.RebuildPackage(context.Background(), "owner", "proj", "pkgo", []string{"fedora-42-x86_64"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(builds) != 1 || builds[0].ID != 456 {
+		t.Fatalf("builds = %+v, want the single rebuilt build", builds)
+	}
+}
+
+func TestDeletePackageRouteAndBody(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("method = %s", r.Method)
+		}
+		if r.URL.Path != "/api_3/package/delete" {
+			t.Errorf("path = %s, want the fixed /package/delete route", r.URL.Path)
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["ownername"] != "owner" || body["projectname"] != "proj" || body["package_name"] != "pkgo" {
+			t.Errorf("body = %v, want ownername/projectname/package_name", body)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	c := New(srv.URL, TokenAuth("l", "t"))
+	if err := c.DeletePackage(context.Background(), "owner", "proj", "pkgo"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

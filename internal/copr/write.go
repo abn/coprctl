@@ -296,11 +296,12 @@ func packagePayload(in PackageCreate) map[string]any {
 	return payload
 }
 
-// DeletePackage removes a package.
+// DeletePackage removes a package. The route is the fixed /package/delete
+// endpoint, which needs the full owner/project/name body; the old
+// /package/delete/{owner}/{project} route does not exist upstream.
 func (c *Client) DeletePackage(ctx context.Context, owner, project, name string) error {
-	payload := map[string]any{"packagename": name}
-	path := fmt.Sprintf("/package/delete/%s/%s", owner, project)
-	return c.doJSON(ctx, http.MethodDelete, path, payload, nil)
+	payload := map[string]any{"ownername": owner, "projectname": project, "package_name": name}
+	return c.doJSON(ctx, http.MethodDelete, "/package/delete", payload, nil)
 }
 
 // ResetPackage clears a package's stored source definition (source_type and
@@ -320,8 +321,11 @@ type BuildSubmit struct {
 	Dir                     string
 }
 
-// SubmitBuild creates a build.
-func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) (*Build, error) {
+// SubmitBuild creates a build. The url source type creates one build per pkgs
+// entry and returns them all in an items envelope, so it is decoded into a
+// BuildList and every build is returned; all other source types return a
+// single flat build object, wrapped in a one-element slice.
+func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) ([]Build, error) {
 	payload := map[string]any{
 		"ownername":    in.Owner,
 		"projectname":  in.Project,
@@ -334,11 +338,26 @@ func (c *Client) SubmitBuild(ctx context.Context, in BuildSubmit) (*Build, error
 		payload[k] = v
 	}
 	path := fmt.Sprintf("/build/create/%s", in.SourceType)
+	if in.SourceType == SourceURL {
+		var bl BuildList
+		if err := c.doJSON(ctx, http.MethodPost, path, payload, &bl); err != nil {
+			return nil, err
+		}
+		if len(bl.Items) == 0 {
+			return nil, cerr.Transport("build submit returned no builds")
+		}
+		return bl.Items, nil
+	}
 	var b Build
 	if err := c.doJSON(ctx, http.MethodPost, path, payload, &b); err != nil {
 		return nil, err
 	}
-	return &b, nil
+	// An empty 200 yields an all-zero Build; treat it as a transport error so
+	// the CLI never reports success for a build that was not created.
+	if b.ID == 0 {
+		return nil, cerr.Transport("build submit returned an empty build")
+	}
+	return []Build{b}, nil
 }
 
 // dirnameFor builds the full Copr dirname for a project directory. Copr
@@ -355,8 +374,10 @@ func (c *Client) CancelBuild(ctx context.Context, id int) error {
 
 // RebuildPackage submits a build for an existing package using its stored
 // source definition. The source_dict is resolved and passed to the build
-// endpoint.
-func (c *Client) RebuildPackage(ctx context.Context, owner, project, pkg string, chroots []string) (*Build, error) {
+// endpoint. A package cannot be url-sourced (such packages are stored with the
+// "link" enum and have no /build/create/<type> route), so there is no envelope
+// branch and a single build is always returned.
+func (c *Client) RebuildPackage(ctx context.Context, owner, project, pkg string, chroots []string) ([]Build, error) {
 	p, err := c.GetPackage(ctx, owner, project, pkg)
 	if err != nil {
 		return nil, err
@@ -374,7 +395,10 @@ func (c *Client) RebuildPackage(ctx context.Context, owner, project, pkg string,
 	if err := c.doJSON(ctx, http.MethodPost, path, payload, &b); err != nil {
 		return nil, err
 	}
-	return &b, nil
+	if b.ID == 0 {
+		return nil, cerr.Transport("build submit returned an empty build")
+	}
+	return []Build{b}, nil
 }
 
 // DeleteBuild removes a build.

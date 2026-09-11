@@ -109,6 +109,11 @@ coprctl try ./rpm --chroot fedora-rawhide-x86_64
 coprctl status you/mypkg --quiet || notify-send "Copr: something failed"
 ```
 
+## Further reading
+
+[coprctl: a friendlier command line for Fedora Copr](https://abn.is/void/coprctl-a-friendlier-command-line-for-fedora-copr/)
+walks through a full build, fix and debug cycle.
+
 ## Development
 
 ```bash

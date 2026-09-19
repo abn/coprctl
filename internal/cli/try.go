@@ -221,9 +221,48 @@ func findSpec(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	var template string
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".spec") {
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(e.Name(), ".spec") {
 			return filepath.Join(dir, e.Name()), nil
+		}
+		if template == "" && strings.HasSuffix(e.Name(), ".spec.in") {
+			template = e.Name()
+		}
+	}
+	// The layout detect understands keeps specs one level down
+	// (packaging/rpm, rpm); point at the right directory. A usable plain
+	// spec anywhere beats a template anywhere: templates are only reported
+	// once no plain spec turns up.
+	subdirs := []string{"packaging/rpm", "rpm", "packaging", "dist", "contrib", ".rpm"}
+	for _, sub := range subdirs {
+		subdir := filepath.Join(dir, sub)
+		subEntries, err := os.ReadDir(subdir)
+		if err != nil {
+			continue
+		}
+		for _, e := range subEntries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".spec") {
+				return "", fmt.Errorf("no .spec file in %s; found one in %s, pass that directory", dir, subdir)
+			}
+		}
+	}
+	if template != "" {
+		return "", fmt.Errorf("template spec (%s) in %s is not consumable as-is; render it first (for example with the .copr/Makefile srpm target and VERSION=...) and point at the rendered spec, or use a make_srpm package for Copr-side builds", template, dir)
+	}
+	for _, sub := range subdirs {
+		subdir := filepath.Join(dir, sub)
+		subEntries, err := os.ReadDir(subdir)
+		if err != nil {
+			continue
+		}
+		for _, e := range subEntries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".spec.in") {
+				return "", fmt.Errorf("template spec (%s) in %s is not consumable as-is; render it first (for example with the .copr/Makefile srpm target and VERSION=...) and point at the rendered spec, or use a make_srpm package for Copr-side builds", filepath.Join(sub, e.Name()), dir)
+			}
 		}
 	}
 	return "", fmt.Errorf("no .spec file found in %s", dir)

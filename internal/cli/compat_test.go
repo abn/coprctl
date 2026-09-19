@@ -16,6 +16,13 @@ func TestMigrateArgs(t *testing.T) {
 		{[]string{"download-build", "123"}, "build download 123"},
 		{[]string{"mock-config", "quadzero/aetherpak", "fedora-42-x86_64"}, "project chroot get quadzero/aetherpak fedora-42-x86_64"},
 		{[]string{"new-webhook-secret", "quadzero/aetherpak"}, "integration rotate-secret quadzero/aetherpak"},
+		{[]string{"build", "quadzero/aetherpak", "aetherpak-0.4.1-1.src.rpm"}, "build submit quadzero/aetherpak --source upload --upload aetherpak-0.4.1-1.src.rpm"},
+		{[]string{"build", "quadzero/aetherpak", "--nowait", "pkg-1.0.src.rpm"}, "build submit quadzero/aetherpak --source upload --upload pkg-1.0.src.rpm --nowait"},
+		{[]string{"build", "quadzero/aetherpak", "--chroot", "fedora-42-x86_64"}, "build submit quadzero/aetherpak --chroot fedora-42-x86_64"},
+		{[]string{"uploadrpm", "quadzero/aetherpak", "pkg-1.0.src.rpm"}, "build submit quadzero/aetherpak --source upload --upload pkg-1.0.src.rpm"},
+		{[]string{"build", "quadzero/aetherpak", "a.src.rpm", "b.src.rpm"}, ""},
+		{[]string{"build", "quadzero/aetherpak", "pkg-1.0.x86_64.rpm"}, ""},
+		{[]string{"build", "--nowait", "quadzero/aetherpak", "pkg-1.0.src.rpm"}, ""},
 		{[]string{"nonsense-verb"}, ""},
 	}
 	for _, tt := range tests {

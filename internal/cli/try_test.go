@@ -89,3 +89,88 @@ func TestPreflightStatusTruncatesReason(t *testing.T) {
 		t.Error("reason missing truncation suffix")
 	}
 }
+
+func TestFindSpecTemplateGuidesToMakeSrpm(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pkg.spec.in"), []byte("Name: pkg\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := findSpec(dir); err == nil {
+		t.Fatal("expected error for template-only dir")
+	} else if !strings.Contains(err.Error(), "make_srpm") {
+		t.Errorf("error = %q, want a pointer at make_srpm", err)
+	} else if !strings.Contains(err.Error(), "render it first") {
+		t.Errorf("error = %q, want the local render step first", err)
+	}
+}
+
+func TestFindSpecPointsAtSubdir(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "packaging", "rpm")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "pkg.spec"), []byte("Name: pkg\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := findSpec(dir); err == nil {
+		t.Fatal("expected error for empty top dir")
+	} else if !strings.Contains(err.Error(), sub) {
+		t.Errorf("error = %q, want it to name %q", err, sub)
+	}
+}
+
+func TestFindSpecSubdirTemplate(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "packaging", "rpm")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "pkg.spec.in"), []byte("Name: pkg\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := findSpec(dir); err == nil {
+		t.Fatal("expected error for template-only tree")
+	} else if !strings.Contains(err.Error(), "render it first") {
+		t.Errorf("error = %q, want the local render step", err)
+	}
+}
+
+func TestFindSpecPlainBeatsDistantTemplate(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"rpm", filepath.Join("packaging", "rpm")} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "packaging", "rpm", "pkg.spec.in"), []byte("Name: pkg\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "rpm", "pkg.spec"), []byte("Name: pkg\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := findSpec(dir); err == nil {
+		t.Fatal("expected error for empty top dir")
+	} else if !strings.Contains(err.Error(), filepath.Join(dir, "rpm")) {
+		t.Errorf("error = %q, want the usable plain spec named", err)
+	}
+}
+
+func TestFindSpecTopTemplateYieldsToSubdirPlain(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "packaging", "rpm")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pkg.spec.in"), []byte("Name: pkg\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "pkg.spec"), []byte("Name: pkg\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := findSpec(dir); err == nil {
+		t.Fatal("expected error for empty top dir")
+	} else if !strings.Contains(err.Error(), sub) {
+		t.Errorf("error = %q, want the subdir plain spec named, not the top template", err)
+	}
+}

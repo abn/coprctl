@@ -65,12 +65,63 @@ func migrateArgs(args []string) (string, error) {
 		return "", fmt.Errorf("no copr-cli verb given")
 	}
 	verb := args[0]
+	rest := args[1:]
+	// copr-cli build and uploadrpm take the SRPM as a positional:
+	// build OWNER/PROJECT file.src.rpm becomes an upload submit. coprctl
+	// has no positional SRPM, so the file moves into --upload explicitly.
+	// Flags after the project are preserved in order behind the new flags.
+	if verb == "build" || verb == "uploadrpm" {
+		translated, fallback, err := migrateUpload(rest)
+		if err != nil {
+			return "", err
+		}
+		if !fallback {
+			return translated, nil
+		}
+	}
 	target, ok := migrationTable[verb]
 	if !ok {
 		return "", fmt.Errorf("no migration known for copr-cli verb %q", verb)
 	}
-	rest := args[1:]
 	return strings.TrimSpace(target + " " + strings.Join(rest, " ")), nil
+}
+
+// migrateUpload rewrites a positional-SRPM build onto an upload submit. It
+// reports fallback when no RPM file is present, leaving the plain table
+// translation to handle flag-only invocations.
+func migrateUpload(rest []string) (translated string, fallback bool, err error) {
+	if len(rest) == 0 || strings.HasPrefix(rest[0], "-") {
+		for _, a := range rest {
+			switch {
+			case strings.HasSuffix(a, ".src.rpm"):
+				return "", false, fmt.Errorf("put the project reference first: coprctl build submit PROJECT --source upload --upload %s", a)
+			case strings.HasSuffix(a, ".rpm"):
+				return "", false, fmt.Errorf("put the project reference first, then publish the prebuilt binary with --source rpm-upload --rpm")
+			}
+		}
+		return "", true, nil
+	}
+	proj := rest[0]
+	var srpm string
+	var middle []string
+	for _, a := range rest[1:] {
+		switch {
+		case strings.HasSuffix(a, ".src.rpm"):
+			if srpm != "" {
+				return "", false, fmt.Errorf("cannot migrate two SRPM files; submit each separately with --source upload --upload")
+			}
+			srpm = a
+		case strings.HasSuffix(a, ".rpm"):
+			return "", false, fmt.Errorf("prebuilt %q is not a source RPM; publish it with --source rpm-upload --rpm and --chroot instead", a)
+		default:
+			middle = append(middle, a)
+		}
+	}
+	if srpm == "" {
+		return "", true, nil
+	}
+	out := append([]string{proj, "--source", "upload", "--upload", srpm}, middle...)
+	return "build submit " + strings.Join(out, " "), false, nil
 }
 
 func newCompatCmd(app *App) *cobra.Command {

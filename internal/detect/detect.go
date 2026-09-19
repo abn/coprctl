@@ -14,11 +14,14 @@ import (
 	"github.com/abn/coprctl/internal/manifest"
 )
 
-// SpecInfo is the parsed information from a single .spec file.
+// SpecInfo is the parsed information from a single .spec file. Template
+// marks a .spec.in file: version and release are placeholders rendered at
+// SRPM time, so the project needs a make_srpm source method.
 type SpecInfo struct {
 	Path            string `json:"path"`
 	Name            string `json:"name"`
 	Version         string `json:"version"`
+	Release         string `json:"release,omitempty"`
 	Summary         string `json:"summary"`
 	Homepage        string `json:"homepage"`
 	License         string `json:"license"`
@@ -28,6 +31,7 @@ type SpecInfo struct {
 	Method          string `json:"method"`
 	Source0IsURL    bool   `json:"source0_is_url"`
 	RHELConditional bool   `json:"rhel_conditional"`
+	Template        bool   `json:"template,omitempty"`
 	Uncertain       bool   `json:"uncertain,omitempty"`
 }
 
@@ -41,6 +45,8 @@ type Result struct {
 	Specs         []SpecInfo         `json:"specs"`
 	HasTito       bool               `json:"has_tito"`
 	HasCoprMake   bool               `json:"has_copr_make"`
+	HasCargo      bool               `json:"has_cargo,omitempty"`
+	RustVersion   string             `json:"rust_version,omitempty"`
 	Proposed      *manifest.Manifest `json:"proposed,omitempty"`
 	Decisions     []Decision         `json:"decisions_required"`
 	Warnings      []string           `json:"warnings"`
@@ -57,6 +63,7 @@ type Decision struct {
 var (
 	reName        = regexp.MustCompile(`(?m)^Name:\s*(.+)$`)
 	reVersion     = regexp.MustCompile(`(?m)^Version:\s*(.+)$`)
+	reRelease     = regexp.MustCompile(`(?m)^Release:\s*(.+)$`)
 	reSummary     = regexp.MustCompile(`(?m)^Summary:\s*(.+)$`)
 	reHomepage    = regexp.MustCompile(`(?m)^URL:\s*(.+)$`)
 	reLicense     = regexp.MustCompile(`(?m)^License:\s*(.+)$`)
@@ -65,10 +72,13 @@ var (
 	reNetwork     = regexp.MustCompile(`(?mi)(go mod download|cargo fetch|npm (ci|install)|pip install|wget|curl)`)
 	reRHEL        = regexp.MustCompile(`(?m)%\{?\??rhel`)
 	reAutorelease = regexp.MustCompile(`%autorelease|%autochangelog`)
+	reRustVersion = regexp.MustCompile(`(?m)^\s*rust-version\s*=\s*["']([^"']+)["']`)
 )
 
-// specDirs are the conventional locations searched for spec files.
-var specDirs = []string{".", "rpm", "dist", "packaging", "contrib", ".rpm"}
+// specDirs are the conventional locations searched for spec files. The
+// packaging/rpm entry covers projects that keep a template spec out of the
+// top level (e.g. packaging/rpm/foo.spec.in).
+var specDirs = []string{".", "rpm", "dist", "packaging", "packaging/rpm", "contrib", ".rpm"}
 
 // Detect scans the repository rooted at path and returns the inferred picture.
 // readGit controls whether git signals are read (disable in tests).
@@ -80,7 +90,7 @@ func Detect(path string, readGit bool) (*Result, error) {
 	}
 	res.RepoDir = path
 
-	// Find spec files.
+	// Find spec files, including .spec.in templates rendered at SRPM time.
 	seen := map[string]bool{}
 	for _, d := range specDirs {
 		entries, err := os.ReadDir(filepath.Join(path, d))
@@ -88,18 +98,27 @@ func Detect(path string, readGit bool) (*Result, error) {
 			continue
 		}
 		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".spec") {
-				fp := filepath.Join(d, e.Name())
-				if !seen[fp] {
-					seen[fp] = true
-					si, err := parseSpec(filepath.Join(path, fp))
-					if err == nil {
-						// Normalize to forward slashes: the manifest and the
-						// SCM subdirectory are always /-separated regardless
-						// of the host platform.
-						si.Path = filepath.ToSlash(fp)
-						res.Specs = append(res.Specs, si)
+			if e.IsDir() {
+				continue
+			}
+			template := strings.HasSuffix(e.Name(), ".spec.in")
+			if !template && !strings.HasSuffix(e.Name(), ".spec") {
+				continue
+			}
+			fp := filepath.Join(d, e.Name())
+			if !seen[fp] {
+				seen[fp] = true
+				si, err := parseSpec(filepath.Join(path, fp))
+				if err == nil {
+					// Normalize to forward slashes: the manifest and the
+					// SCM subdirectory are always /-separated regardless
+					// of the host platform.
+					si.Path = filepath.ToSlash(fp)
+					si.Template = template
+					if template || strings.Contains(si.Version, "@") || strings.Contains(si.Release, "@") {
+						si.Uncertain = true
 					}
+					res.Specs = append(res.Specs, si)
 				}
 			}
 		}
@@ -118,18 +137,86 @@ func Detect(path string, readGit bool) (*Result, error) {
 	if _, err := os.Stat(filepath.Join(path, ".copr", "Makefile")); err == nil {
 		res.HasCoprMake = true
 	}
+	res.readCargo(path)
 	for i := range res.Specs {
-		if res.HasTito {
-			res.Specs[i].Method = "tito"
-		} else if res.HasCoprMake {
+		switch {
+		case res.Specs[i].Template:
+			// A template spec is not consumable as-is, not even by tito;
+			// the srpm target in .copr/Makefile renders it first.
 			res.Specs[i].Method = "make_srpm"
-		} else {
+			if res.HasTito {
+				res.Warnings = append(res.Warnings,
+					"template spec "+res.Specs[i].Path+" overrides tito: the srpm target must render it")
+			}
+		case res.HasTito:
+			res.Specs[i].Method = "tito"
+		case res.HasCoprMake:
+			res.Specs[i].Method = "make_srpm"
+		default:
 			res.Specs[i].Method = "rpkg"
 		}
 	}
+	warnDualSpecs(res)
 
 	res.Proposed = res.buildProposal()
+	if res.needsMakeSrpm() && !res.HasCoprMake {
+		res.Decisions = append(res.Decisions, Decision{
+			Field:    "spec.makeSrpmTarget",
+			Reason:   "template spec needs a .copr/Makefile srpm target that renders the spec; run init with --owner, --chroot, and --yes to scaffold one",
+			Proposal: []string{"coprctl init PATH --owner OWNER --chroot CHROOT --yes"},
+			Flag:     "--yes",
+		})
+	}
 	return res, nil
+}
+
+// warnDualSpecs notes directories holding both a rendered spec and its
+// template, so a stale copy does not go unnoticed.
+func warnDualSpecs(res *Result) {
+	plain := map[string]string{}
+	for _, s := range res.Specs {
+		if s.Template {
+			continue
+		}
+		dir, base := filepath.Split(s.Path)
+		plain[dir+base] = s.Path
+	}
+	for _, s := range res.Specs {
+		if !s.Template {
+			continue
+		}
+		rendered := strings.TrimSuffix(s.Path, ".in")
+		if _, ok := plain[rendered]; ok {
+			res.Warnings = append(res.Warnings,
+				"both "+rendered+" and its template exist; make sure the template is the source of truth")
+		}
+	}
+}
+
+// needsMakeSrpm reports whether any detected spec requires the make_srpm
+// source method.
+func (r *Result) needsMakeSrpm() bool {
+	for _, s := range r.Specs {
+		if s.Method == "make_srpm" {
+			return true
+		}
+	}
+	return false
+}
+
+// readCargo records Rust workspace signals. A Cargo.toml at the root means
+// the build needs a Rust toolchain in the chroot, and a template spec in the
+// same repo almost always pairs with a vendoring step (cargo vendor) inside
+// the make_srpm target so the build itself can run offline.
+func (r *Result) readCargo(path string) {
+	data, err := os.ReadFile(filepath.Join(path, "Cargo.toml"))
+	if err != nil {
+		return
+	}
+	r.HasCargo = true
+	if m := reRustVersion.FindStringSubmatch(string(data)); m != nil {
+		r.RustVersion = strings.TrimSpace(m[1])
+	}
 }
 
 func (r *Result) readGit(path string) {
@@ -204,6 +291,7 @@ func parseSpec(path string) (SpecInfo, error) {
 	si := SpecInfo{
 		Name:            firstMatch(reName, text),
 		Version:         firstMatch(reVersion, text),
+		Release:         firstMatch(reRelease, text),
 		Summary:         firstMatch(reSummary, text),
 		Homepage:        firstMatch(reHomepage, text),
 		License:         firstMatch(reLicense, text),
@@ -241,20 +329,23 @@ func (r *Result) buildProposal() *manifest.Manifest {
 		m.Spec.Description = s.Summary
 		m.Spec.Homepage = s.Homepage
 		// Copr's SCM source resolves `spec` as a basename inside `subdirectory`,
-		// so split the detected path accordingly.
+		// so split the detected path accordingly. A template renders to the
+		// same name minus .in, which is what the srpm target must produce.
 		dir, base := filepath.Split(s.Path)
+		specName := strings.TrimSuffix(base, ".in")
 		pkg := manifest.Package{
 			Name: s.Name,
 			Source: manifest.Source{
 				Type:       "scm",
 				CloneURL:   r.CloneURL,
 				Committish: r.DefaultBranch,
-				Spec:       base,
+				Spec:       specName,
 				Method:     s.Method,
 			},
 		}
-		if ar := r.Forge != "" && r.Forge != "other"; ar {
-			pkg.AutoRebuild = &ar
+		autoRebuild := r.Forge != "" && r.Forge != "other"
+		if autoRebuild {
+			pkg.AutoRebuild = &autoRebuild
 		}
 		if dir != "" && dir != "./" {
 			pkg.Source.Subdirectory = strings.TrimSuffix(dir, "/")

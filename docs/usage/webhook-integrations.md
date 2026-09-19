@@ -158,6 +158,51 @@ never in `export` output, and never printed without `--reveal`.
 Rotation breaks every existing hook by design. Re-enable the hook after
 rotating so the forge side points at the new secret.
 
+## Template specs and Rust workspaces
+
+Some projects keep a template spec such as `packaging/rpm/foo.spec.in`
+instead of a plain `.spec`, with placeholders for the version and release.
+Copr cannot consume that file directly; the project needs the `make_srpm`
+source method, where the `srpm` target in `.copr/Makefile` renders the spec
+before `rpmbuild` sees it.
+
+`coprctl detect` recognizes this layout: the template appears in `specs`
+with `"template": true` and method `make_srpm`, the proposal points `spec`
+at the rendered basename, and a `spec.makeSrpmTarget` decision (resolved by
+`init --yes`) records the missing Makefile. `coprctl init` writes both
+`copr.yaml` and the scaffolded `.copr/Makefile` into the repository and
+reports `not-needed`, `exists:<path>`, or `wrote:<path>` in its `makefile`
+output key.
+
+The scaffolded `srpm` target does three things:
+
+1. Derives the version from the pushed tag (`v1.2.3` becomes `1.2.3`, with
+   a `0.prerelease` release for tagged pre-releases).
+2. Renders every `@TOKEN@` placeholder found in the template (`@RPM_VERSION@`
+   style tokens map to computed values; anything else becomes a make
+   variable to pass on the command line) and packs the sources with
+   `git archive`.
+3. Runs `cargo vendor` and writes the `.cargo/config.toml` source override,
+   so the spec's `cargo build --locked --offline` step needs no network.
+   That step needs a committed `Cargo.lock` and the network Copr provides
+   at srpm time.
+
+Copr invokes the target as `make -f <repo>/.copr/Makefile srpm
+outdir=... spec=...` from the cloned checkout, as root in a mock chroot
+with network access, and picks the resulting SRPM up from `outdir`
+afterwards (see the Copr user documentation, "Build Source Types"). The
+scaffold renders `SPEC_TEMPLATE` and ignores the passed `spec`, which the
+protocol permits. The target assumes committed state on a tagged checkout:
+uncommitted work is excluded with a warning, and a missing tag needs an
+explicit `VERSION=x.y.z`. Keep the chroot `BuildRequires`
+(`cargo >= <rust-version>`) in step with the workspace `rust-version`.
+
+Tag matching needs one extra look for these projects: release tags are
+usually bare (`v1.2.3`) while the RPM package has its own name (`foo-cli`).
+`integration github enable` already selects the package-scoped webhook URL
+in that case, so the bare tag resolves to the right package. Branch pushes
+stay quiet under the tag-only default.
+
 ## Related
 
 - `coprctl doctor` reports connectivity and credential presence.

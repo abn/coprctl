@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -10,6 +11,18 @@ import (
 	"github.com/abn/coprctl/internal/detect"
 	"github.com/abn/coprctl/internal/manifest"
 )
+
+// repoPath resolves the repository under inspection: the positional PATH
+// wins, then --path, then the working directory.
+func repoPath(flag string, args []string) string {
+	if len(args) == 1 {
+		return args[0]
+	}
+	if flag != "" {
+		return flag
+	}
+	return "."
+}
 
 func newDetectCmd(app *App) *cobra.Command {
 	var out outFlags
@@ -19,10 +32,7 @@ func newDetectCmd(app *App) *cobra.Command {
 		Short: "Read-only: infer a project setup from a source repository",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p := "."
-			if len(args) == 1 {
-				p = args[0]
-			}
+			p := repoPath(path, args)
 			res, err := detect.Detect(p, true)
 			if err != nil {
 				return err
@@ -45,10 +55,7 @@ func newInitCmd(app *App) *cobra.Command {
 		Short: "Scaffold a manifest and create a working Copr project",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p := "."
-			if len(args) == 1 {
-				p = args[0]
-			}
+			p := repoPath(path, args)
 			res, err := detect.Detect(p, true)
 			if err != nil {
 				return err
@@ -75,8 +82,9 @@ func newInitCmd(app *App) *cobra.Command {
 			}
 			m.Spec.Chroots.Enabled = *chroots
 
-			// Write the manifest.
-			manifestPath := "copr.yaml"
+			// Both artefacts live in the repo: the manifest next to the
+			// sources it describes, and the Makefile where Copr expects it.
+			manifestPath := filepath.Join(p, "copr.yaml")
 			data, err := m.MarshalYAML()
 			if err != nil {
 				return err
@@ -87,6 +95,24 @@ func newInitCmd(app *App) *cobra.Command {
 			if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
 				return err
 			}
+			// Scaffold the make_srpm target when a template spec needs one.
+			makefile := "not-needed"
+			if mp, ok := makefileParams(res); ok {
+				repoDir := p
+				if abs, err := filepath.Abs(p); err == nil {
+					repoDir = abs
+				}
+				target := filepath.Join(repoDir, ".copr", "Makefile")
+				if _, err := os.Stat(target); err == nil {
+					makefile = "exists:" + target
+				} else if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+					return err
+				} else if err := os.WriteFile(target, []byte(renderCoprMakefile(mp)), 0o644); err != nil {
+					return err
+				} else {
+					makefile = "wrote:" + target
+				}
+			}
 			// Reuse the apply logic: create the project and packages.
 			if err := applyManifest(cmd.Context(), app, m, false); err != nil {
 				return err
@@ -94,6 +120,7 @@ func newInitCmd(app *App) *cobra.Command {
 			return renderResult(cmd, &out, map[string]any{
 				"init":               true,
 				"manifest":           manifestPath,
+				"makefile":           makefile,
 				"project":            owner + "/" + m.Metadata.Name,
 				"packages":           len(m.Spec.Packages),
 				"chroots":            len(*chroots),

@@ -4,6 +4,21 @@ This log tracks the evolution of the knowledge base: page additions,
 deprecations, and structural refactors. It does not track software releases
 or implementation milestones; repository changes belong in the commit history.
 
+## 2026-09-19
+
+* **Update**: The webhook integrations guide covers template specs and Rust
+  workspaces (the `make_srpm` layout, version rendering, vendoring for
+  offline builds, and the upstream protocol), including pre-release tag
+  semantics. The submitting-builds guide covers the copr-cli SRPM-upload
+  migration and a GitHub Actions snippet for CI submits.
+* **Creation**: Added two usage guides: "Migrating a project to webhook
+  builds" (`docs/usage/migrating-to-webhooks.md`), covering the
+  hand-submitted to tag-driven move with source conversion and EOL chroot
+  cleanup, and "Packaging a Rust workspace for Copr"
+  (`docs/usage/rust-workspace.md`), an end-to-end template-spec flow from an
+  empty workspace to the first tagged build. Both are linked from the usage
+  index.
+
 ## 2026-09-01
 
 * **Update**: Documented the breaking machine-output shapes in the CLI

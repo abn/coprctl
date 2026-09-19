@@ -83,6 +83,61 @@ The route is gated by the instance's `DIRECT_RPM_UPLOAD` setting. On instances
 where it is off (including Fedora infrastructure) the command fails with a
 `feature_disabled` error rather than silently succeeding.
 
+## Migrating a copr-cli SRPM upload
+
+`copr-cli build OWNER/PROJECT file.src.rpm` passes the SRPM as a positional
+argument. coprctl has no positional SRPM, so the file moves into `--upload`:
+
+```bash
+coprctl build submit OWNER/PROJECT --source upload --upload ./foo-1.0-1.src.rpm --watch
+```
+
+`coprctl compat copr-cli -- build OWNER/PROJECT file.src.rpm` prints the
+equivalent submit (add `--watch` if wanted). The translation expects the
+project reference first; a second `.src.rpm` is rejected (submit each
+separately), and a prebuilt `.rpm` is not an upload at all: publish it with
+`--source rpm-upload --rpm` and `--chroot` instead.
+
+Prefer a tag-only webhook over uploads for release automation: the webhook
+needs no standing Copr API token in CI (pushing and tagging still use the
+forge's own credentials) and Copr builds from the tag itself (see the
+webhook integrations guide). Keep the upload form for one-off submits and
+for the transition period.
+
+## GitHub Actions
+
+For the submits that still run in CI, download a pinned release asset
+(archives are named `coprctl_<version>_<Os>_<Arch>.tar.gz`), pipe the
+credentials into `auth login`, and submit with machine output:
+
+```yaml
+- name: Submit SRPM to Copr
+  env:
+    COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
+    COPR_REPO: OWNER/PROJECT
+    COPRCTL_VERSION: 1.0.1
+    SRPM_PATH: ./foo-1.0-1.src.rpm
+  run: |
+    curl -sSL -o coprctl.tar.gz \
+      "https://github.com/abn/coprctl/releases/download/v${COPRCTL_VERSION}/coprctl_${COPRCTL_VERSION}_Linux_x86_64.tar.gz"
+    tar xzf coprctl.tar.gz coprctl && chmod +x coprctl
+    printf '%s' "$COPR_CONFIG" | ./coprctl auth login --no-open
+    ./coprctl build submit "$COPR_REPO" \
+      --source upload --upload "$SRPM_PATH" \
+      --output json --watch
+```
+
+`COPR_CONFIG` holds the `[copr-cli]` block (login, username, token,
+`copr_url`), the same block the Copr website offers and `coprctl auth`
+accepts. `COPR_REPO` is the `OWNER/PROJECT` reference, `COPRCTL_VERSION`
+pins the tool release, and `SRPM_PATH` points at the built source RPM.
+Piping the config through `auth login` validates the parse and writes
+the profile without touching config file paths by hand; `--profile`
+selects a non-default instance. Confirm the asset name on the release
+page and bump `COPRCTL_VERSION` instead of tracking latest. After the
+webhook migration this job goes away; what stays is the existing test
+suite plus `coprctl sync --check` against the manifest.
+
 ## Batch delete
 
 `coprctl build delete BUILD_ID... --yes` deletes all given builds in one

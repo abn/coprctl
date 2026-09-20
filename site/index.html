@@ -12,7 +12,7 @@
   --line:#2c2418;
   --ink:#e8dfd0;
   --ink-dim:#a3998a;
-  --ink-faint:#6f6559;
+  --ink-faint:#97897a;
   --copper:#c97a3d;
   --copper-hi:#e79a5e;
   --copper-dark:#8f5427;
@@ -21,6 +21,8 @@
   --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+.skip{position:absolute;left:12px;top:-48px;z-index:100;font-family:var(--mono);font-size:.82rem;color:var(--ink);background:var(--bg-2);border:1px solid var(--copper);border-radius:6px;padding:10px 14px;transition:top .15s}
+.skip:focus{top:12px}
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased}
 a{color:var(--copper);text-decoration:none;border-bottom:1px solid transparent;transition:color .15s,border-color .15s}
@@ -37,18 +39,34 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;
 }
 
 /* nav */
-header{position:sticky;top:0;z-index:10;background:rgba(19,16,9,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-nav.wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:60px}
-.brand{font-family:var(--mono);font-weight:700;letter-spacing:.5px;color:var(--ink);white-space:nowrap}
+header{position:sticky;top:0;z-index:10;background:rgba(19,16,9,.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav.wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:64px}
+.brand{font-family:var(--mono);font-size:1rem;font-weight:700;letter-spacing:.5px;color:var(--ink);white-space:nowrap}
 .brand .dollar{color:var(--copper)}
 .brand b{color:var(--copper-hi)}
-nav ul{display:flex;gap:26px;list-style:none;flex-wrap:wrap;justify-content:flex-end}
+nav ul{display:flex;gap:6px;list-style:none;flex-wrap:wrap;justify-content:flex-end;align-items:center}
 nav a{font-size:.85rem;color:var(--ink-dim);letter-spacing:.2px}
 nav a:hover{color:var(--ink)}
+.nav-search{display:flex;align-items:center}
+.nav-right{display:flex;align-items:center;gap:16px}
+.search-btn{font-size:.78rem;color:var(--ink-dim);background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:8px;min-height:36px;min-width:36px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.search-btn:hover{color:var(--ink);border-color:var(--copper-dark);background:rgba(201,122,61,.1)}
+header .nav-right > ul > li > a,.nav-drop summary{display:inline-flex;align-items:center;min-height:36px;padding:8px 12px;border-radius:8px}
+header .nav-right > ul > li > a:hover,.nav-drop summary:hover{background:rgba(201,122,61,.1);color:var(--ink);border-bottom-color:transparent}
+.nav-drop details{position:relative}
+.nav-drop summary{font-size:.85rem;color:var(--ink-dim);letter-spacing:.2px;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+.nav-drop summary::-webkit-details-marker{display:none}
+.nav-drop summary::marker{content:""}
+.nav-drop summary:hover{color:var(--ink)}
+.nav-drop details[open] ul{position:absolute;top:calc(100% + 12px);right:0;display:block;min-width:190px;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;padding:8px;z-index:20}
+.nav-drop details[open] ul a{display:block;padding:12px 16px;font-size:.85rem;white-space:nowrap}
 @media(max-width:560px){
   nav.wrap{justify-content:space-between;height:auto;padding:10px 16px;flex-wrap:wrap}
-  nav ul{gap:14px;justify-content:flex-end}
+  nav ul{gap:8px;justify-content:flex-end}
   nav a{font-size:.75rem}
+  .nav-drop summary{font-size:.75rem}
+  header .nav-right > ul > li > a,.nav-drop summary{padding:8px}
+  .nav-right{gap:8px}
   .term-body{padding:16px 14px 20px}
   .code{padding:16px 14px}
 }
@@ -74,7 +92,7 @@ h1 .thin{font-weight:400;color:var(--ink-dim)}
 
 /* install tabs */
 .install-tabs{display:flex;gap:4px;padding:10px 12px 0;border-bottom:1px solid var(--line);background:var(--panel-2)}
-.install-tabs button{font-family:var(--mono);font-size:.8rem;color:var(--ink-dim);background:none;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;padding:8px 14px;cursor:pointer}
+.install-tabs button{font-family:var(--mono);font-size:.8rem;color:var(--ink-dim);background:none;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;padding:8px 14px;min-height:44px;cursor:pointer}
 .install-tabs button:hover{color:var(--ink)}
 .install-tabs button.active{color:var(--copper-hi);background:#0d0a06;border-color:var(--line)}
 .install-pane{display:none;padding:22px 24px 26px;font-size:.9rem;line-height:1.9}
@@ -88,7 +106,7 @@ h1 .thin{font-weight:400;color:var(--ink-dim)}
 .dots i:nth-child(2){background:#c08a3c}
 .dots i:nth-child(3){background:#5f8a4a}
 .term-title{margin-left:8px;font-family:var(--mono);font-size:.75rem;color:var(--ink-faint)}
-.term-body{padding:22px 24px 26px;font-size:.9rem;line-height:1.85;height:261px;overflow:hidden}
+.term-body{padding:22px 24px 26px;font-size:.9rem;line-height:1.85;min-height:261px;overflow:hidden}
 .term-body .ln{display:block;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
 .prompt{color:var(--copper)}
 .cmd{color:var(--ink)}
@@ -167,24 +185,57 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 footer .mono{color:var(--ink-dim)}
 footer a{color:var(--ink-dim)}
 footer a:hover{color:var(--copper)}
+.search-backdrop{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:none;align-items:flex-start;justify-content:center;padding:12vh 16px 16px}
+.search-backdrop.open{display:flex}
+.search-modal{width:min(620px,100%);background:var(--bg-2);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.search-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.search-input{flex:1;min-width:0;font-family:var(--sans);font-size:1rem;color:var(--ink);background:none;border:none;outline:none}
+.search-close{background:none;border:1px solid var(--line);border-radius:6px;padding:6px 8px;cursor:pointer;color:var(--ink-dim)}
+.search-results{max-height:50vh;overflow-y:auto}
+.search-empty{padding:18px;color:var(--ink-faint);font-size:.9rem}
+.search-hit{display:block;padding:10px 16px;border-bottom:1px solid var(--line);border-left:2px solid transparent}
+.search-hit:last-child{border-bottom:none}
+.search-hit.on,.search-hit:hover{background:rgba(201,122,61,.08);border-left-color:var(--copper)}
+.search-hit-title{color:var(--ink);font-size:.92rem;font-weight:600}
+.search-hit-crumb{font-family:var(--mono);font-size:.7rem;color:var(--ink-faint);margin:2px 0}
+.search-hit-snip{color:var(--ink-dim);font-size:.84rem}
+.search-hit-snip mark{color:var(--copper-hi);background:none}
+.search-foot{display:flex;justify-content:space-between;gap:12px;padding:10px 16px;border-top:1px solid var(--line);font-size:.75rem;color:var(--ink-faint)}
+.search-foot kbd,.search-close kbd{font-family:var(--mono);font-size:.68rem;color:var(--ink-faint);border:1px solid var(--line);border-radius:4px;padding:1px 6px;background:var(--bg)}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{transition:none!important;animation:none!important}
+  .cursor{display:none}
+}
 </style>
 </head>
 <body>
 
+<a class="skip" href="#content">Skip to content</a>
+
 <header>
   <nav class="wrap">
     <div class="brand"><span class="dollar">$</span>copr<b>ctl</b></div>
+    <div class="nav-right">
     <ul>
-      <li><a href="#grammar">Grammar</a></li>
-      <li><a href="#capabilities">Capabilities</a></li>
-      <li><a href="#why">Why</a></li>
-      <li><a href="#install">Install</a></li>
+      <li class="nav-drop"><details>
+        <summary>Home</summary>
+        <ul>
+          <li><a href="#grammar">Grammar</a></li>
+          <li><a href="#capabilities">Capabilities</a></li>
+          <li><a href="#why">Why</a></li>
+          <li><a href="#install">Install</a></li>
+        </ul>
+      </details></li>
       <li><a href="/wiki/">Docs</a></li>
+      <li><a href="https://github.com/abn/coprctl" target="_blank" rel="noopener">GitHub ↗</a></li>
     </ul>
+    <div class="nav-search"><button class="search-btn" id="searchBtn" aria-label="Search documentation" title="Search ( / )"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="5"/><line x1="11.2" y1="11.2" x2="14.5" y2="14.5"/></svg></button></div>
+    </div>
   </nav>
 </header>
 
-<div class="wrap">
+<div class="wrap" id="content">
 
   <section id="install" style="border:none;padding:96px 0 40px">
     <div class="kicker">Fedora Copr · one binary · no runtime</div>
@@ -192,23 +243,23 @@ footer a:hover{color:var(--copper)}
     <p class="lede"><strong>coprctl</strong> is a command-line and agent interface for the <strong>Fedora Copr</strong> build service. Copr does the heavy lifting: it turns your sources into signed RPM repositories. coprctl makes that easier to drive, in a terminal or from an agent.</p>
 
     <div class="term">
-      <div class="install-tabs">
-        <button class="active" data-tab="copr">Install via Copr</button>
-        <button data-tab="go">Install via Go</button>
-        <button data-tab="configure">Configure</button>
+      <div class="install-tabs" role="tablist" aria-label="Install methods">
+        <button class="active" data-tab="copr" role="tab" id="tab-copr" aria-controls="pane-copr" aria-selected="true">Install via Copr</button>
+        <button data-tab="go" role="tab" id="tab-go" aria-controls="pane-go" aria-selected="false" tabindex="-1">Install via Go</button>
+        <button data-tab="configure" role="tab" id="tab-configure" aria-controls="pane-configure" aria-selected="false" tabindex="-1">Configure</button>
       </div>
-      <div class="install-pane active" data-pane="copr">
+      <div class="install-pane active" data-pane="copr" role="tabpanel" id="pane-copr" aria-labelledby="tab-copr" tabindex="0">
         <span class="ln"><span class="cmt"># the project's own Copr repo</span></span>
         <span class="ln"><span class="pl">$</span> dnf copr enable abn/coprctl</span>
         <span class="ln"><span class="pl">$</span> dnf install coprctl</span>
         <div class="install-note">The simplest path on Fedora. The Copr repo installs the binary and keeps it updated with your distro.</div>
       </div>
-      <div class="install-pane" data-pane="go">
+      <div class="install-pane" data-pane="go" role="tabpanel" id="pane-go" aria-labelledby="tab-go" tabindex="0" hidden>
         <span class="ln"><span class="cmt"># a single static binary, from source</span></span>
         <span class="ln"><span class="pl">$</span> go install github.com/abn/coprctl/cmd/coprctl@latest</span>
         <div class="install-note">Works anywhere with the Go toolchain. One binary, no runtime.</div>
       </div>
-      <div class="install-pane" data-pane="configure">
+      <div class="install-pane" data-pane="configure" role="tabpanel" id="pane-configure" aria-labelledby="tab-configure" tabindex="0" hidden>
         <span class="ln"><span class="cmt"># existing Copr credentials are picked up automatically</span></span>
         <span class="ln"><span class="pl">$</span> coprctl auth status</span>
         <span class="ln"><span class="cmt"># fresh, or to add another instance</span></span>
@@ -222,7 +273,7 @@ footer a:hover{color:var(--copper)}
     <div class="term">
       <div class="term-head">
         <div class="dots"><i></i><i></i><i></i></div>
-        <div class="term-title">coprctl — a first build</div>
+<div class="term-title">coprctl: a first build</div>
       </div>
       <div class="term-body" id="term" aria-hidden="true"></div>
     </div>
@@ -351,14 +402,44 @@ footer a:hover{color:var(--copper)}
   </div>
 </footer>
 
+<div class="search-backdrop" id="searchBackdrop" aria-hidden="true">
+  <div class="search-modal" role="dialog" aria-modal="true" aria-label="Search documentation">
+    <div class="search-head">
+      <input type="search" id="searchInput" class="search-input" placeholder="Search docs..." autocomplete="off" aria-label="Search docs">
+      <button type="button" id="searchCloseBtn" class="search-close" aria-label="Close search"><kbd>ESC</kbd></button>
+    </div>
+    <div class="search-results" id="searchResults"></div>
+    <div class="search-foot"><span><kbd>/</kbd> or <kbd>Ctrl K</kbd> to search</span><span><kbd>Enter</kbd> to open</span></div>
+  </div>
+</div>
+<script src="/wiki/search.js" defer></script>
+
 <script>
 (function(){
+  // Collapse the sections dropdown after following an anchor.
+  document.querySelectorAll(".nav-drop a").forEach(function(a){
+    a.addEventListener("click", function(){
+      var d = a.closest("details");
+      if (d) d.removeAttribute("open");
+    });
+  });
   // Install tab switching.
   var tabBtns = document.querySelectorAll(".install-tabs button");
   var panes = document.querySelectorAll(".install-pane");
-  function showTab(name){
-    tabBtns.forEach(function(b){ b.classList.toggle("active", b.getAttribute("data-tab") === name); });
-    panes.forEach(function(p){ p.classList.toggle("active", p.getAttribute("data-pane") === name); });
+  var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function showTab(name, focus){
+    tabBtns.forEach(function(b){
+      var on = b.getAttribute("data-tab") === name;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;
+      if (on && focus) b.focus();
+    });
+    panes.forEach(function(p){
+      var on = p.getAttribute("data-pane") === name;
+      p.classList.toggle("active", on);
+      if (on) p.removeAttribute("hidden"); else p.setAttribute("hidden", "");
+    });
   }
   // Pin every pane to the height of the tallest so switching never resizes.
   var tallest = 0;
@@ -366,8 +447,16 @@ footer a:hover{color:var(--copper)}
   if (tallest > 0) {
     panes.forEach(function(p){ p.style.minHeight = tallest + "px"; });
   }
-  tabBtns.forEach(function(b){
+  tabBtns.forEach(function(b, i){
     b.addEventListener("click", function(){ showTab(b.getAttribute("data-tab")); });
+    b.addEventListener("keydown", function(e){
+      var j = null;
+      if (e.key === "ArrowRight") j = (i + 1) % tabBtns.length;
+      else if (e.key === "ArrowLeft") j = (i - 1 + tabBtns.length) % tabBtns.length;
+      else if (e.key === "Home") j = 0;
+      else if (e.key === "End") j = tabBtns.length - 1;
+      if (j !== null) { e.preventDefault(); showTab(tabBtns[j].getAttribute("data-tab"), true); }
+    });
   });
 
   var el=document.getElementById("term");
@@ -400,6 +489,11 @@ footer a:hover{color:var(--copper)}
     el.appendChild(cmdLine(li));
   }
   startTyping();
+  if (reducedMotion) {
+    // Render the whole demo at once: no typing, no motion.
+    while (li < lines.length) { commit(); el.appendChild(outLine(li)); li++; }
+    return;
+  }
   var timer=setInterval(function(){
     if(state==="typing"){
       ci++;

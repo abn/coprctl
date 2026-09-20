@@ -96,8 +96,9 @@ coprctl integration github enable OWNER/PROJECT --repo OWNER/REPO
 Tag-only is the default. Every pushed tag fires the webhook; Copr offers
 no tag-pattern filter, so a tagged pre-release such as `v1.2.3-rc.1`
 builds as version `1.2.3` with a `0.rc.1` release, following standard RPM
-practice. If the project does not want pre-release builds, do not push
-pre-release tags to the repository.
+practice. When the project wants stable tags only, `coprctl integration
+trigger` drives the receiver from the release pipeline instead, where the
+pre-release filter is expressible.
 
 ## Release
 

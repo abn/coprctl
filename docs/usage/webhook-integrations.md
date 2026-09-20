@@ -145,6 +145,61 @@ coprctl integration url OWNER/PROJECT --forge gitlab --package PKG
 `--forge bitbucket` is accepted too; the receiver route is identical in shape,
 though there is no enable command for Bitbucket yet.
 
+The receiver choice matters: the `custom` route is for packages whose source
+method is `custom` (it hands the raw hook payload to the build script). A
+package with an SCM source is rebuilt through the forge route, which parses a
+forge-shaped payload; the trigger command below sends that shape.
+
+## Triggering a rebuild without a forge hook
+
+Not every project wants the forge to decide. A release pipeline may need a
+stable-tag-only policy, or a manual rebuild for one package. `coprctl
+integration trigger` drives the same receiver a forge hook would, so the
+pipeline keeps the hook-free setup and still does not need a Copr API token:
+
+```bash
+coprctl integration trigger OWNER/PROJECT/PKG --tag v1.2.3
+```
+
+The command resolves the package's SCM source first: an upload-sourced
+package, or an SCM source without a clone URL, fails before anything is sent,
+with the conversion step as the hint. The receiver URL is package-scoped, so
+Copr matches the bare `v<semver>` tag to the package by name. The secret is
+the one `rotate-secret` cached, or the `COPRCTL_WEBHOOK_SECRET` environment
+variable when the pipeline passes it in; the override is read at trigger time
+and never persisted.
+
+`--dry-run` prints the method, the masked URL, and the payload without
+sending anything, which is enough to review the request in code review.
+Success is the receiver accepting the request, and nothing more: the GitHub
+route answers a bare `OK` with no build id. The newest build surfaces through
+`coprctl build list OWNER/PROJECT -n1` or the monitor; a pipeline that wants
+the outcome polls there.
+
+In GitHub Actions the trigger fires from the release workflow with the
+pre-release guard the forge cannot express:
+
+```yaml
+on:
+  release:
+    types: [published]
+
+jobs:
+  copr:
+    if: ${{ !github.event.release.prerelease }}
+    steps:
+      - name: Trigger Copr rebuild
+        env:
+          COPRCTL_WEBHOOK_SECRET: ${{ secrets.COPRCTL_WEBHOOK_SECRET }}
+        run: |
+          coprctl integration trigger OWNER/PROJECT/PKG --tag "${{ github.ref_name }}"
+```
+
+The secret in the receiver URL is the bearer credential for rebuilds of that
+one package. It is never printed by `trigger`, rotated with `integration
+rotate-secret` like any other webhook setup, and the pipeline secret is then
+the only value to update.
+
 ## Managing the secret
 
 The Copr webhook secret is a credential: it is never written into a manifest,

@@ -8,6 +8,7 @@
 
 # Site: generated wiki (rendered from docs/ by make site in site/)
 /site/wiki/
+/site/sitemap.xml
 /site/bin/
 
 # Build tooling output

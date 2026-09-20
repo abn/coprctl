@@ -1,6 +1,7 @@
 package sitewiki
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,6 +48,9 @@ func TestRenderAll(t *testing.T) {
 		"wiki/usage/quickstart.html",
 		"wiki/usage/instances.html",
 		"wiki/wiki.css",
+		"wiki/search.js",
+		"wiki/search-index.json",
+		"sitemap.xml",
 	} {
 		if _, err := os.Stat(filepath.Join(out, want)); err != nil {
 			t.Errorf("missing %s: %v", want, err)
@@ -71,6 +75,9 @@ func TestRenderPageContent(t *testing.T) {
 	q := read(t, filepath.Join(out, "wiki/usage/quickstart.html"))
 	for _, want := range []string{
 		"<h1>Quick start</h1>",
+		`<meta name="description" content="First steps.">`,
+		`<aside class="sidebar"`,
+		`<nav class="breadcrumb crumb-page"`,
 		`class="chip chip-type">Guide`,
 		`class="chip chip-status">stable`,
 		`href="#install"`,
@@ -85,6 +92,89 @@ func TestRenderPageContent(t *testing.T) {
 	if !strings.Contains(idx, `href="/wiki/usage/quickstart.html"`) {
 		t.Errorf("index cross-link to quickstart not rewritten")
 	}
+
+	// Relay-style folding nav: only the active section unfolds.
+	if got := strings.Count(q, `<details class="side-fold" open>`); got != 1 {
+		t.Errorf("exactly one sidebar section should unfold, got %d", got)
+	}
+	if !strings.Contains(q, `<li class="active"><a href="/wiki/usage/quickstart.html">`) {
+		t.Errorf("quickstart sidebar should mark the current page active")
+	}
+	// The drawer holds the nav and the page holds the breadcrumb; a swapped
+	// shell argument once put each in the other.
+	aside := q[strings.Index(q, "<aside"):]
+	aside = aside[:strings.Index(aside, "</aside>")]
+	if !strings.Contains(aside, `<nav class="side"`) || strings.Contains(aside, "crumb-sep") {
+		t.Errorf("drawer aside should hold the section nav, not the breadcrumb")
+	}
+}
+
+func TestSearchIndex(t *testing.T) {
+	root := writeFixture(t)
+	r, err := New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "site")
+	if err := r.RenderAll(root, out); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(out, "wiki/search-index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []SearchEntry
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		t.Fatalf("search-index.json is not valid JSON: %v", err)
+	}
+	var sectionHit, leadHit bool
+	for _, e := range entries {
+		if e.URL == "/wiki/usage/quickstart.html#install" && e.Doc == "Quick start" {
+			sectionHit = true
+			if !strings.Contains(e.Content, "coprctl") {
+				t.Errorf("install chunk missing expected text: %q", e.Content)
+			}
+		}
+		if e.URL == "/wiki/usage/instances.html" {
+			leadHit = true
+		}
+		if e.URL == "" || e.Title == "" || e.Content == "" {
+			t.Errorf("incomplete index row: %+v", e)
+		}
+	}
+	if !sectionHit {
+		t.Errorf("no section-anchored row for quickstart#install")
+	}
+	if !leadHit {
+		t.Errorf("no lead-text row for instances")
+	}
+
+	js, err := os.ReadFile(filepath.Join(out, "wiki/search.js"))
+	if err != nil || len(js) == 0 {
+		t.Errorf("search.js missing or empty")
+	}
+}
+
+func TestSitemap(t *testing.T) {
+	root := writeFixture(t)
+	r, err := New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "site")
+	if err := r.RenderAll(root, out); err != nil {
+		t.Fatal(err)
+	}
+	sm := read(t, filepath.Join(out, "sitemap.xml"))
+	for _, want := range []string{
+		"https://coprctl.abn.is/wiki/usage/quickstart.html",
+		"https://coprctl.abn.is/wiki/",
+	} {
+		if !strings.Contains(sm, want) {
+			t.Errorf("sitemap.xml missing %q", want)
+		}
+	}
 }
 
 func TestLinkPath(t *testing.T) {
@@ -95,6 +185,7 @@ func TestLinkPath(t *testing.T) {
 		{"index", "usage/index.md", "/wiki/usage/"},
 		{"usage/quickstart", "#install", "#install"},
 		{"usage/quickstart", "https://example.com", "https://example.com"},
+		{"index", "../CHANGELOG.md", "/wiki/changelog.html"},
 	}
 	for _, c := range cases {
 		if got := linkPath(c.from, c.href); got != c.want {

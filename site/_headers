@@ -10,3 +10,9 @@
 
 /wiki/*.html
   Cache-Control: public, max-age=60, must-revalidate
+
+/wiki/search.js
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/wiki/search-index.json
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400

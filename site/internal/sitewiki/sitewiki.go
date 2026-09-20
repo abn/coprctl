@@ -5,6 +5,7 @@ package sitewiki
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -35,8 +36,12 @@ type Page struct {
 	Title   string
 	Type    string
 	Status  string
-	Body    string // rendered HTML body (without H1, which is the title)
-	TOC     []TOCEntry
+	// Description feeds the page meta tag; empty falls back to the default.
+	Description string
+	// Sections are the indexable chunks (lead text plus H2/H3 sections).
+	Sections []PageSection
+	Body     string // rendered HTML body (without H1, which is the title)
+	TOC      []TOCEntry
 }
 
 // TOCEntry is a heading in the page body.
@@ -87,8 +92,12 @@ func (r *Renderer) RenderAll(docsRoot, out string) error {
 			}
 		}
 	}
-	// Write the shared stylesheet.
+	// Write the shared stylesheet and search script.
 	css, err := CSS()
+	if err != nil {
+		return err
+	}
+	js, err := SearchJS()
 	if err != nil {
 		return err
 	}
@@ -96,7 +105,39 @@ func (r *Renderer) RenderAll(docsRoot, out string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "wiki.css"), css, 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "wiki.css"), css, 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "search.js"), js, 0o644); err != nil {
+		return err
+	}
+	entries, err := json.Marshal(r.searchEntries())
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "search-index.json"), entries, 0o644); err != nil {
+		return err
+	}
+	return r.writeSitemap(out)
+}
+
+// sitemapBase is the canonical origin used for absolute sitemap URLs.
+const sitemapBase = "https://coprctl.abn.is"
+
+// writeSitemap emits sitemap.xml beside wiki/ so crawlers find every page.
+func (r *Renderer) writeSitemap(out string) error {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	b.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
+	b.WriteString("  <url><loc>" + sitemapBase + "/</loc></url>\n")
+	b.WriteString("  <url><loc>" + sitemapBase + "/wiki/</loc></url>\n")
+	for _, s := range r.sections {
+		for _, p := range s.Pages {
+			b.WriteString("  <url><loc>" + sitemapBase + "/wiki/" + pageURL(p) + "</loc></url>\n")
+		}
+	}
+	b.WriteString(`</urlset>` + "\n")
+	return os.WriteFile(filepath.Join(out, "sitemap.xml"), []byte(b.String()), 0o644)
 }
 
 // load walks the docs tree, building sections and pages.
@@ -222,13 +263,24 @@ func (r *Renderer) parsePage(section, slug, file string) (Page, error) {
 	p.Type = fm.Type
 	p.Status = fm.Status
 	p.Title = fm.Title
+	p.Description = fm.Description
 
 	doc := r.md.Parser().Parse(text.NewReader(body))
 	src := body
 	usedIDs := map[string]int{}
 	var h1 string
+	var sc sectionCollector
 	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
+		if _, ok := n.(*ast.Heading); ok {
+			if entering {
+				sc.inHead++
+			} else {
+				sc.inHead--
+			}
+			if !entering {
+				return ast.WalkContinue, nil
+			}
+		} else if !entering {
 			return ast.WalkContinue, nil
 		}
 		switch nn := n.(type) {
@@ -255,14 +307,24 @@ func (r *Renderer) parsePage(section, slug, file string) (Page, error) {
 			}
 			h.SetAttributeString("id", []byte(id))
 			p.TOC = append(p.TOC, TOCEntry{ID: id, Level: h.Level, Text: text})
+			sc.enterHeading(id, text, h.Level)
+		} else if sc.inHead == 0 {
+			sc.node(n, src)
 		}
 		return ast.WalkContinue, nil
 	})
+	sc.finish()
+	p.Sections = sc.sections
 	if p.Title == "" {
 		p.Title = h1
 	}
 	if p.Title == "" {
 		p.Title = strings.Title(strings.ReplaceAll(filepath.Base(file), "-", " "))
+	}
+	for i := range p.Sections {
+		if p.Sections[i].Title == "" {
+			p.Sections[i].Title = p.Title
+		}
 	}
 
 	var buf bytes.Buffer
@@ -353,6 +415,10 @@ func linkPath(from, href string) string {
 	}
 	base := path.Dir(from)
 	target := path.Clean(path.Join(base, href))
+	if target == ".." || strings.HasPrefix(target, "../") {
+		name := strings.TrimSuffix(path.Base(target), ".md")
+		return "/wiki/" + strings.ToLower(name) + ".html"
+	}
 	if strings.HasSuffix(target, ".md") {
 		target = strings.TrimSuffix(target, ".md")
 	}

@@ -6,6 +6,12 @@ or implementation milestones; repository changes belong in the commit history.
 
 ## 2026-09-20
 
+* **Creation**: Added a "Triggering a rebuild without a forge hook" section
+  to the webhook integrations guide, covering `coprctl integration trigger`, the `COPRCTL_WEBHOOK_SECRET`
+environment override, the receiver's bare-OK
+  answer, and the release-guarded GitHub Actions pattern. The migrating guide
+  points at the manual trigger for the stable-tag-only case.
+
 * **Creation**: Added ADR 0009 and the usage guide "Credentials from the
   environment" (`docs/usage/environment-credentials.md`), covering the
   `COPRCTL_*` variables, the `COPR_*` CI fallbacks, the mandatory login for a

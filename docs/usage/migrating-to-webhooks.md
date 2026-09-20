@@ -102,7 +102,10 @@ coprctl integration github enable OWNER/PROJECT --repo OWNER/REPO
 
 The default is tag-only: pushing a release tag rebuilds, branch pushes do
 not. The package-scoped URL maps bare `vX.Y.Z` tags onto the right package
-when the tag and the package name differ.
+when the tag and the package name differ. When a forge hook firing on every
+tag is too broad, `coprctl integration trigger` drives the receiver from a
+release pipeline instead, with the pre-release filter expressed there (see
+the webhook integrations guide).
 
 ## Verify without pushing a tag
 
@@ -122,6 +125,7 @@ submits; it is no longer the release path.
 ```bash
 coprctl sync --check -f copr.yaml   # CI gate against manifest drift
 coprctl status OWNER/PROJECT        # health summary, exits 4 on failures
+coprctl integration trigger OWNER/PROJECT/PKG --tag vX.Y.Z   # manual or pipeline-driven rebuild
 ```
 
 ## Related

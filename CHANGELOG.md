@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.1.0](https://github.com/abn/coprctl/compare/v1.0.1...v1.1.0) (2026-09-20)
+
+
+### Features
+
+* **cli:** honour environment credentials in commands ([6fb0737](https://github.com/abn/coprctl/commit/6fb0737dd29994c942709106e33f99a35a7c5112))
+* **compat:** migrate positional SRPM uploads ([05f4342](https://github.com/abn/coprctl/commit/05f434274cb10427e3fdb5508d9d45382b38dee6))
+* **config:** accept a coprctl TOML config in COPRCTL_CONFIG ([e46a062](https://github.com/abn/coprctl/commit/e46a062a945a0492ac7a9490d20726670d168686))
+* **config:** resolve credentials from environment ([6fee4b1](https://github.com/abn/coprctl/commit/6fee4b10aa98dad4462ee7532418e9d8cb9eebe4))
+* **detect:** recognize template specs and Rust workspaces ([2e41e5b](https://github.com/abn/coprctl/commit/2e41e5b3aac95f56658fd904d5139cad6bdbd61e))
+* **init:** scaffold .copr/Makefile for template specs ([2aec590](https://github.com/abn/coprctl/commit/2aec5900afc446604220ff7541e9ff8eaf46da13))
+* **integration:** trigger tag rebuilds via the receiver ([d9b29b4](https://github.com/abn/coprctl/commit/d9b29b4292ab1316034232ae68c33955377cb646))
+* **site:** build-time search index and sitemap ([cbece74](https://github.com/abn/coprctl/commit/cbece744cb5275e9c7cdc5bba8e072916adf6e3c))
+* **site:** unify and harden the site shells ([7e4c9e8](https://github.com/abn/coprctl/commit/7e4c9e8ad74e3d7e276835a2ebf8effe8938b365))
+
+
+### Bug Fixes
+
+* **cli:** isolate XDG_CONFIG_HOME in owner tests ([6fb60c7](https://github.com/abn/coprctl/commit/6fb60c71b8ded0e3e9e95f7b13519497e30180aa))
+* **render:** render maps and structs as tables ([7210742](https://github.com/abn/coprctl/commit/721074203a240ba39f53aa680cc5a4ccf2317e42))
+
+
+### Documentation
+
+* adopt relay OKF wiki learnings ([648d92b](https://github.com/abn/coprctl/commit/648d92b5cf2eb970a61f4364deadb2a9ed651fcd))
+* document environment credentials ([6433695](https://github.com/abn/coprctl/commit/6433695272c6310606dc28173caca34bc28d498c))
+* document TOML configs in COPRCTL_CONFIG ([638092e](https://github.com/abn/coprctl/commit/638092ec9befa73bcf32ca635aee8fac1b0ca455))
+* **integration:** document manual trigger rebuilds ([39bc415](https://github.com/abn/coprctl/commit/39bc415e5bdaba4a0f04b7c07288c045553c94fe))
+* link the coprctl introduction blog post in the README ([#57](https://github.com/abn/coprctl/issues/57)) ([459833c](https://github.com/abn/coprctl/commit/459833cee1e62ffd389f7805d4bef0d27ee549d2))
+* read CI credentials from the environment ([7b70a73](https://github.com/abn/coprctl/commit/7b70a7396eb21638149f8821fa574656bbd91466))
+* webhook migration and Rust packaging guides ([d6d7eea](https://github.com/abn/coprctl/commit/d6d7eea5c3c145dd4c7e7a12cd98a7a9ee75b235))
+
 ## [1.0.1](https://github.com/abn/coprctl/compare/v1.0.0...v1.0.1) (2026-09-01)
 
 

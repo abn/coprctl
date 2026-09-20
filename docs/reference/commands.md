@@ -49,6 +49,7 @@ description: The full coprctl command tree, generated from the registry.
       - `coprctl integration gitlab` - GitLab webhook integration
         - `coprctl integration gitlab enable` - Enable a GitLab webhook for a project
       - `coprctl integration rotate-secret` - Generate a new webhook secret and cache it
+      - `coprctl integration trigger` - Trigger a package rebuild via the Copr webhook receiver
       - `coprctl integration url` - Print the Copr webhook URL for a project
     - `coprctl log` - Tail and inspect build logs
       - `coprctl log detective` - Ask log-detective.com to explain a failing build log

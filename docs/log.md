@@ -6,6 +6,12 @@ or implementation milestones; repository changes belong in the commit history.
 
 ## 2026-09-20
 
+* **Creation**: Added ADR 0009 and the usage guide "Credentials from the
+  environment" (`docs/usage/environment-credentials.md`), covering the
+  `COPRCTL_*` variables, the `COPR_*` CI fallbacks, the mandatory login for a
+  token, live username resolution, and the rule that `auth login` is the only
+  path that persists ephemeral credentials. Both are linked from their section
+  indexes.
 * **Update**: Applied the relay OKF wiki learnings to the doc site: the
   maintainer guide no longer points at the private `.agents` reviewer card,
   the bundle index links the repo-root changelog so relative links resolve

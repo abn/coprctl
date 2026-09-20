@@ -15,6 +15,8 @@ Guides and worked examples for using the tool.
   namespaces (@alias)
 * [Instances, staging, and profiles](instances.md) - work with any Copr
   instance, including Fedora staging, via profiles
+* [Credentials from the environment](environment-credentials.md) - supply
+  credentials through variables for CI and ephemeral shells
 * [The copr.yaml manifest](manifest.md) - the declarative project state schema,
   the declared-only apply rule, and what diff and export verify
 * [Migrating a project to webhook builds](migrating-to-webhooks.md) -

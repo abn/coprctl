@@ -12,3 +12,4 @@ evolves.
 * [ADR 0006](0006-instance-detection.md) - instance detection
 * [ADR 0007](0007-cross-platform-releases.md) - cross-platform releases
 * [ADR 0008](0008-chroot-lifecycle.md) - chroot lifecycle and EOL surfacing
+* [ADR 0009](0009-environment-credentials.md) - environment credentials

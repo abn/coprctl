@@ -10,9 +10,8 @@ status: stable
 This page captures the maintainer workflow: reviewing changes, keeping the
 wiki honest, and driving milestones to completion.
 
-The operational contract lives in `AGENTS.md`. The reviewer role card in
-`.agents/agents/reviewer.md` describes the skeptical-maintainer review gate
-used before any push.
+The operational contract lives in `AGENTS.md`. Every change passes a
+skeptical-maintainer review gate before any push.
 
 Releases follow the [release process](release-process.md): pull request only,
 squash merge, and the normal-versus-NVR bump decision.
@@ -35,6 +34,9 @@ Prefer, in order:
 2. The copr-cli client (`python-copr`) for how an established client calls the
    API.
 3. Live probing against a staging instance when a behaviour is still unclear.
+
+The [upstream sources](../reference/upstream-sources.md) page is the
+provenance ledger for these layers.
 
 A field or endpoint that works in the web UI but is absent from the swagger
 is not a bug in the docs; it is the upstream reality to match. When in doubt,

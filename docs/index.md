@@ -45,7 +45,7 @@ maintained to reflect status quo as the project evolves.
 
 ## Releases
 
-* [Changelog](changelog.md) - version history and release notes
+* [Changelog](../CHANGELOG.md) - version history and release notes
 
 ## Repository contract
 

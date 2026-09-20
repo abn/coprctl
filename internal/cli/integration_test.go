@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/config"
 	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/ref"
@@ -81,10 +83,17 @@ func integrationCoprServer(t *testing.T, cloneURL string, edits *int) *httptest.
 // instance base URL, so webhook URLs are deterministic.
 func integrationTestApp(t *testing.T, coprSrv *httptest.Server) *App {
 	t.Helper()
+	return integrationTestAppURL(t, coprSrv, "https://copr.test")
+}
+
+// integrationTestAppURL is integrationTestApp with an explicit instance base
+// URL, so tests that exercise the receiver POST can point it at the fake.
+func integrationTestAppURL(t *testing.T, coprSrv *httptest.Server, profileURL string) *App {
+	t.Helper()
 	cfgDir := t.TempDir()
 	cfgPath := filepath.Join(cfgDir, "config.toml")
 	m := config.New(cfgPath, filepath.Join(cfgDir, "legacy"))
-	if err := m.SetProfile("test", config.Profile{URL: "https://copr.test"}); err != nil {
+	if err := m.SetProfile("test", config.Profile{URL: profileURL}); err != nil {
 		t.Fatal(err)
 	}
 	app := NewApp()
@@ -380,5 +389,272 @@ func TestIntegrationGitlabEnableSendsBooleanToggles(t *testing.T) {
 	}
 	if out["url"] != "https://copr.test/webhooks/gitlab/42/****/pkg/" {
 		t.Errorf("url = %v, want masked url", out["url"])
+	}
+}
+
+// triggerCoprServer serves the lookup endpoints plus the GitHub receiver the
+// trigger POSTs to, and records the trigger request for assertions.
+func triggerCoprServer(t *testing.T) (*httptest.Server, *[]string, *map[string][]string) {
+	t.Helper()
+	var requests []string
+	var payloads map[string][]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/project/":
+			json.NewEncoder(w).Encode(map[string]any{"id": 42, "name": "p", "ownername": "o", "full_name": "o/p"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/package/list":
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{
+					"id": 1, "name": "nono", "source_type": "scm", "auto_rebuild": false,
+					"source_dict": map[string]any{"type": "git", "clone_url": "https://github.com/o/nono.git"},
+				}},
+				"meta": copr.Meta{Limit: 100, Offset: 0, Order: "id", OrderType: "ASC"},
+			})
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/webhooks/"):
+			requests = append(requests, r.URL.Path)
+			data, _ := io.ReadAll(r.Body)
+			if payloads == nil {
+				payloads = map[string][]string{}
+			}
+			payloads["push"] = []string{r.Header.Get("Content-Type"), string(data)}
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "OK\n")
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	return srv, &requests, &payloads
+}
+
+// runIntegrationTrigger executes the trigger subcommand with JSON output and
+// decodes the result map.
+func runIntegrationTrigger(t *testing.T, app *App, args ...string) map[string]any {
+	t.Helper()
+	cmd := newIntegrationCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs(append(append([]string{"trigger"}, args...), "--output", "json"))
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute trigger %v: %v", args, err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	return out
+}
+
+func TestIntegrationTriggerSubmitsBuild(t *testing.T) {
+	srv, requests, payloads := triggerCoprServer(t)
+	defer srv.Close()
+	integrationTestState(t)
+	seedIntegrationState(t, "s3cr3t", 0)
+	app := integrationTestAppURL(t, srv, srv.URL)
+
+	out := runIntegrationTrigger(t, app, "o/p/nono", "--tag", "v1.2.3")
+	if len(*requests) != 1 {
+		t.Fatalf("receiver requests = %v, want exactly one", *requests)
+	}
+	if (*requests)[0] != "/webhooks/github/42/s3cr3t/nono/" {
+		t.Errorf("receiver path = %s, want package-scoped secret path", (*requests)[0])
+	}
+	body := (*payloads)["push"][1]
+	if !strings.Contains(body, "\"ref_type\":\"tag\"") ||
+		!strings.Contains(body, "\"ref\":\"v1.2.3\"") ||
+		!strings.Contains(body, "https://github.com/o/nono.git") {
+		t.Errorf("receiver payload = %s, want tag-shaped payload with clone_url", body)
+	}
+	if out["submitted"] != true || out["package"] != "nono" {
+		t.Errorf("output = %v, want submitted package=nono", out)
+	}
+	if _, ok := out["build_id"]; ok {
+		t.Error("the receiver returns no build id; output must not claim one")
+	}
+	if u, _ := out["url"].(string); !strings.Contains(u, "****") {
+		t.Errorf("url = %q, want masked", u)
+	}
+}
+
+func TestIntegrationTriggerEnvSecret(t *testing.T) {
+	srv, requests, _ := triggerCoprServer(t)
+	defer srv.Close()
+	integrationTestState(t)
+	// The stored secret is stale: the environment value must shadow it, the
+	// way credential variables shadow the profile.
+	seedIntegrationState(t, "olds3cr3t", 0)
+	t.Setenv("COPRCTL_WEBHOOK_SECRET", "s3cr3t")
+	app := integrationTestAppURL(t, srv, srv.URL)
+
+	runIntegrationTrigger(t, app, "o/p/nono", "--tag", "v1.2.3")
+	if len(*requests) != 1 || (*requests)[0] != "/webhooks/github/42/s3cr3t/nono/" {
+		t.Fatalf("requests = %v, want one POST carrying the env secret", *requests)
+	}
+}
+
+func TestIntegrationTriggerDryRun(t *testing.T) {
+	srv, requests, _ := triggerCoprServer(t)
+	defer srv.Close()
+	integrationTestState(t)
+	seedIntegrationState(t, "s3cr3t", 0)
+	app := integrationTestApp(t, srv)
+
+	out := runIntegrationTrigger(t, app, "o/p/nono", "--tag", "v1.2.3", "--dry-run")
+	if len(*requests) != 0 {
+		t.Fatalf("dry-run must not POST; got %v", *requests)
+	}
+	if out["dry_run"] != true || out["package"] != "nono" {
+		t.Errorf("output = %v, want dry_run package=nono", out)
+	}
+	if u, _ := out["url"].(string); !strings.Contains(u, "****") {
+		t.Errorf("dry-run url = %q, want masked", u)
+	}
+	if p, _ := out["payload"].(string); !strings.Contains(p, "v1.2.3") || !strings.Contains(p, "https://github.com/o/nono.git") {
+		t.Errorf("dry-run payload = %q, want tag and clone_url", p)
+	}
+}
+
+func TestIntegrationTriggerRefusals(t *testing.T) {
+	integrationTestState(t)
+	seedIntegrationState(t, "s3cr3t", 0)
+	// A project whose only package is upload-sourced: nothing the receiver
+	// can rebuild.
+	pkgSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/project/":
+			json.NewEncoder(w).Encode(map[string]any{"id": 42, "name": "p", "ownername": "o", "full_name": "o/p"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/package/list":
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{
+					"id": 1, "name": "nono", "source_type": "upload", "auto_rebuild": false,
+					"source_dict": map[string]any{},
+				}},
+				"meta": copr.Meta{Limit: 100, Offset: 0, Order: "id", OrderType: "ASC"},
+			})
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer pkgSrv.Close()
+	app := integrationTestApp(t, pkgSrv)
+
+	cmd := newIntegrationCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"trigger", "o/p/nono", "--tag", "v1.2.3"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("trigger on an upload package must fail")
+	}
+
+	// Missing tag is a usage failure, checked before any request.
+	lookupSrv := integrationCoprServer(t, "", nil)
+	defer lookupSrv.Close()
+	app2 := integrationTestApp(t, lookupSrv)
+	cmd = newIntegrationCmd(app2)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"trigger", "o/p/nono"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("trigger without --tag must fail")
+	}
+}
+
+func TestIntegrationTriggerReceiverError(t *testing.T) {
+	integrationTestState(t)
+	seedIntegrationState(t, "s3cr3t", 0)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/project/":
+			json.NewEncoder(w).Encode(map[string]any{"id": 42, "name": "p", "ownername": "o", "full_name": "o/p"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/package/list":
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{
+					"id": 1, "name": "nono", "source_type": "scm", "auto_rebuild": false,
+					"source_dict": map[string]any{"type": "git", "clone_url": "https://github.com/o/nono.git"},
+				}},
+				"meta": copr.Meta{Limit: 100, Offset: 0, Order: "id", OrderType: "ASC"},
+			})
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/webhooks/"):
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, "BAD_UUID\n")
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	app := integrationTestAppURL(t, srv, srv.URL)
+
+	cmd := newIntegrationCmd(app)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"trigger", "o/p/nono", "--tag", "v1.2.3"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("a receiver 403 must fail")
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitGeneric || !strings.Contains(err.Error(), "BAD_UUID") {
+		t.Errorf("err = %v, want receiver_error body BAD_UUID at a generic failure", err)
+	}
+}
+
+func TestIntegrationTriggerNoSecretAnywhere(t *testing.T) {
+	integrationTestState(t)
+	// No secret in state and none in the environment: the failure must point
+	// at the remediation without any receiver request.
+	srv, requests, _ := triggerCoprServer(t)
+	defer srv.Close()
+	app := integrationTestApp(t, srv)
+
+	cmd := newIntegrationCmd(app)
+	var buf bytes.Buffer
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"trigger", "o/p/nono", "--tag", "v1.2.3"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("trigger without any secret must fail")
+	}
+	if msg := buf.String(); !strings.Contains(msg, "rotate-secret") ||
+		!strings.Contains(msg, "COPRCTL_WEBHOOK_SECRET") {
+		t.Errorf("error = %q, want remediation naming rotate-secret and the env var", msg)
+	}
+	if len(*requests) != 0 {
+		t.Fatal("no secret means no POST")
+	}
+}
+
+func TestIntegrationTriggerNoCloneURL(t *testing.T) {
+	integrationTestState(t)
+	seedIntegrationState(t, "s3cr3t", 0)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/project/":
+			json.NewEncoder(w).Encode(map[string]any{"id": 42, "name": "p", "ownername": "o", "full_name": "o/p"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api_3/package/list":
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{
+					"id": 1, "name": "nono", "source_type": "scm", "auto_rebuild": false,
+					"source_dict": map[string]any{"type": "git"},
+				}},
+				"meta": copr.Meta{Limit: 100, Offset: 0, Order: "id", OrderType: "ASC"},
+			})
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	app := integrationTestApp(t, srv)
+
+	cmd := newIntegrationCmd(app)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"trigger", "o/p/nono", "--tag", "v1.2.3"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("trigger on an scm package without a clone_url must fail")
 	}
 }

@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -13,6 +17,7 @@ import (
 	"github.com/abn/coprctl/internal/copr"
 	"github.com/abn/coprctl/internal/forge"
 	"github.com/abn/coprctl/internal/ref"
+	"github.com/abn/coprctl/internal/render"
 	"github.com/abn/coprctl/internal/state"
 )
 
@@ -50,6 +55,7 @@ func newIntegrationCmd(app *App) *cobra.Command {
 		github,
 		gitlab,
 		newIntegrationURLCmd(app, &out),
+		newIntegrationTriggerCmd(app, &out),
 		newIntegrationDisableCmd(app, &out),
 		newIntegrationRotateCmd(app, &out),
 	)
@@ -74,6 +80,16 @@ func webhookURL(ctx context.Context, app *App, r ref.Ref, forge, pkgName string)
 	if forge == "custom" && pkgName == "" {
 		return "", cerr.Usage("the custom webhook needs a package name; pass --package PKG")
 	}
+	secret, err := webhookSecretState(app, r)
+	if err != nil {
+		return "", err
+	}
+	return receiverURL(ctx, app, r, forge, pkgName, secret)
+}
+
+// receiverURL composes the receiver URL from an already-resolved secret. The
+// secret sits in the URL path: it is the bearer credential of a rebuild.
+func receiverURL(ctx context.Context, app *App, r ref.Ref, forge, pkgName, secret string) (string, error) {
 	c, err := app.Client()
 	if err != nil {
 		return "", err
@@ -81,14 +97,6 @@ func webhookURL(ctx context.Context, app *App, r ref.Ref, forge, pkgName string)
 	proj, err := c.GetProject(ctx, r.Owner, r.Project)
 	if err != nil {
 		return "", err
-	}
-	store, err := state.NewStore(mustStateDir(app.profile))
-	if err != nil {
-		return "", err
-	}
-	secret, err := store.GetSecret(r.Owner, r.Project)
-	if err != nil || secret == "" {
-		return "", fmt.Errorf("no webhook secret known for %s; run 'integration rotate-secret' first", r.String())
 	}
 	u := fmt.Sprintf("%s/webhooks/%s/%d/%s/", profileURL(app), forge, proj.ID, secret)
 	if pkgName != "" {
@@ -124,6 +132,168 @@ func newIntegrationURLCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().StringVar(&pkg, "package", "", "scope the URL to a package (required for custom)")
 	cmd.Flags().BoolVar(&reveal, "reveal", false, "print the secret in the URL")
 	return cmd
+}
+
+// newIntegrationTriggerCmd submits a rebuild for one package by POSTing a
+// forge payload to the Copr receiver, the same endpoint a forge hook drives.
+// The trigger is manual: the caller decides which tag rebuilds, so a tag
+// filter (stable releases only, no pre-releases) stays where the caller can
+// express it. The GitHub receiver reads a push payload; ref_type "tag" makes
+// the receiver build at the tag committish (webhooks_general.py). The route
+// answers with body "OK" and no build id: follow up with 'coprctl build
+// list OWNER/PROJECT -n1' or the monitor. Rebuilds need the package to have
+// an SCM source with the tag reachable.
+func newIntegrationTriggerCmd(app *App, out *outFlags) *cobra.Command {
+	var tag string
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:   "trigger REF/PKG --tag TAG",
+		Short: "Trigger a package rebuild via the Copr webhook receiver",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if tag == "" {
+				return cerr.Usage("--tag is required: the receiver builds at the given tag")
+			}
+			r, err := parsePackageRef(cmd, app, args)
+			if err != nil {
+				return err
+			}
+			c, err := app.Client()
+			if err != nil {
+				return err
+			}
+			pkg, err := c.GetPackage(cmd.Context(), r.Owner, r.Project, r.Segment)
+			if err != nil {
+				return err
+			}
+			if pkg.SourceType != copr.SourceSCM {
+				return cerr.New("not_scm", cerr.ExitPrecondition, fmt.Sprintf("package %s has source type %s; the receiver rebuilds scm packages only", pkg.Name, pkg.SourceType)).
+					WithHint("convert the package to an scm source first: coprctl package edit REF/PKG --source scm --clone-url ... (see the migrating-to-webhooks guide)")
+			}
+			cloneURL := pkg.SourceDict["clone_url"]
+			if cloneURL == "" {
+				return cerr.New("no_clone_url", cerr.ExitPrecondition,
+					fmt.Sprintf("package %s has no clone_url in its scm source; cannot build at a tag", pkg.Name))
+			}
+			u, err := triggerURL(cmd.Context(), app, r, pkg.Name)
+			if err != nil {
+				return err
+			}
+			// The receiver matches on the URL path (project id and secret) and
+			// selects the package by name; the payload supplies the clone URL
+			// and the tag. X-GitHub-Event: push is required: an absent header
+			// dereferences the event map and the receiver 500s.
+			header := http.Header{}
+			header.Set("X-GitHub-Event", "push")
+			header.Set("Content-Type", "application/json")
+			payload, err := json.Marshal(forgeTriggerPayload{Repository: forgeTriggerRepo{CloneURL: cloneURL}, Ref: tag, RefType: "tag"})
+			if err != nil {
+				return err
+			}
+			if dryRun {
+				result := map[string]any{
+					"dry_run": true, "forge": "github", "package": pkg.Name,
+					"tag": tag, "clone_url": cloneURL, "url": maskSecret(u),
+					"method": "POST", "headers": map[string]string{"X-GitHub-Event": "push"},
+					"payload": string(payload),
+				}
+				return renderResult(cmd, out, result)
+			}
+			if err := postReceiver(cmd.Context(), u, header, payload); err != nil {
+				return err
+			}
+			// The route answers "OK" with no build id, so the result reports
+			// acceptance only; the newest build surfaces through build list or
+			// the monitor.
+			result := map[string]any{"submitted": true, "package": pkg.Name, "tag": tag, "url": maskSecret(u)}
+			return renderHumanOr(cmd, out, result, func() *render.Table {
+				t := render.NewTable("FIELD", "VALUE")
+				t.Add("Submitted", pkg.Name)
+				t.Add("Tag", tag)
+				return t
+			})
+		},
+	}
+	cmd.Flags().StringVar(&tag, "tag", "", "tag to build (the package must have an scm source the tag is reachable in)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the receiver request without sending it")
+	return cmd
+}
+
+// forgeTriggerPayload is the minimal GitHub push payload the Copr receiver
+// needs to submit a tag rebuild.
+type forgeTriggerRepo struct {
+	CloneURL string `json:"clone_url"`
+}
+
+type forgeTriggerPayload struct {
+	Repository forgeTriggerRepo `json:"repository"`
+	Ref        string           `json:"ref"`
+	RefType    string           `json:"ref_type"`
+}
+
+// integrationSecret resolves the Copr webhook secret for the trigger request:
+// the environment variable first (CI passes it in and it is never persisted),
+// then the cached local state the rotate-secret command fills. The override is
+// deliberately out of webhookURL: enable and disable match and write forge
+// hook destinations against the stored secret, so an environment value must
+// not repoint or misidentify hooks.
+func integrationSecret(app *App, r ref.Ref) (string, error) {
+	if v := os.Getenv("COPRCTL_WEBHOOK_SECRET"); v != "" {
+		return v, nil
+	}
+	return webhookSecretState(app, r)
+}
+
+// webhookSecretState returns the cached webhook secret for a project, or the
+// remediation for its absence.
+func webhookSecretState(app *App, r ref.Ref) (string, error) {
+	store, err := state.NewStore(mustStateDir(app.profile))
+	if err != nil {
+		return "", err
+	}
+	secret, err := store.GetSecret(r.Owner, r.Project)
+	if err != nil || secret == "" {
+		return "", fmt.Errorf("no webhook secret known for %s; run 'coprctl integration rotate-secret %s --yes', or pass COPRCTL_WEBHOOK_SECRET to trigger",
+			r.String(), r.String())
+	}
+	return secret, nil
+}
+
+// triggerURL composes the GitHub receiver URL for one package, resolving the
+// secret with the environment override. webhookURL keeps the state-only
+// resolution its hook-management callers depend on.
+func triggerURL(ctx context.Context, app *App, r ref.Ref, pkgName string) (string, error) {
+	secret, err := integrationSecret(app, r)
+	if err != nil {
+		return "", err
+	}
+	return receiverURL(ctx, app, r, "github", pkgName, secret)
+}
+
+// postReceiver sends the trigger request and fails only on a non-2xx answer.
+// The body carries whatever the route returns ("OK" upstream); with a build
+// id echo (some custom receivers) it still reports cleanly.
+func postReceiver(ctx context.Context, url string, header http.Header, payload []byte) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	for k, vs := range header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return cerr.New("receiver_error", cerr.ExitGeneric, fmt.Sprintf("receiver returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+	}
+	return nil
 }
 
 func newIntegrationGithubEnableCmd(app *App, out *outFlags) *cobra.Command {

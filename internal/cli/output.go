@@ -108,9 +108,10 @@ func requireOne(args []string, usage string) (string, error) {
 }
 
 // resolveRefOwner fills in an empty owner on a project-family ref from the
-// current profile's username, so a bare project name means "the current user".
-// Build refs have no owner and are left untouched.
-func resolveRefOwner(app *App, r ref.Ref) ref.Ref {
+// effective username (configured, or resolved live from the credentials), so a
+// bare project name means "the current user". Build refs have no owner and are
+// left untouched.
+func resolveRefOwner(cmd *cobra.Command, app *App, r ref.Ref) ref.Ref {
 	if r.Owner != "" {
 		return r
 	}
@@ -119,22 +120,20 @@ func resolveRefOwner(app *App, r ref.Ref) ref.Ref {
 	default:
 		return r
 	}
-	if app.Cfg != nil {
-		if prof, err := app.Cfg.Profile(app.profile); err == nil && prof.Username != "" {
-			r.Owner = prof.Username
-		}
+	if username := app.Username(cmd.Context()); username != "" {
+		r.Owner = username
 	}
 	return r
 }
 
 // parseRef parses a project-family reference. A bare project name defaults to
-// the current profile's username; build refs are passed through untouched.
-func parseRef(app *App, s string) (ref.Ref, error) {
+// the effective username; build refs are passed through untouched.
+func parseRef(cmd *cobra.Command, app *App, s string) (ref.Ref, error) {
 	r, err := ref.Parse(s, nil)
 	if err != nil {
 		return r, err
 	}
-	return resolveRefOwner(app, r), nil
+	return resolveRefOwner(cmd, app, r), nil
 }
 
 // parseBuildRef parses a reference and requires it to be a build.
@@ -184,13 +183,13 @@ func parseBuildIDs(args []string) ([]int, error) {
 }
 
 // parsePackageRef parses a reference requiring ForcePackage and defaults a bare
-// owner to the current profile's username.
-func parsePackageRef(app *App, args []string) (ref.Ref, error) {
+// owner to the effective username.
+func parsePackageRef(cmd *cobra.Command, app *App, args []string) (ref.Ref, error) {
 	r, err := ref.Parse(args[0], &ref.Options{ForcePackage: true})
 	if err != nil {
 		return r, err
 	}
-	return resolveRefOwner(app, r), nil
+	return resolveRefOwner(cmd, app, r), nil
 }
 
 // confirmRequired returns a usage error naming the confirmation flag that a
@@ -199,13 +198,11 @@ func confirmRequired(flag string) error {
 	return cerr.Usage(fmt.Sprintf("this is a destructive operation; pass %s to confirm", flag))
 }
 
-// instanceBase returns the configured instance base URL, falling back to the
+// instanceBase returns the effective instance base URL, falling back to the
 // production instance.
 func instanceBase(app *App) string {
-	if app.Cfg != nil {
-		if prof, err := app.Cfg.Profile(app.profile); err == nil && prof.BaseURL() != "" {
-			return prof.BaseURL()
-		}
+	if prof, _, err := app.profileForUse(); err == nil && prof.BaseURL() != "" {
+		return prof.BaseURL()
 	}
 	return config.DefaultProductionURL
 }

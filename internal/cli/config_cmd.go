@@ -158,10 +158,7 @@ func newConfigShowCmd(app *App, out *outFlags) *cobra.Command {
 		Use:   "show [--reveal]",
 		Short: "Show the effective configuration and where each value came from",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
-				app.Cfg = config.New(app.cfgPath, app.legacy)
-			}
-			prof, err := app.Cfg.Profile(app.profile)
+			prof, envSrc, err := app.profileForUse()
 			if err != nil {
 				return err
 			}
@@ -169,7 +166,10 @@ func newConfigShowCmd(app *App, out *outFlags) *cobra.Command {
 			if _, statErr := os.Stat(app.cfgPath); statErr == nil {
 				src = config.FromFile
 			}
-			return renderHumanOr(cmd, out, map[string]any{
+			if envSrc.Active() {
+				src = config.FromEnv
+			}
+			res := map[string]any{
 				"profile":       profileName(app),
 				"url":           prof.BaseURL(),
 				"instance":      config.DetectInstance(prof.BaseURL()),
@@ -180,7 +180,11 @@ func newConfigShowCmd(app *App, out *outFlags) *cobra.Command {
 				"config_file":   app.cfgPath,
 				"legacy_config": app.legacy,
 				"source":        src,
-			}, func() *render.Table {
+			}
+			if envSrc.Active() {
+				res["env_source"] = strings.Join(envSrc.Names(), ", ")
+			}
+			return renderHumanOr(cmd, out, res, func() *render.Table {
 				t := render.NewTable("KEY", "VALUE", "SOURCE")
 				addRow := func(k, v string) {
 					if !reveal && (k == "token" || k == "login") {
@@ -189,6 +193,9 @@ func newConfigShowCmd(app *App, out *outFlags) *cobra.Command {
 					t.Add(k, v, src)
 				}
 				addRow("profile", profileName(app))
+				if envSrc.Active() {
+					addRow("credentials from", strings.Join(envSrc.Names(), ", "))
+				}
 				addRow("url", prof.BaseURL())
 				addRow("instance", config.DetectInstance(prof.BaseURL()))
 				addRow("username", prof.Username)
@@ -287,10 +294,16 @@ func newConfigImportCmd(app *App, out *outFlags) *cobra.Command {
 	return cmd
 }
 
-// importProfile writes a profile into the config file, naming it by the
-// instance when no profile name is given. It refuses to clobber existing
-// profiles unless the profile name is explicitly the same.
-func importProfile(cmd *cobra.Command, app *App, out *outFlags, profile string, p config.Profile) error {
+// writeProfile persists p under the given profile name, defaulting the name to
+// the instance and the URL to production. It refuses to clobber a profile that
+// belongs to a different user unless the name was given explicitly, and it
+// reads only the file configuration, so environment credentials can never be
+// written by a command that merely read them. The normalised profile is
+// returned for rendering.
+func writeProfile(app *App, profile string, p config.Profile) (string, config.Profile, error) {
+	if p.URL == "" {
+		p.URL = config.DefaultProductionURL
+	}
 	name := profile
 	if name == "" {
 		name = config.DetectInstance(p.BaseURL())
@@ -298,12 +311,20 @@ func importProfile(cmd *cobra.Command, app *App, out *outFlags, profile string, 
 	if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
 		app.Cfg = config.New(app.cfgPath, app.legacy)
 	}
-	// If the profile already exists under a different username, refuse to
-	// overwrite it unless the profile name was given explicitly.
 	if existing, err := app.Cfg.Profile(name); err == nil && profile == "" && existing.Username != p.Username && existing.Username != "" {
-		return fmt.Errorf("profile %q already exists for a different user; pass --profile to update it explicitly", name)
+		return "", config.Profile{}, fmt.Errorf("profile %q already exists for a different user; pass --profile to update it explicitly", name)
 	}
 	if err := app.Cfg.SetProfile(name, p); err != nil {
+		return "", config.Profile{}, err
+	}
+	return name, p, nil
+}
+
+// importProfile writes a profile into the config file, naming it by the
+// instance when no profile name is given.
+func importProfile(cmd *cobra.Command, app *App, out *outFlags, profile string, p config.Profile) error {
+	name, p, err := writeProfile(app, profile, p)
+	if err != nil {
 		return err
 	}
 	return renderResult(cmd, out, map[string]any{

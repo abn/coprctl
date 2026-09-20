@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -46,7 +47,7 @@ func newProjectEditCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Edit project settings",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
@@ -130,7 +131,7 @@ func newProjectRegenCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Regenerate repository metadata for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
@@ -158,7 +159,7 @@ func newProjectListCmd(app *App, out *outFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			owner := resolveListOwner(app, args)
+			owner := resolveListOwner(cmd.Context(), app, args)
 			limit := 100
 			if all {
 				limit = 0
@@ -185,7 +186,7 @@ func newProjectGetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Show a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
@@ -220,7 +221,7 @@ func newProjectCreateCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Create a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
@@ -288,7 +289,7 @@ func newProjectDeleteCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Delete a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
@@ -316,11 +317,11 @@ func newProjectForkCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Fork a project",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			src, err := parseRef(app, args[0])
+			src, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
-			dst, err := parseRef(app, args[1])
+			dst, err := parseRef(cmd, app, args[1])
 			if err != nil {
 				return err
 			}
@@ -349,16 +350,11 @@ func truncate(s string, n int) string {
 }
 
 // resolveListOwner picks the owner for project list. An explicit argument
-// wins; otherwise it defaults to the authenticated user's projects so the
+// wins; otherwise it defaults to the effective username's projects so the
 // command does not page through the whole instance.
-func resolveListOwner(app *App, args []string) string {
+func resolveListOwner(ctx context.Context, app *App, args []string) string {
 	if len(args) == 1 {
 		return args[0]
 	}
-	if app.Cfg != nil {
-		if prof, err := app.Cfg.Profile(app.profile); err == nil && prof.Username != "" {
-			return prof.Username
-		}
-	}
-	return ""
+	return app.Username(ctx)
 }

@@ -58,6 +58,19 @@ func newAuthLoginCmd(app *App, out *outFlags) *cobra.Command {
 			if base == "" {
 				base = config.DefaultProductionURL
 			}
+
+			// Environment credentials are written verbatim: this command is the
+			// one place where ephemeral credentials are allowed to reach disk.
+			if env, src, ok, err := config.EnvironmentProfile(); err != nil {
+				return err
+			} else if ok {
+				if over := strings.TrimRight(url, "/"); over != "" {
+					env.URL = over
+				}
+				fmt.Fprintf(cmd.ErrOrStderr(), "Using credentials from %s\n", strings.Join(src.Names(), ", "))
+				return persistLogin(cmd, app, out, profile, env, "env")
+			}
+
 			apiURL := base + "/api/"
 
 			// Open the browser, unless the user asked not to.
@@ -98,50 +111,7 @@ func newAuthLoginCmd(app *App, out *outFlags) *cobra.Command {
 			if p.URL == "" {
 				p.URL = base
 			}
-			// Write the profile without emitting a separate import result.
-			name := profile
-			if name == "" {
-				name = config.DetectInstance(p.BaseURL())
-			}
-			if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
-				app.Cfg = config.New(app.cfgPath, app.legacy)
-			}
-			if existing, err := app.Cfg.Profile(name); err == nil && profile == "" && existing.Username != p.Username && existing.Username != "" {
-				return fmt.Errorf("profile %q already exists for a different user; pass --profile to update it explicitly", name)
-			}
-			if err := app.Cfg.SetProfile(name, p); err != nil {
-				return err
-			}
-			// Emit a single result: profile, instance, and expiry status.
-			w := expiryWarning{Profile: name, Expiry: p.TokenExpiry}
-			if p.TokenExpiry != "" {
-				if exp, perr := parseExpiry(p.TokenExpiry); perr == nil {
-					rem := time.Until(exp)
-					switch {
-					case rem < 0:
-						w.Status = "expired"
-						w.Remaining = "expired"
-					case rem < warnThreshold:
-						w.Status = "warning"
-						w.Remaining = roundDuration(rem)
-					default:
-						w.Status = "ok"
-						w.Remaining = roundDuration(rem)
-					}
-				}
-			}
-			if w.Status == "" {
-				w.Status = "unknown"
-			}
-			return renderResult(cmd, out, map[string]any{
-				"logged_in":   true,
-				"profile":     name,
-				"instance":    config.DetectInstance(p.BaseURL()),
-				"expiry":      w.Expiry,
-				"status":      w.Status,
-				"remaining":   w.Remaining,
-				"config_file": app.cfgPath,
-			})
+			return persistLogin(cmd, app, out, profile, p, "prompt")
 		},
 	}
 	cmd.Flags().StringVar(&url, "url", "", "instance base URL (default: production or current profile)")
@@ -149,6 +119,62 @@ func newAuthLoginCmd(app *App, out *outFlags) *cobra.Command {
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "do not open a browser; print the URL instead")
 	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "prompt for each credential instead of pasting a block")
 	return cmd
+}
+
+// persistLogin writes credentials to a named profile and reports the result.
+// Source records where the credentials came from (env or prompt). It reads the
+// file profile, never the effective one, so environment credentials are only
+// ever written when they are explicitly imported.
+func persistLogin(cmd *cobra.Command, app *App, out *outFlags, profile string, p config.Profile, source string) error {
+	name, p, err := writeProfile(app, profile, p)
+	if err != nil {
+		return err
+	}
+	// Emit a single result: profile, instance, and expiry status.
+	w := expiryWarning{Profile: name, Expiry: p.TokenExpiry}
+	if p.TokenExpiry != "" {
+		if exp, perr := parseExpiry(p.TokenExpiry); perr == nil {
+			rem := time.Until(exp)
+			switch {
+			case rem < 0:
+				w.Status = "expired"
+				w.Remaining = "expired"
+			case rem < warnThreshold:
+				w.Status = "warning"
+				w.Remaining = roundDuration(rem)
+			default:
+				w.Status = "ok"
+				w.Remaining = roundDuration(rem)
+			}
+		}
+	}
+	if w.Status == "" {
+		w.Status = "unknown"
+	}
+	return renderHumanOr(cmd, out, map[string]any{
+		"logged_in":   true,
+		"profile":     name,
+		"instance":    config.DetectInstance(p.BaseURL()),
+		"expiry":      w.Expiry,
+		"status":      w.Status,
+		"remaining":   w.Remaining,
+		"config_file": app.cfgPath,
+		"source":      source,
+	}, func() *render.Table {
+		t := render.NewTable("FIELD", "VALUE")
+		t.Add("Profile", name)
+		t.Add("Instance", config.DetectInstance(p.BaseURL()))
+		t.Add("Source", source)
+		if w.Expiry != "" {
+			t.Add("Expiry", w.Expiry)
+		}
+		t.Add("Status", w.Status)
+		if w.Remaining != "" {
+			t.Add("Remaining", w.Remaining)
+		}
+		t.Add("Config", app.cfgPath)
+		return t
+	})
 }
 
 // readMultiline reads until EOF, returning the pasted block.
@@ -172,6 +198,10 @@ type expiryWarning struct {
 	Status    string `json:"status"` // valid | warning | expired | invalid | error
 	Remaining string `json:"remaining,omitempty"`
 	Username  string `json:"username,omitempty"`
+	// Source is "env" when credentials came from the environment, and
+	// EnvSource names the variables that supplied them.
+	Source    string `json:"source,omitempty"`
+	EnvSource string `json:"env_source,omitempty"`
 }
 
 func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
@@ -179,10 +209,7 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 		Use:   "status",
 		Short: "Show who you are and whether the token is near expiry",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
-				app.Cfg = newConfigManager(app.cfgPath, app.legacy)
-			}
-			prof, err := app.Cfg.Profile(app.profile)
+			prof, src, err := app.profileForUse()
 			if err != nil {
 				return err
 			}
@@ -193,7 +220,16 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 			if login == "" || token == "" {
 				return cerr.Auth("no credentials configured for this profile")
 			}
-			w := expiryWarning{Profile: profileName(app), Expiry: prof.TokenExpiry, Username: prof.Username}
+			w := expiryWarning{Expiry: prof.TokenExpiry, Username: prof.Username}
+			if src.Active() {
+				// No profile is in play: report the instance the credentials
+				// belong to, with the environment named as the source.
+				w.Profile = config.DetectInstance(prof.BaseURL())
+				w.Source = "env"
+				w.EnvSource = strings.Join(src.Names(), ", ")
+			} else {
+				w.Profile = profileName(app)
+			}
 			// Live check: is the token accepted by the instance?
 			c := copr.New(prof.BaseURL(), copr.TokenAuth(login, token))
 			if live, err := c.AuthCheck(cmd.Context()); err == nil {
@@ -232,6 +268,9 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 			if err := renderHumanOr(cmd, out, w, func() *render.Table {
 				t := render.NewTable("FIELD", "VALUE")
 				t.Add("Profile", w.Profile)
+				if w.Source != "" {
+					t.Add("Credentials", w.Source+" ("+w.EnvSource+")")
+				}
 				t.Add("Username", w.Username)
 				t.Add("Login", prof.Login)
 				t.Add("Expiry", w.Expiry)
@@ -259,7 +298,7 @@ func newAuthStatusCmd(app *App, out *outFlags) *cobra.Command {
 }
 
 func newAuthTokenCmd(app *App, out *outFlags) *cobra.Command {
-	var yes *bool
+	var yes, reveal *bool
 	cmd := &cobra.Command{
 		Use:   "rotate",
 		Short: "Rotate the API token and update the profile",
@@ -267,8 +306,44 @@ func newAuthTokenCmd(app *App, out *outFlags) *cobra.Command {
 			if !*yes {
 				return confirmRequired("--yes")
 			}
-			if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
-				app.Cfg = newConfigManager(app.cfgPath, app.legacy)
+			// Environment credentials have nowhere to persist the replacement,
+			// so rotation is refused unless the new token will be printed.
+			if _, src, ok, err := config.EnvironmentProfile(); err != nil {
+				return err
+			} else if ok {
+				if !*reveal {
+					return cerr.New("ephemeral_credentials", cerr.ExitPrecondition,
+						"cannot rotate credentials supplied by the environment").WithHint(
+						"the replacement token would have nowhere to persist; run with --reveal to print it, " +
+							"or 'coprctl auth login' to store a profile")
+				}
+				c, err := app.Client()
+				if err != nil {
+					return err
+				}
+				nt, err := c.RotateAPIToken(cmd.Context())
+				if err != nil {
+					return err
+				}
+				app.ResetClient()
+				return renderHumanOr(cmd, out, map[string]any{
+					"rotated":    true,
+					"persisted":  false,
+					"source":     "env",
+					"env_source": strings.Join(src.Names(), ", "),
+					"login":      nt.APILogin,
+					"token":      nt.APIToken,
+					"expiration": nt.Expiration,
+				}, func() *render.Table {
+					t := render.NewTable("FIELD", "VALUE")
+					t.Add("Rotated", "true")
+					t.Add("Persisted", "false (environment credentials)")
+					t.Add("Credentials", strings.Join(src.Names(), ", "))
+					t.Add("Login", nt.APILogin)
+					t.Add("Token", nt.APIToken)
+					t.Add("Expiration", nt.Expiration)
+					return t
+				})
 			}
 			c, err := app.Client()
 			if err != nil {
@@ -294,16 +369,34 @@ func newAuthTokenCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			// Invalidate the cached client so subsequent calls use the new token.
 			app.ResetClient()
-			return renderResult(cmd, out, map[string]any{
+			res := map[string]any{
 				"rotated":        true,
+				"persisted":      true,
 				"profile":        name,
 				"expiration":     nt.Expiration,
 				"config_file":    app.cfgPath,
 				"legacy_sourced": legacySourced,
+			}
+			if *reveal {
+				res["login"] = nt.APILogin
+				res["token"] = nt.APIToken
+			}
+			return renderHumanOr(cmd, out, res, func() *render.Table {
+				t := render.NewTable("FIELD", "VALUE")
+				t.Add("Rotated", "true")
+				t.Add("Profile", name)
+				if *reveal {
+					t.Add("Login", nt.APILogin)
+					t.Add("Token", nt.APIToken)
+				}
+				t.Add("Expiration", nt.Expiration)
+				t.Add("Config", app.cfgPath)
+				return t
 			})
 		},
 	}
 	yes = addYesFlag(cmd, yesHelp, true)
+	reveal = cmd.Flags().Bool("reveal", false, "print the new token in the output (required for environment credentials, which cannot store it)")
 	return cmd
 }
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -32,11 +33,11 @@ func TestResolveListOwner(t *testing.T) {
 
 	app := NewApp()
 	// Explicit arg wins.
-	if got := resolveListOwner(app, []string{"bob"}); got != "bob" {
+	if got := resolveListOwner(context.Background(), app, []string{"bob"}); got != "bob" {
 		t.Errorf("explicit arg = %q, want bob", got)
 	}
 	// No arg defaults to the authenticated user.
-	if got := resolveListOwner(app, []string{}); got != "alice" {
+	if got := resolveListOwner(context.Background(), app, []string{}); got != "alice" {
 		t.Errorf("default owner = %q, want alice", got)
 	}
 }
@@ -48,7 +49,7 @@ func TestResolveListOwnerNoConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	app := NewApp()
 	// No config and no arg: anonymous read, empty owner.
-	if got := resolveListOwner(app, []string{}); got != "" {
+	if got := resolveListOwner(context.Background(), app, []string{}); got != "" {
 		t.Errorf("no config owner = %q, want empty", got)
 	}
 }

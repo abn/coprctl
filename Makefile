@@ -8,7 +8,7 @@ COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE := $(shell git show -s --format=%cI HEAD 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X github.com/abn/coprctl/internal/cli.version=$(VERSION) -X github.com/abn/coprctl/internal/cli.commit=$(COMMIT) -X github.com/abn/coprctl/internal/cli.date=$(DATE)
 
-.PHONY: help build check fmt lint test clean gen drift
+.PHONY: help build check fmt lint test clean gen drift docs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -50,8 +50,25 @@ drift: gen ## Fail if generated artefacts differ from the committed versions
 	done
 	@echo "drift: ok"
 
-check: fmt lint test drift ## Full quality gate
+check: fmt lint test drift docs ## Full quality gate
 	@echo "check: ok"
+
+docs: ## Check the OKF bundle stays public-ready
+	@! grep -rn "\.agents/\(agents\|brain\)/" docs/ --include="*.md" || { echo "docs: internal .agents path leaked"; exit 1; }
+	@! grep -rn "/home/" docs/ --include="*.md" || { echo "docs: absolute /home path leaked"; exit 1; }
+	@! grep -rn "](file://" docs/ --include="*.md" || { echo "docs: file:// link breaks portability"; exit 1; }
+	@grep -q "](\.\./CHANGELOG.md)" docs/index.md || { echo "docs: index must link ../CHANGELOG.md"; exit 1; }
+	@missing=0; for f in $$(find docs -name '*.md'); do \
+		dir=$$(dirname "$$f"); \
+		for link in $$(grep -hoE '\]\([^)]+\.md(#.+)?\)' "$$f" | sed 's/^](//;s/)$$//'); do \
+			case "$$link" in "http://"*) continue;; "https://"*) continue;; "mailto:"*) continue;; "#"*) continue;; esac; \
+			target=$$(echo "$$link" | cut -d'#' -f1); \
+			if [ ! -f "$$dir/$$target" ]; then \
+				echo "docs: broken link $$link in $$f"; missing=1; \
+			fi; \
+		done; \
+	done; test "$$missing" = "0" || exit 1
+	@echo "docs: ok"
 
 clean: ## Remove build artefacts
 	rm -rf bin

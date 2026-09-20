@@ -107,8 +107,9 @@ for the transition period.
 ## GitHub Actions
 
 For the submits that still run in CI, download a pinned release asset
-(archives are named `coprctl_<version>_<Os>_<Arch>.tar.gz`), pipe the
-credentials into `auth login`, and submit with machine output:
+(archives are named `coprctl_<version>_<Os>_<Arch>.tar.gz`) and submit with
+machine output. coprctl reads the credentials from the environment, so the job
+writes nothing to disk:
 
 ```yaml
 - name: Submit SRPM to Copr
@@ -121,22 +122,23 @@ credentials into `auth login`, and submit with machine output:
     curl -sSL -o coprctl.tar.gz \
       "https://github.com/abn/coprctl/releases/download/v${COPRCTL_VERSION}/coprctl_${COPRCTL_VERSION}_Linux_x86_64.tar.gz"
     tar xzf coprctl.tar.gz coprctl && chmod +x coprctl
-    printf '%s' "$COPR_CONFIG" | ./coprctl auth login --no-open
     ./coprctl build submit "$COPR_REPO" \
       --source upload --upload "$SRPM_PATH" \
       --output json --watch
 ```
 
 `COPR_CONFIG` holds the `[copr-cli]` block (login, username, token,
-`copr_url`), the same block the Copr website offers and `coprctl auth`
-accepts. `COPR_REPO` is the `OWNER/PROJECT` reference, `COPRCTL_VERSION`
-pins the tool release, and `SRPM_PATH` points at the built source RPM.
-Piping the config through `auth login` validates the parse and writes
-the profile without touching config file paths by hand; `--profile`
-selects a non-default instance. Confirm the asset name on the release
-page and bump `COPRCTL_VERSION` instead of tracking latest. After the
-webhook migration this job goes away; what stays is the existing test
-suite plus `coprctl sync --check` against the manifest.
+`copr_url`), the same block the Copr website offers; it is read straight from
+the environment and never written to disk. `COPRCTL_CONFIG` is the native name
+for the same value, and `COPRCTL_LOGIN`/`COPRCTL_TOKEN` set the fields
+individually when that suits the pipeline better (see
+[Credentials from the environment](environment-credentials.md)). `COPR_REPO` is
+the `OWNER/PROJECT` reference, `COPRCTL_VERSION` pins the tool release, and
+`SRPM_PATH` points at the built source RPM. Run `coprctl auth login` once
+interactively if you would rather store a profile; confirm the asset name on
+the release page and bump `COPRCTL_VERSION` instead of tracking latest. After
+the webhook migration this job goes away; what stays is the existing test suite
+plus `coprctl sync --check` against the manifest.
 
 ## Batch delete
 

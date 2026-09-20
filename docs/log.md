@@ -12,6 +12,9 @@ or implementation milestones; repository changes belong in the commit history.
   token, live username resolution, and the rule that `auth login` is the only
   path that persists ephemeral credentials. Both are linked from their section
   indexes.
+* **Update**: Rewrote the GitHub Actions submit example in the
+  submitting-builds guide to read credentials from the environment instead of
+  piping them into `auth login`, so a CI job no longer writes a config file.
 * **Update**: Applied the relay OKF wiki learnings to the doc site: the
   maintainer guide no longer points at the private `.agents` reviewer card,
   the bundle index links the repo-root changelog so relative links resolve

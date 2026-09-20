@@ -4,6 +4,7 @@
 package render
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -115,7 +116,14 @@ func (t *Table) Add(row ...string) { t.Rows = append(t.Rows, row) }
 func renderTable(w io.Writer, v any, color bool) error {
 	tbl, ok := v.(*Table)
 	if !ok {
-		return fmt.Errorf("cannot render %T as a table", v)
+		// Commands with a hand-built *Table keep it. Anything else is rendered
+		// from its machine shape, so a command never fails merely because the
+		// human format was selected.
+		generic, err := tableFor(v)
+		if err != nil {
+			return err
+		}
+		tbl = generic
 	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	if len(tbl.Header) > 0 {
@@ -143,6 +151,107 @@ func renderTable(w io.Writer, v any, color bool) error {
 		fmt.Fprintln(tw, strings.Join(cells, "\t"))
 	}
 	return tw.Flush()
+}
+
+// tableFor renders an arbitrary value as a table by way of its JSON encoding,
+// so the human output can never disagree with the machine output.
+func tableFor(v any) (*Table, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	// Decode numbers as their original text: a float64 would render 1000000 as
+	// 1e+06 in a cell.
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var decoded any
+	if err := dec.Decode(&decoded); err != nil {
+		return nil, err
+	}
+	return tableFromJSON(decoded), nil
+}
+
+// tableFromJSON turns decoded JSON into a table: an object becomes FIELD/VALUE
+// rows, a collection of objects becomes one row per object with a column per
+// key, and anything else becomes a single column.
+func tableFromJSON(v any) *Table {
+	switch val := v.(type) {
+	case nil:
+		return NewTable()
+	case map[string]any:
+		if len(val) == 0 {
+			return NewTable()
+		}
+		t := NewTable("FIELD", "VALUE")
+		for _, k := range SortedKeys(val) {
+			t.Add(k, cellValue(val[k]))
+		}
+		return t
+	case []any:
+		if len(val) == 0 {
+			return NewTable()
+		}
+		if t := rowsFromObjects(val); t != nil {
+			return t
+		}
+		t := NewTable("VALUE")
+		for _, item := range val {
+			t.Add(cellValue(item))
+		}
+		return t
+	default:
+		t := NewTable("VALUE")
+		t.Add(cellValue(v))
+		return t
+	}
+}
+
+// rowsFromObjects builds a table from a collection of JSON objects, using the
+// union of their keys as columns. It returns nil when the collection holds
+// anything other than objects.
+func rowsFromObjects(items []any) *Table {
+	columns := map[string]bool{}
+	for _, item := range items {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			return nil
+		}
+		for k := range obj {
+			columns[k] = true
+		}
+	}
+	keys := SortedKeys(columns)
+	t := NewTable(keys...)
+	for _, item := range items {
+		obj := item.(map[string]any)
+		row := make([]string, len(keys))
+		for i, k := range keys {
+			row[i] = cellValue(obj[k])
+		}
+		t.Add(row...)
+	}
+	return t
+}
+
+// cellValue renders one table cell: strings verbatim, nested structures as
+// compact JSON so nothing is lost, and scalars as their natural text.
+func cellValue(v any) string {
+	switch val := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return val
+	case json.Number:
+		return val.String()
+	case map[string]any, []any:
+		data, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprint(val)
+		}
+		return string(data)
+	default:
+		return fmt.Sprint(val)
+	}
 }
 
 // SortedKeys returns the sorted keys of a map for deterministic output.

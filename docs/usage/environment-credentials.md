@@ -15,7 +15,7 @@ are never written anywhere: set them, run the command, and clean up.
 
 | Variable | Meaning |
 | --- | --- |
-| `COPRCTL_CONFIG` | a verbatim `[copr-cli]` credential block, the same text the Copr API page offers |
+| `COPRCTL_CONFIG` | the contents of a credential file, either a `[copr-cli]` block or a coprctl `config.toml` |
 | `COPRCTL_TOKEN` | the API token |
 | `COPRCTL_LOGIN` | the API login |
 | `COPRCTL_USERNAME` | your account username |
@@ -27,9 +27,18 @@ CI pipelines commonly use. When both forms are set, the `COPRCTL_` name wins.
 Per-field variables override fields from a block, so a shared block can be
 pointed at another login or instance without editing it.
 
-`COPRCTL_CONFIG` takes a `[copr-cli]` block, the text the Copr API page hands
-you, not a coprctl `config.toml`; use `--config` for a file path. And
-`COPRCTL_URL` and `COPRCTL_USERNAME` are only read alongside a token, or a block
+`COPRCTL_CONFIG` takes the contents of a credential file, not a path: either
+the `[copr-cli]` block the Copr API page hands you, or a coprctl `config.toml`.
+A TOML config picks its profile the same way a file does, using `--profile`
+when given, then its `default_profile` (or the implicit `default`), then the
+sole profile when nothing named one. Use `--config`
+when you would rather point at a path instead of passing contents:
+
+```console
+$ COPRCTL_CONFIG="$(cat ~/.config/coprctl/config.toml)" coprctl project list
+```
+
+`COPRCTL_URL` and `COPRCTL_USERNAME` are only read alongside a token, or a file
 that carries one. On their own they are ignored, so they can never redirect
 saved credentials to another instance.
 

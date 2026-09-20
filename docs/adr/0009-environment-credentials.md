@@ -33,11 +33,18 @@ set:
 
 | Variable | Meaning |
 | --- | --- |
-| `COPRCTL_CONFIG` | a verbatim `[copr-cli]` credential block |
+| `COPRCTL_CONFIG` | the contents of a credential file: a `[copr-cli]` block or a coprctl TOML config |
 | `COPRCTL_TOKEN` | the API token |
 | `COPRCTL_LOGIN` | the API login, required whenever a token is set |
 | `COPRCTL_USERNAME` | the account username, when it should not be resolved live |
 | `COPRCTL_URL` | the instance base URL, defaulting to production |
+
+A config block is read as TOML when it yields profiles, and otherwise as a
+`[copr-cli]` block. Profiles are checked first because the block parser is
+line-based and would read login and token out of a TOML profile section while
+losing its url. A TOML config resolves its profile the way the file would: the
+requested name, then `default_profile`, then the implicit `default`, then the
+sole profile when nothing named one.
 
 Environment credentials always take precedence over the file configuration and
 are ephemeral: no command writes them. `auth login` is the single path that

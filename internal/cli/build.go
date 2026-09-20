@@ -51,7 +51,7 @@ func newBuildRebuildCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Rebuild a package from its stored source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parsePackageRef(app, args)
+			r, err := parsePackageRef(cmd, app, args)
 			if err != nil {
 				return err
 			}
@@ -347,7 +347,7 @@ func newBuildListCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "List builds for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
@@ -389,7 +389,7 @@ func newBuildSubmitCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Submit a build",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}

@@ -28,7 +28,7 @@ func newUICmd(app *App) *cobra.Command {
 			if ref == "" {
 				return fmt.Errorf("a project reference is required")
 			}
-			r, err := parseRef(app, ref)
+			r, err := parseRef(cmd, app, ref)
 			if err != nil {
 				return err
 			}

@@ -62,10 +62,7 @@ func projectRefCompleter(app *App) func(*cobra.Command, []string, string) ([]str
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 		// Resolve the owner: use the authenticated user when possible.
-		owner := ""
-		if prof, err := app.Cfg.Profile(app.profile); err == nil {
-			owner = prof.Username
-		}
+		owner := app.Username(cmd.Context())
 		projects, err := c.ListProjects(cmd.Context(), owner, 100)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp

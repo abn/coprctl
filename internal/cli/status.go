@@ -18,7 +18,7 @@ func newMonitorCmd(app *App) *cobra.Command {
 		Short: "Show a package-by-chroot state matrix for a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
@@ -101,7 +101,7 @@ func newStatusCmd(app *App) *cobra.Command {
 		Short: "One-shot project health summary; exits 4 on failed builds",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}

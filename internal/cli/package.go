@@ -155,7 +155,7 @@ func newPackageCreateCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Create a package",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parsePackageRef(app, args)
+			r, err := parsePackageRef(cmd, app, args)
 			if err != nil {
 				return err
 			}
@@ -190,7 +190,7 @@ func newPackageEditCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Edit a package's source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parsePackageRef(app, args)
+			r, err := parsePackageRef(cmd, app, args)
 			if err != nil {
 				return err
 			}
@@ -225,7 +225,7 @@ func newPackageGetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Show a package's source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parsePackageRef(app, args)
+			r, err := parsePackageRef(cmd, app, args)
 			if err != nil {
 				return err
 			}
@@ -256,7 +256,7 @@ func newPackageResetCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Clear a package's stored source definition",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parsePackageRef(app, args)
+			r, err := parsePackageRef(cmd, app, args)
 			if err != nil {
 				return err
 			}
@@ -283,7 +283,7 @@ func newPackageListCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "List packages in a project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parseRef(app, args[0])
+			r, err := parseRef(cmd, app, args[0])
 			if err != nil {
 				return err
 			}
@@ -312,7 +312,7 @@ func newPackageDeleteCmd(app *App, out *outFlags) *cobra.Command {
 		Short: "Delete a package",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := parsePackageRef(app, args)
+			r, err := parsePackageRef(cmd, app, args)
 			if err != nil {
 				return err
 			}

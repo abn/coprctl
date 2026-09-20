@@ -2,11 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/abn/coprctl/internal/cerr"
-	"github.com/abn/coprctl/internal/config"
 )
 
 // newDoctorCmd diagnoses the environment: config presence, auth, and
@@ -19,16 +19,15 @@ func newDoctorCmd(app *App) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			failed := 0
-			// Reconcile config paths from flags before checking.
-			if app.Cfg == nil || !app.Cfg.Matches(app.cfgPath, app.legacy) {
-				app.Cfg = config.New(app.cfgPath, app.legacy)
-			}
-			prof, err := app.Cfg.Profile(app.profile)
+			prof, envSrc, err := app.profileForUse()
 			if err != nil {
 				fmt.Fprintf(out, "FAIL config: %v\n", err)
 				return err
 			}
 			fmt.Fprintln(out, "ok   config: profile loaded")
+			if envSrc.Active() {
+				fmt.Fprintf(out, "ok   env: credentials from %s\n", strings.Join(envSrc.Names(), ", "))
+			}
 
 			login, tok, aerr := prof.AuthErr()
 			if aerr != nil {

@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"context"
 	"io"
 	"os"
 
@@ -21,11 +22,12 @@ type App struct {
 	Stderr io.Writer
 	Stdin  io.Reader
 
-	Cfg     *config.Manager
-	profile string
-	cfgPath string
-	legacy  string
-	client  *copr.Client
+	Cfg      *config.Manager
+	profile  string
+	cfgPath  string
+	legacy   string
+	client   *copr.Client
+	username string
 }
 
 // NewApp builds an App with default streams.
@@ -42,26 +44,34 @@ func NewApp() *App {
 }
 
 // Client returns the configured API client, building it lazily from the
-// selected profile. It also installs the chroot-catalog predicate used to
-// disambiguate three-segment references.
+// effective profile (environment credentials win over the file configuration).
+// It also installs the chroot-catalog predicate used to disambiguate
+// three-segment references.
 func (a *App) Client() (*copr.Client, error) {
 	if a.client != nil {
 		return a.client, nil
 	}
-	// Rebuild the manager if the effective config paths differ from the ones
-	// it was constructed with (e.g. overridden by --config/--legacy-config).
-	if a.Cfg == nil || !a.Cfg.Matches(a.cfgPath, a.legacy) {
-		a.Cfg = config.New(a.cfgPath, a.legacy)
-	}
-	prof, err := a.Cfg.Profile(a.profile)
+	prof, _, err := a.profileForUse()
 	if err != nil {
 		return nil, err
 	}
+	return a.installClient(prof), nil
+}
+
+// installClient caches a client for the given profile and wires the chroot
+// catalog into the reference parser.
+func (a *App) installClient(prof config.Profile) *copr.Client {
 	login, token := prof.Auth()
-	c := copr.New(prof.BaseURL(), copr.TokenAuth(login, token))
+	return a.installRaw(prof.BaseURL(), copr.TokenAuth(login, token))
+}
+
+// installRaw caches a client built from raw inputs. A nil auth func leaves the
+// request anonymous.
+func (a *App) installRaw(baseURL string, auth copr.AuthFunc) *copr.Client {
+	c := copr.New(baseURL, auth)
 	a.client = c
 	a.installChrootCatalog()
-	return c, nil
+	return c
 }
 
 // ResetClient drops the cached API client so the next Client() call rebuilds
@@ -71,7 +81,9 @@ func (a *App) ResetClient() { a.client = nil }
 // ReadClient returns an API client for read-only operations. It uses the
 // configured profile when one exists, and otherwise falls back to an anonymous
 // production client, because browsing, monitoring, and log reading are all
-// anonymous operations that should not require configuration.
+// anonymous operations that should not require configuration. Environment
+// credentials are authoritative: when they are set and malformed the error is
+// returned rather than silently degraded to an anonymous client.
 func (a *App) ReadClient() (*copr.Client, error) {
 	if a.client != nil {
 		return a.client, nil
@@ -79,19 +91,58 @@ func (a *App) ReadClient() (*copr.Client, error) {
 	if a.Cfg == nil || !a.Cfg.Matches(a.cfgPath, a.legacy) {
 		a.Cfg = config.New(a.cfgPath, a.legacy)
 	}
+	if env, _, ok, err := config.EnvironmentProfile(); err != nil {
+		return nil, err
+	} else if ok {
+		return a.installClient(env), nil
+	}
 	prof, err := a.Cfg.Profile(a.profile)
 	if err != nil {
 		// No profile or legacy config: use anonymous production reads.
-		c := copr.New(config.DefaultProductionURL, nil)
-		a.client = c
-		a.installChrootCatalog()
-		return c, nil
+		return a.installRaw(config.DefaultProductionURL, nil), nil
 	}
-	login, token := prof.Auth()
-	c := copr.New(prof.BaseURL(), copr.TokenAuth(login, token))
-	a.client = c
-	a.installChrootCatalog()
-	return c, nil
+	return a.installClient(prof), nil
+}
+
+// profileForUse returns the effective profile for API calls, rebuilding the
+// manager when the config paths changed via flags, and reporting the
+// environment source when credentials came from the environment.
+func (a *App) profileForUse() (config.Profile, config.EnvSource, error) {
+	if a.Cfg == nil || !a.Cfg.Matches(a.cfgPath, a.legacy) {
+		a.Cfg = config.New(a.cfgPath, a.legacy)
+	}
+	return a.Cfg.Effective(a.profile)
+}
+
+// Username returns the effective account username. A configured username wins;
+// otherwise the identity is resolved once from the credentials via auth-check
+// and cached for the lifetime of the process. It returns "" when the username
+// cannot be determined, which keeps anonymous read paths working unchanged.
+func (a *App) Username(ctx context.Context) string {
+	if a.username != "" {
+		return a.username
+	}
+	prof, _, err := a.profileForUse()
+	if err != nil {
+		return ""
+	}
+	if prof.Username != "" {
+		return prof.Username
+	}
+	// Resolving the identity needs credentials; skip the round trip otherwise.
+	if prof.Token == "" && prof.TokenCommand == "" && prof.SecretHandler == "" {
+		return ""
+	}
+	c, err := a.Client()
+	if err != nil {
+		return ""
+	}
+	identity, err := c.AuthCheck(ctx)
+	if err != nil || identity.Name == "" {
+		return ""
+	}
+	a.username = identity.Name
+	return a.username
 }
 
 // profileName returns the effective profile name (flag or default).
@@ -100,11 +151,6 @@ func profileName(a *App) string {
 		return a.profile
 	}
 	return a.Cfg.DefaultProfileName()
-}
-
-// newConfigManager builds a config manager with the given paths.
-func newConfigManager(cfgPath, legacy string) *config.Manager {
-	return config.New(cfgPath, legacy)
 }
 
 // installChrootCatalog wires the cached catalog into the reference parser so

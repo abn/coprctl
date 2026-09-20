@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/abn/coprctl/internal/cerr"
 	"github.com/abn/coprctl/internal/config"
 	"github.com/abn/coprctl/internal/ref"
@@ -17,14 +19,20 @@ import (
 func testAppWithProfile(t *testing.T, username string) *App {
 	t.Helper()
 	dir := t.TempDir()
-	m := config.New(filepath.Join(dir, "config.toml"), filepath.Join(dir, "no-legacy"))
+	cfgPath := filepath.Join(dir, "config.toml")
+	legacy := filepath.Join(dir, "no-legacy")
+	m := config.New(cfgPath, legacy)
 	if err := m.SetProfile("default", config.Profile{
 		URL: "https://copr.fedorainfracloud.org", Username: username,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	return &App{Cfg: m}
+	return &App{Cfg: m, cfgPath: cfgPath, legacy: legacy}
 }
+
+// testCmd returns a command carrying a background context for helpers that
+// take one to resolve the effective username.
+func testCmd() *cobra.Command { return &cobra.Command{} }
 
 func TestParseBuildRef(t *testing.T) {
 	r, err := parseBuildRef([]string{"123"})
@@ -97,7 +105,7 @@ func TestParseBuildIDs(t *testing.T) {
 
 func TestParsePackageRef(t *testing.T) {
 	app := testAppWithProfile(t, "abn")
-	r, err := parsePackageRef(app, []string{"owner/proj/epel-9-x86_64"})
+	r, err := parsePackageRef(testCmd(), app, []string{"owner/proj/epel-9-x86_64"})
 	if err != nil {
 		t.Fatalf("parsePackageRef: %v", err)
 	}
@@ -108,7 +116,7 @@ func TestParsePackageRef(t *testing.T) {
 
 func TestParseRefDefaultsBareOwner(t *testing.T) {
 	app := testAppWithProfile(t, "abn")
-	r, err := parseRef(app, "hello-go")
+	r, err := parseRef(testCmd(), app, "hello-go")
 	if err != nil {
 		t.Fatalf("parseRef: %v", err)
 	}
@@ -119,7 +127,7 @@ func TestParseRefDefaultsBareOwner(t *testing.T) {
 
 func TestParseRefKeepsExplicitOwner(t *testing.T) {
 	app := testAppWithProfile(t, "abn")
-	r, err := parseRef(app, "other/proj")
+	r, err := parseRef(testCmd(), app, "other/proj")
 	if err != nil {
 		t.Fatalf("parseRef: %v", err)
 	}
@@ -130,7 +138,7 @@ func TestParseRefKeepsExplicitOwner(t *testing.T) {
 
 func TestParseRefBuildNoOwnerDefault(t *testing.T) {
 	app := testAppWithProfile(t, "abn")
-	r, err := parseRef(app, "123")
+	r, err := parseRef(testCmd(), app, "123")
 	if err != nil {
 		t.Fatalf("parseRef: %v", err)
 	}
@@ -141,7 +149,7 @@ func TestParseRefBuildNoOwnerDefault(t *testing.T) {
 
 func TestParseRefBareWithoutProfileLeavesOwnerEmpty(t *testing.T) {
 	app := &App{Cfg: nil}
-	r, err := parseRef(app, "hello-go")
+	r, err := parseRef(testCmd(), app, "hello-go")
 	if err != nil {
 		t.Fatalf("parseRef: %v", err)
 	}

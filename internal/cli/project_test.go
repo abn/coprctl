@@ -19,6 +19,7 @@ func TestResolveListOwner(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	legacy := filepath.Join(home, ".config", "copr")
 	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
@@ -44,6 +45,7 @@ func TestResolveListOwnerNoConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	app := NewApp()
 	// No config and no arg: anonymous read, empty owner.
 	if got := resolveListOwner(app, []string{}); got != "" {

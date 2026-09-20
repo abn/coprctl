@@ -4,6 +4,22 @@ This log tracks the evolution of the knowledge base: page additions,
 deprecations, and structural refactors. It does not track software releases
 or implementation milestones; repository changes belong in the commit history.
 
+## 2026-09-20
+
+* **Update**: Applied the relay OKF wiki learnings to the doc site: the
+  maintainer guide no longer points at the private `.agents` reviewer card,
+  the bundle index links the repo-root changelog so relative links resolve
+  both on GitHub and in the rendered site, and a new "Upstream sources"
+  reference page records the permitted public sources behind the API.
+* **Creation**: Added `docs/reference/upstream-sources.md` as the provenance
+  ledger for the upstream Copr source, copr-cli, and staging probes, linked
+  from the maintainer ground-truth section and the reference index.
+* **Curation**: `make check` now runs a `make docs` hygiene gate (no
+  `.agents` or absolute paths, no `file://` links, changelog link shape,
+  and unbroken relative bundle links).
+* **Fix**: Replaced the em-dash placeholders in the terminology table with
+  `none`, per the no-em-dash invariant.
+
 ## 2026-09-19
 
 * **Update**: The webhook integrations guide covers template specs and Rust

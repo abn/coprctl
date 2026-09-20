@@ -91,7 +91,7 @@ func (a *App) ReadClient() (*copr.Client, error) {
 	if a.Cfg == nil || !a.Cfg.Matches(a.cfgPath, a.legacy) {
 		a.Cfg = config.New(a.cfgPath, a.legacy)
 	}
-	if env, _, ok, err := config.EnvironmentProfile(); err != nil {
+	if env, _, ok, err := config.EnvironmentProfile(a.profile); err != nil {
 		return nil, err
 	} else if ok {
 		return a.installClient(env), nil

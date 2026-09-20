@@ -61,7 +61,7 @@ func newAuthLoginCmd(app *App, out *outFlags) *cobra.Command {
 
 			// Environment credentials are written verbatim: this command is the
 			// one place where ephemeral credentials are allowed to reach disk.
-			if env, src, ok, err := config.EnvironmentProfile(); err != nil {
+			if env, src, ok, err := config.EnvironmentProfile(profile); err != nil {
 				return err
 			} else if ok {
 				if over := strings.TrimRight(url, "/"); over != "" {
@@ -308,7 +308,7 @@ func newAuthTokenCmd(app *App, out *outFlags) *cobra.Command {
 			}
 			// Environment credentials have nowhere to persist the replacement,
 			// so rotation is refused unless the new token will be printed.
-			if _, src, ok, err := config.EnvironmentProfile(); err != nil {
+			if _, src, ok, err := config.EnvironmentProfile(app.profile); err != nil {
 				return err
 			} else if ok {
 				if !*reveal {

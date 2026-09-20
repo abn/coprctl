@@ -242,6 +242,81 @@ func TestConfigSetDoesNotPersistEnvCredentials(t *testing.T) {
 	}
 }
 
+func TestConfigShowEnvTOMLConfig(t *testing.T) {
+	isolateHome(t)
+	t.Setenv(config.EnvConfig, `default_profile = "staging"
+
+[profiles.production]
+url = "https://copr.fedorainfracloud.org"
+username = "alice"
+login = "PL"
+token = "PT"
+
+[profiles.staging]
+url = "https://copr.stg.example.org"
+username = "bob"
+login = "SL"
+token = "ST"
+`)
+
+	app := NewApp()
+	var buf bytes.Buffer
+	cmd := newConfigCmd(app)
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"show", "--output", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	var res map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &res); err != nil {
+		t.Fatalf("decode result: %v (out %q)", err, buf.String())
+	}
+	if res["source"] != "env" || res["url"] != "https://copr.stg.example.org" || res["username"] != "bob" {
+		t.Errorf("result = %v", res)
+	}
+}
+
+func TestAuthLoginPersistsEnvTOMLProfile(t *testing.T) {
+	home := isolateHome(t)
+	t.Setenv(config.EnvConfig, `default_profile = "staging"
+
+[profiles.production]
+url = "https://copr.fedorainfracloud.org"
+login = "PL"
+token = "PT"
+
+[profiles.staging]
+url = "https://copr.stg.example.org"
+login = "SL"
+token = "ST"
+`)
+
+	app := NewApp()
+	var buf bytes.Buffer
+	cmd := newAuthCmd(app)
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"login", "--profile", "production", "--output", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	var res map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &res); err != nil {
+		t.Fatalf("decode result: %v (out %q)", err, buf.String())
+	}
+	if res["profile"] != "production" {
+		t.Errorf("profile = %v, want production", res["profile"])
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".config", "coprctl", "config.toml"))
+	if err != nil {
+		t.Fatalf("config not written: %v", err)
+	}
+	if !strings.Contains(string(data), "PL") || strings.Contains(string(data), "SL") {
+		t.Errorf("expected only the selected profile to persist:\n%s", data)
+	}
+}
+
 func TestReadClientRejectsMalformedEnv(t *testing.T) {
 	isolateHome(t)
 	// A token without a login is a broken setup: it must fail loudly rather

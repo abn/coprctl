@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/abn/coprctl/internal/cerr"
@@ -45,7 +47,7 @@ func TestEnvironmentProfileInactive(t *testing.T) {
 			for k, v := range tc.env {
 				t.Setenv(k, v)
 			}
-			_, _, ok, err := EnvironmentProfile()
+			_, _, ok, err := EnvironmentProfile("")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -58,7 +60,7 @@ func TestEnvironmentProfileInactive(t *testing.T) {
 
 func TestEnvironmentProfileFromBlock(t *testing.T) {
 	t.Setenv(EnvConfig, testBlock)
-	prof, src, ok, err := EnvironmentProfile()
+	prof, src, ok, err := EnvironmentProfile("")
 	if err != nil || !ok {
 		t.Fatalf("ok = %v, err = %v", ok, err)
 	}
@@ -83,7 +85,7 @@ func TestEnvironmentProfilePerFieldOverridesBlock(t *testing.T) {
 	t.Setenv(EnvLogin, "LOGIN2")
 	t.Setenv(EnvToken, "TOKEN2")
 
-	prof, src, ok, err := EnvironmentProfile()
+	prof, src, ok, err := EnvironmentProfile("")
 	if err != nil || !ok {
 		t.Fatalf("ok = %v, err = %v", ok, err)
 	}
@@ -109,7 +111,7 @@ func TestEnvironmentProfileFallbackNames(t *testing.T) {
 	t.Setenv(envLoginAlt, "LOGIN3")
 	t.Setenv(envTokenAlt, "TOKEN3")
 
-	prof, src, ok, err := EnvironmentProfile()
+	prof, src, ok, err := EnvironmentProfile("")
 	if err != nil || !ok {
 		t.Fatalf("ok = %v, err = %v", ok, err)
 	}
@@ -127,7 +129,7 @@ func TestEnvironmentProfileNativeBeatsFallback(t *testing.T) {
 	t.Setenv(envLoginAlt, "fallback")
 	t.Setenv(EnvLogin, "native")
 
-	prof, src, ok, err := EnvironmentProfile()
+	prof, src, ok, err := EnvironmentProfile("")
 	if err != nil || !ok {
 		t.Fatalf("ok = %v, err = %v", ok, err)
 	}
@@ -142,7 +144,7 @@ func TestEnvironmentProfileNativeBeatsFallback(t *testing.T) {
 func TestEnvironmentProfileDefaultsURL(t *testing.T) {
 	t.Setenv(EnvLogin, "LOGIN1")
 	t.Setenv(EnvToken, "TOKEN1")
-	prof, src, ok, err := EnvironmentProfile()
+	prof, src, ok, err := EnvironmentProfile("")
 	if err != nil || !ok {
 		t.Fatalf("ok = %v, err = %v", ok, err)
 	}
@@ -156,7 +158,7 @@ func TestEnvironmentProfileDefaultsURL(t *testing.T) {
 
 func TestEnvironmentProfileTokenRequiresLogin(t *testing.T) {
 	t.Setenv(EnvToken, "TOKEN1")
-	_, _, ok, err := EnvironmentProfile()
+	_, _, ok, err := EnvironmentProfile("")
 	if ok {
 		t.Fatal("token without login must not activate credentials")
 	}
@@ -170,7 +172,7 @@ func TestEnvironmentProfileTokenRequiresLogin(t *testing.T) {
 
 func TestEnvironmentProfileBlockWithoutToken(t *testing.T) {
 	t.Setenv(EnvConfig, "[copr-cli]\ncopr_url = https://copr.example.org\n")
-	_, _, ok, err := EnvironmentProfile()
+	_, _, ok, err := EnvironmentProfile("")
 	if ok || err == nil {
 		t.Fatalf("ok = %v, err = %v, want an error", ok, err)
 	}
@@ -186,7 +188,7 @@ func TestEnvironmentProfileBlockPlusSeparateToken(t *testing.T) {
 	t.Setenv(EnvLogin, "LOGIN9")
 	t.Setenv(EnvToken, "TOKEN9")
 
-	prof, _, ok, err := EnvironmentProfile()
+	prof, _, ok, err := EnvironmentProfile("")
 	if err != nil || !ok {
 		t.Fatalf("ok = %v, err = %v", ok, err)
 	}
@@ -195,11 +197,182 @@ func TestEnvironmentProfileBlockPlusSeparateToken(t *testing.T) {
 	}
 }
 
-func TestEnvironmentProfileRejectsCoprctlConfig(t *testing.T) {
-	// coprctl's TOML config uses "url", not "copr_url". Accepting it here would
-	// send its token to the default instance instead of the configured one.
-	t.Setenv(EnvConfig, "default_profile = \"staging\"\n\n[profiles.staging]\nurl = \"https://copr.stg.example.org\"\nlogin = \"LOGIN1\"\ntoken = \"TOKEN1\"\n")
-	_, _, ok, err := EnvironmentProfile()
+func TestEnvironmentProfileFromTOMLConfig(t *testing.T) {
+	// A coprctl TOML config is accepted verbatim and its url is honoured,
+	// rather than defaulting the instance.
+	t.Setenv(EnvConfig, `default_profile = "staging"
+
+[profiles.production]
+url = "https://copr.fedorainfracloud.org"
+username = "alice"
+login = "PL"
+token = "PT"
+
+[profiles.staging]
+url = "https://copr.stg.example.org"
+username = "bob"
+login = "SL"
+token = "ST"
+`)
+	prof, src, ok, err := EnvironmentProfile("")
+	if err != nil || !ok {
+		t.Fatalf("ok = %v, err = %v", ok, err)
+	}
+	if prof.URL != "https://copr.stg.example.org" || prof.Login != "SL" || prof.Token != "ST" || prof.Username != "bob" {
+		t.Errorf("profile = %+v", prof)
+	}
+	if src.Config != EnvConfig {
+		t.Errorf("source = %+v", src)
+	}
+}
+
+func TestEnvironmentProfileTOMLRequestedProfile(t *testing.T) {
+	t.Setenv(EnvConfig, `default_profile = "staging"
+
+[profiles.production]
+url = "https://copr.fedorainfracloud.org"
+login = "PL"
+token = "PT"
+
+[profiles.staging]
+url = "https://copr.stg.example.org"
+login = "SL"
+token = "ST"
+`)
+	prof, _, ok, err := EnvironmentProfile("production")
+	if err != nil || !ok {
+		t.Fatalf("ok = %v, err = %v", ok, err)
+	}
+	if prof.URL != "https://copr.fedorainfracloud.org" || prof.Login != "PL" {
+		t.Errorf("profile = %+v", prof)
+	}
+}
+
+func TestEnvironmentProfileTOMLSoleProfile(t *testing.T) {
+	t.Setenv(EnvConfig, "[profiles.only]\nurl = \"https://copr.example.org\"\nlogin = \"L\"\ntoken = \"T\"\n")
+	prof, _, ok, err := EnvironmentProfile("")
+	if err != nil || !ok {
+		t.Fatalf("ok = %v, err = %v", ok, err)
+	}
+	if prof.URL != "https://copr.example.org" || prof.Login != "L" {
+		t.Errorf("profile = %+v", prof)
+	}
+}
+
+func TestEnvironmentProfileTOMLAmbiguous(t *testing.T) {
+	t.Setenv(EnvConfig, "[profiles.one]\nurl = \"https://a.example.org\"\nlogin = \"L\"\ntoken = \"T\"\n\n[profiles.two]\nurl = \"https://b.example.org\"\nlogin = \"L\"\ntoken = \"T\"\n")
+	_, _, ok, err := EnvironmentProfile("")
+	if ok || err == nil {
+		t.Fatalf("ok = %v, err = %v, want an error", ok, err)
+	}
+	if cerr.ExitCodeFor(err) != cerr.ExitConfig {
+		t.Errorf("exit code = %d, want %d", cerr.ExitCodeFor(err), cerr.ExitConfig)
+	}
+	// The names and the remedy must survive into machine output, which drops
+	// the wrapped cause.
+	var ce *cerr.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("error is %T, want *cerr.Error", err)
+	}
+	if !strings.Contains(ce.Message, "several profiles") || !strings.Contains(ce.Message, "one, two") {
+		t.Errorf("message = %q", ce.Message)
+	}
+	if !strings.Contains(ce.Hint, "--profile") {
+		t.Errorf("hint = %q", ce.Hint)
+	}
+}
+
+func TestEnvironmentProfileTOMLUnknownProfile(t *testing.T) {
+	t.Setenv(EnvConfig, "[profiles.one]\nurl = \"https://a.example.org\"\nlogin = \"L\"\ntoken = \"T\"\n")
+	_, _, ok, err := EnvironmentProfile("two")
+	if ok || err == nil {
+		t.Fatalf("ok = %v, err = %v, want an error", ok, err)
+	}
+	var ce *cerr.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("error is %T, want *cerr.Error", err)
+	}
+	if !strings.Contains(ce.Message, `has no profile "two"`) || !strings.Contains(ce.Message, "available: one") {
+		t.Errorf("message = %q", ce.Message)
+	}
+	if !strings.Contains(ce.Hint, "--profile") {
+		t.Errorf("hint = %q", ce.Hint)
+	}
+}
+
+func TestEnvironmentProfileTOMLImplicitDefault(t *testing.T) {
+	// Manager.Load treats an empty default_profile as "default". The env blob
+	// follows, so a config.toml copied verbatim resolves the same way.
+	t.Setenv(EnvConfig, "[profiles.default]\nurl = \"https://d.example.org\"\nlogin = \"DL\"\ntoken = \"DT\"\n\n[profiles.other]\nurl = \"https://o.example.org\"\nlogin = \"OL\"\ntoken = \"OT\"\n")
+	prof, _, ok, err := EnvironmentProfile("")
+	if err != nil || !ok {
+		t.Fatalf("ok = %v, err = %v", ok, err)
+	}
+	if prof.URL != "https://d.example.org" || prof.Login != "DL" {
+		t.Errorf("profile = %+v", prof)
+	}
+}
+
+func TestEnvironmentProfileTOMLTokenCommandSource(t *testing.T) {
+	// A profile that defers to a token_command still counts as credentials.
+	t.Setenv(EnvConfig, "[profiles.one]\nurl = \"https://a.example.org\"\nlogin = \"L\"\ntoken_command = \"printf tok\"\n")
+	_, _, ok, err := EnvironmentProfile("")
+	if err != nil || !ok {
+		t.Fatalf("ok = %v, err = %v", ok, err)
+	}
+}
+
+func TestEnvironmentProfileTOMLPerFieldOverrides(t *testing.T) {
+	t.Setenv(EnvConfig, "[profiles.one]\nurl = \"https://a.example.org\"\nlogin = \"L\"\ntoken = \"T\"\n")
+	t.Setenv(EnvURL, "https://override.example.org")
+	t.Setenv(EnvToken, "TOKEN2")
+	prof, src, ok, err := EnvironmentProfile("")
+	if err != nil || !ok {
+		t.Fatalf("ok = %v, err = %v", ok, err)
+	}
+	if prof.URL != "https://override.example.org" || prof.Token != "TOKEN2" || prof.Login != "L" {
+		t.Errorf("profile = %+v", prof)
+	}
+	if src.URL != EnvURL || src.Token != EnvToken {
+		t.Errorf("source = %+v", src)
+	}
+}
+
+func TestEnvironmentProfileBlockWithProfilesComment(t *testing.T) {
+	// A block whose comment mentions profiles is still a block.
+	t.Setenv(EnvConfig, "[copr-cli]\n# generated from the profiles page\nusername = \"alice\"\nlogin = \"L\"\ntoken = \"T\"\ncopr_url = https://copr.example.org\n")
+	prof, _, ok, err := EnvironmentProfile("")
+	if err != nil || !ok {
+		t.Fatalf("ok = %v, err = %v", ok, err)
+	}
+	if prof.URL != "https://copr.example.org" || prof.Login != "L" {
+		t.Errorf("profile = %+v", prof)
+	}
+}
+
+func TestEnvironmentProfileTOMLMissingDefaultProfile(t *testing.T) {
+	t.Setenv(EnvConfig, "default_profile = \"ghost\"\n\n[profiles.one]\nurl = \"https://a.example.org\"\nlogin = \"L\"\ntoken = \"T\"\n")
+	_, _, ok, err := EnvironmentProfile("")
+	if ok || err == nil {
+		t.Fatalf("ok = %v, err = %v, want an error", ok, err)
+	}
+	var ce *cerr.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("error is %T, want *cerr.Error", err)
+	}
+	if !strings.Contains(ce.Message, `default_profile "ghost"`) || !strings.Contains(ce.Message, "available: one") {
+		t.Errorf("message = %q", ce.Message)
+	}
+	if !strings.Contains(ce.Hint, "--profile") {
+		t.Errorf("hint = %q", ce.Hint)
+	}
+}
+
+func TestEnvironmentProfileMalformedTOMLLooksLikeConfig(t *testing.T) {
+	// It advertises profiles but cannot be parsed: refuse rather than fall
+	// back to the line parser and lose the url.
+	t.Setenv(EnvConfig, "default_profile = \"staging\"\n[profiles.staging\nurl = \"https://copr.stg.example.org\"\nlogin = \"L\"\ntoken = \"T\"\n")
+	_, _, ok, err := EnvironmentProfile("")
 	if ok || err == nil {
 		t.Fatalf("ok = %v, err = %v, want an error", ok, err)
 	}

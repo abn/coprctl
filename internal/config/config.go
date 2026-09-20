@@ -400,6 +400,12 @@ func mergeLegacy(primary, legacy Profile) Profile {
 	return primary
 }
 
+// HasTokenSource reports whether the profile can supply a token, from an
+// inline value, a token command, or a secret handler.
+func (p Profile) HasTokenSource() bool {
+	return p.Token != "" || p.TokenCommand != "" || p.SecretHandler != ""
+}
+
 // Auth returns the (login, token) credentials for the profile. Secret
 // resolution order: a configured secret handler, then a token_command, then an
 // inline token. The login always comes from the profile. When a configured

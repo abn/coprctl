@@ -175,7 +175,7 @@ func newConfigShowCmd(app *App, out *outFlags) *cobra.Command {
 				"instance":      config.DetectInstance(prof.BaseURL()),
 				"username":      prof.Username,
 				"login":         prof.Login,
-				"token_present": prof.Token != "" || prof.TokenCommand != "",
+				"token_present": prof.HasTokenSource(),
 				"token_expiry":  prof.TokenExpiry,
 				"config_file":   app.cfgPath,
 				"legacy_config": app.legacy,
